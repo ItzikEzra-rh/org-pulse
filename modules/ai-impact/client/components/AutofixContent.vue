@@ -397,7 +397,7 @@ function buildJiraLabelUrl(jiraLabels, excludeLabels) {
   if (selectedComponent.value !== 'all') {
     jql += ` AND component = "${selectedComponent.value}"`
   }
-  jql += ' AND component != "Enclave"'
+  jql += ' AND (component is EMPTY OR component != "Enclave")'
   const days = props.timeWindow === 'week' ? 7 : props.timeWindow === 'month' ? 30 : 90
   const windowCutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
   const earliestIssue = projectFilteredIssues.value.length > 0
