@@ -712,7 +712,7 @@ Quality assessment data pushed from the rfe-quality-dashboard CI pipeline. Store
 
 **Notes:**
 - `latest` contains the full assessment (scores, notes, verdict, feedback). Used by list, detail, and chart views.
-- `history` contains prior assessments with a trimmed payload (only `scores`, `total`, `passFail`, `assessedAt`). Full notes are only kept in `latest` to control file size.
+- `history` contains prior assessments with a trimmed payload (only `rubricVersion`, `scores`, `total`, `passFail`, `assessedAt`). Full notes are only kept in `latest` to control file size.
 - History is sorted newest-first, capped at 20 entries per RFE (`MAX_HISTORY`). When the cap is reached, only entries newer than the oldest existing entry are accepted; older entries are discarded without insertion.
 - `lastSyncedAt` and `totalAssessed` are updated on every write (PUT single or POST bulk).
 - `rubricVersion`: `"v1"` (legacy) or `"v2"` (current). Defaults to `"v1"` when absent (pre-versioning entries). Each review is rendered under its own rubric.

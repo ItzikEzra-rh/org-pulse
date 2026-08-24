@@ -70,6 +70,11 @@ describe('trimForHistory', () => {
     expect(trimmed.feedback).toBeUndefined();
     expect(trimmed.antiPatterns).toBeUndefined();
   });
+
+  it('retains rubricVersion so history entries are not silently downgraded', () => {
+    const trimmed = trimForHistory(makeAssessment({ rubricVersion: 'v2' }));
+    expect(trimmed.rubricVersion).toBe('v2');
+  });
 });
 
 describe('upsertAssessment', () => {
@@ -171,6 +176,24 @@ describe('getLatestProjection', () => {
     expect(proj.assessments['A'].verdict).toBeUndefined();
     expect(proj.assessments['A'].feedback).toBeUndefined();
     expect(proj.assessments['A'].history).toBeUndefined();
+  });
+
+  it('exposes rubricVersion in the latest projection', () => {
+    const data = {
+      lastSyncedAt: '2026-08-01T00:00:00Z',
+      totalAssessed: 1,
+      assessments: {
+        'A': {
+          latest: makeAssessment({
+            rubricVersion: 'v2',
+            scores: { what: 2, why: 2, userFacing: 1, rightSized: 2, testability: 2 }
+          }),
+          history: []
+        }
+      }
+    };
+    const proj = getLatestProjection(data);
+    expect(proj.assessments['A'].rubricVersion).toBe('v2');
   });
 });
 

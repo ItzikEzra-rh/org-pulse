@@ -80,8 +80,10 @@ const diffs = computed(() => {
     const older = reversed[i + 1]
     if (!newer.scores || !older.scores) continue
     const changes = {}
-    // Union of both entries' criteria, so version changes are handled.
-    const keys = new Set([...Object.keys(newer.scores), ...Object.keys(older.scores)])
+    // Compare only criteria present in BOTH entries. Across a rubric change
+    // (v1<->v2) the exclusive criteria have no counterpart, so diffing them
+    // against an implicit zero would report false ±changes.
+    const keys = Object.keys(newer.scores).filter(c => c in older.scores)
     for (const c of keys) {
       const diff = (newer.scores[c] || 0) - (older.scores[c] || 0)
       if (diff !== 0) changes[c] = diff
