@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { rubricForAssessment } from '../rubric.js'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -59,13 +60,9 @@ const scoresSummary = computed(() => {
   const scores = props.item.scores
   if (!scores) return null
   if (props.item.type === 'rfe') {
-    const dims = [
-      { label: 'WHAT', key: 'what' },
-      { label: 'WHY', key: 'why' },
-      { label: 'HOW', key: 'how' },
-      { label: 'TASK', key: 'task' },
-      { label: 'SIZE', key: 'size' }
-    ]
+    // Version-aware: render the criteria of whichever rubric this item used.
+    const rubric = rubricForAssessment({ rubricVersion: props.item.rubricVersion, scores })
+    const dims = rubric.keys.map(key => ({ label: rubric.labels[key].toUpperCase(), key }))
     const parts = dims
       .filter(d => scores[d.key] !== undefined)
       .map(d => ({ label: d.label, value: scores[d.key], color: scoreColor(scores[d.key]), pillClass: scorePillClass(scores[d.key]) }))

@@ -684,12 +684,13 @@ Quality assessment data pushed from the rfe-quality-dashboard CI pipeline. Store
   "assessments": {
     "RHAIRFE-123": {
       "latest": {
-        "scores": { "what": 2, "why": 1, "how": 2, "task": 1, "size": 2 },
-        "total": 8,
+        "rubricVersion": "v2",
+        "scores": { "what": 2, "why": 2, "userFacing": 1, "rightSized": 2, "testability": 2 },
+        "total": 9,
         "passFail": "PASS",
         "antiPatterns": ["WHY Void"],
         "criterionNotes": {
-          "what": "...", "why": "...", "how": "...", "task": "...", "size": "..."
+          "what": "...", "why": "...", "userFacing": "...", "rightSized": "...", "testability": "..."
         },
         "verdict": "One-sentence summary.",
         "feedback": "Actionable markdown.",
@@ -697,6 +698,7 @@ Quality assessment data pushed from the rfe-quality-dashboard CI pipeline. Store
       },
       "history": [
         {
+          "rubricVersion": "v1",
           "total": 5,
           "passFail": "FAIL",
           "scores": { "what": 1, "why": 0, "how": 1, "task": 1, "size": 2 },
@@ -713,7 +715,11 @@ Quality assessment data pushed from the rfe-quality-dashboard CI pipeline. Store
 - `history` contains prior assessments with a trimmed payload (only `scores`, `total`, `passFail`, `assessedAt`). Full notes are only kept in `latest` to control file size.
 - History is sorted newest-first, capped at 20 entries per RFE (`MAX_HISTORY`). When the cap is reached, only entries newer than the oldest existing entry are accepted; older entries are discarded without insertion.
 - `lastSyncedAt` and `totalAssessed` are updated on every write (PUT single or POST bulk).
-- `scores`: each criterion (`what`, `why`, `how`, `task`, `size`) is an integer 0-2. `total` is the sum (0-10).
+- `rubricVersion`: `"v1"` (legacy) or `"v2"` (current). Defaults to `"v1"` when absent (pre-versioning entries). Each review is rendered under its own rubric.
+- `scores`: each criterion is an integer 0-2; `total` is the sum (0-10). Criterion keys depend on `rubricVersion`:
+  - **v1** (legacy): `what`, `why`, `how`, `task`, `size`
+  - **v2** (current): `what`, `why`, `userFacing`, `rightSized`, `testability`
+- The aggregate "Criteria Performance" chart is computed over v2 reviews only; v1 reviews still display individually under their own rubric.
 - `passFail` is `"PASS"` or `"FAIL"` (enum only; no server-side threshold validation).
 - Upsert is idempotent: if `latest.assessedAt` matches the incoming `assessedAt`, the write is skipped and the endpoint returns `"unchanged"`.
 - The file is written atomically (write-to-temp-then-rename) to prevent corruption from mid-write crashes.

@@ -172,3 +172,48 @@ describe('validateAssessment', () => {
     expect(CRITERIA).toEqual(['what', 'why', 'how', 'task', 'size']);
   });
 });
+
+describe('validateAssessment rubric versioning', () => {
+  function makeV2Assessment(overrides = {}) {
+    return {
+      rubricVersion: 'v2',
+      scores: { what: 2, why: 2, userFacing: 1, rightSized: 2, testability: 2 },
+      total: 9,
+      passFail: 'PASS',
+      assessedAt: '2026-08-01T12:00:00Z',
+      ...overrides
+    };
+  }
+
+  it('accepts a valid v2 assessment with the new criteria keys', () => {
+    const result = validateAssessment(makeV2Assessment());
+    expect(result.valid).toBe(true);
+    expect(result.data.scores.userFacing).toBe(1);
+    expect(result.data.scores.rightSized).toBe(2);
+    expect(result.data.scores.testability).toBe(2);
+    expect(result.data.rubricVersion).toBe('v2');
+  });
+
+  it('rejects a v2 assessment missing a v2 criterion', () => {
+    const result = validateAssessment(makeV2Assessment({
+      scores: { what: 2, why: 2, userFacing: 1, rightSized: 2 }
+    }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('testability'))).toBe(true);
+  });
+
+  it('defaults to v1 criteria when rubricVersion is absent', () => {
+    const result = validateAssessment({
+      scores: { what: 2, why: 2, how: 2, task: 2, size: 2 },
+      total: 10, passFail: 'PASS', assessedAt: '2026-01-01T00:00:00Z'
+    });
+    expect(result.valid).toBe(true);
+    expect(result.data.rubricVersion).toBe('v1');
+  });
+
+  it('rejects an invalid rubricVersion', () => {
+    const result = validateAssessment(makeV2Assessment({ rubricVersion: 'v3' }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('rubricVersion'))).toBe(true);
+  });
+});

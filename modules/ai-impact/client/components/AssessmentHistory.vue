@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { Line } from 'vue-chartjs'
+import { RUBRICS } from '../rubric.js'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -62,7 +63,11 @@ const chartOptions = {
   }
 }
 
-const CRITERIA = ['what', 'why', 'how', 'task', 'size']
+// Merged labels across rubric versions so a diff can span v1/v2 keys.
+const ALL_LABELS = { ...RUBRICS.v1.labels, ...RUBRICS.v2.labels }
+function criterionLabel(key) {
+  return ALL_LABELS[key] || key
+}
 
 // Compute diffs between consecutive entries (newest-first for display)
 const diffs = computed(() => {
@@ -75,7 +80,9 @@ const diffs = computed(() => {
     const older = reversed[i + 1]
     if (!newer.scores || !older.scores) continue
     const changes = {}
-    for (const c of CRITERIA) {
+    // Union of both entries' criteria, so version changes are handled.
+    const keys = new Set([...Object.keys(newer.scores), ...Object.keys(older.scores)])
+    for (const c of keys) {
       const diff = (newer.scores[c] || 0) - (older.scores[c] || 0)
       if (diff !== 0) changes[c] = diff
     }
@@ -133,7 +140,7 @@ const diffs = computed(() => {
               class="mr-2"
               :class="change > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
             >
-              {{ criterion }}: {{ change > 0 ? '+' : '' }}{{ change }}
+              {{ criterionLabel(criterion) }}: {{ change > 0 ? '+' : '' }}{{ change }}
             </span>
           </template>
         </div>

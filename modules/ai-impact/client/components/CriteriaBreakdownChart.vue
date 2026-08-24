@@ -11,17 +11,23 @@ import {
   Legend
 } from 'chart.js'
 
+import { RUBRICS, rubricForAssessment } from '../rubric.js'
+
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const props = defineProps({
   assessments: { type: Object, default: () => ({}) }
 })
 
-const CRITERIA = ['what', 'why', 'how', 'task', 'size']
-const CRITERIA_LABELS = { what: 'What', why: 'Why', how: 'How', task: 'Task', size: 'Size' }
+// Aggregate over current-rubric (v2) reviews only — v2 is the growing
+// majority; v1 (legacy) reviews still display individually under their own
+// rubric but are excluded from this aggregate to keep dimensions comparable.
+const CRITERIA = RUBRICS.v2.keys
+const CRITERIA_LABELS = RUBRICS.v2.labels
 
 const stats = computed(() => {
   const entries = Object.values(props.assessments)
+    .filter(a => rubricForAssessment(a).version === 'v2')
   const count = entries.length
   if (count === 0) {
     return CRITERIA.map(c => ({ criterion: c, avg: 0, zeroPct: 0 }))

@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { rubricForAssessment } from '../rubric.js'
 
-defineProps({
+const props = defineProps({
   assessment: { type: Object, required: true },
   detail: { type: Object, default: null }
 })
@@ -12,13 +13,11 @@ function toggleCriterion(name) {
   expandedCriteria.value[name] = !expandedCriteria.value[name]
 }
 
-const CRITERIA_LABELS = {
-  what: 'What',
-  why: 'Why',
-  how: 'How',
-  task: 'Task',
-  size: 'Size'
-}
+// Render each assessment under its own rubric version (v1 legacy / v2 current).
+const criteria = computed(() => {
+  const rubric = rubricForAssessment(props.assessment)
+  return rubric.keys.map(key => ({ key, label: rubric.labels[key] }))
+})
 
 function getScoreClass(score) {
   if (score === 2) return 'bg-green-500'
@@ -50,7 +49,7 @@ function getPassFailClass(passFail) {
     <!-- Criterion Rows -->
     <div class="space-y-1">
       <div
-        v-for="(label, key) in CRITERIA_LABELS"
+        v-for="{ key, label } in criteria"
         :key="key"
         class="rounded-md"
       >
@@ -60,7 +59,7 @@ function getPassFailClass(passFail) {
           @click="detail?.latest?.criterionNotes?.[key] ? toggleCriterion(key) : null"
         >
           <span class="flex items-center gap-3">
-            <span class="font-medium dark:text-gray-200 w-12">{{ label }}</span>
+            <span class="font-medium dark:text-gray-200 w-32 text-left">{{ label }}</span>
             <!-- Score dots -->
             <span class="flex gap-1">
               <span

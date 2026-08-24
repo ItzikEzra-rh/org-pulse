@@ -4,87 +4,140 @@
   "assessments": {
     "RHAIRFE-1001": {
       "latest": {
-        "scores": { "what": 2, "why": 2, "how": 2, "task": 1, "size": 2 },
+        "scores": {
+          "what": 2,
+          "why": 2,
+          "userFacing": 2,
+          "rightSized": 1,
+          "testability": 2
+        },
         "total": 9,
         "passFail": "PASS",
         "antiPatterns": [],
         "criterionNotes": {
           "what": "Clearly describes the autoscaling behavior needed for inference workloads.",
           "why": "Strong business justification tied to customer throughput requirements.",
-          "how": "Specifies HPA-based scaling with custom metrics from inference gateway.",
-          "task": "Could be more specific about acceptance criteria.",
-          "size": "Well-scoped to a single scaling mechanism."
+          "userFacing": "Specifies HPA-based scaling with custom metrics from inference gateway.",
+          "rightSized": "Could be more specific about acceptance criteria.",
+          "testability": "Well-scoped to a single scaling mechanism."
         },
         "verdict": "High-quality RFE with clear problem statement and solution approach.",
         "feedback": "**Strengths:**\n- Clear description of the scaling problem\n- Specific metrics identified for scaling triggers\n\n**Suggestions:**\n- Add explicit acceptance criteria for latency thresholds\n- Consider mentioning rollback behavior",
-        "assessedAt": "2026-04-18T12:00:00Z"
+        "assessedAt": "2026-04-18T12:00:00Z",
+        "rubricVersion": "v2"
       },
       "history": [
         {
-          "scores": { "what": 2, "why": 1, "how": 1, "task": 1, "size": 2 },
+          "scores": {
+            "what": 2,
+            "why": 1,
+            "how": 1,
+            "task": 1,
+            "size": 2
+          },
           "total": 7,
           "passFail": "PASS",
-          "assessedAt": "2026-04-10T08:00:00Z"
+          "assessedAt": "2026-04-10T08:00:00Z",
+          "rubricVersion": "v1"
         }
       ]
     },
     "RHAIRFE-1002": {
       "latest": {
-        "scores": { "what": 1, "why": 0, "how": 1, "task": 0, "size": 1 },
+        "scores": {
+          "what": 1,
+          "why": 0,
+          "userFacing": 1,
+          "rightSized": 0,
+          "testability": 1
+        },
         "total": 3,
         "passFail": "FAIL",
-        "antiPatterns": ["WHY Void", "Task Masquerade"],
+        "antiPatterns": [
+          "WHY Void",
+          "Task Masquerade"
+        ],
         "criterionNotes": {
           "what": "Mentions GPU monitoring but lacks specifics on what metrics.",
           "why": "No business justification provided.",
-          "how": "Vague reference to a dashboard without implementation details.",
-          "task": "No acceptance criteria or definition of done.",
-          "size": "Reasonable scope but unclear boundaries."
+          "userFacing": "Vague reference to a dashboard without implementation details.",
+          "rightSized": "No acceptance criteria or definition of done.",
+          "testability": "Reasonable scope but unclear boundaries."
         },
         "verdict": "Needs significant revision to meet quality standards.",
         "feedback": "**Issues:**\n- Missing business justification (WHY Void)\n- No acceptance criteria defined (Task Masquerade)\n\n**Recommendations:**\n- Add a section explaining why GPU monitoring is needed\n- Define specific metrics to be displayed\n- List acceptance criteria",
-        "assessedAt": "2026-04-17T14:00:00Z"
+        "assessedAt": "2026-04-17T14:00:00Z",
+        "rubricVersion": "v2"
       },
       "history": []
     },
     "RHAIRFE-1003": {
       "latest": {
-        "scores": { "what": 2, "why": 2, "how": 1, "task": 2, "size": 1 },
+        "scores": {
+          "what": 2,
+          "why": 2,
+          "userFacing": 1,
+          "rightSized": 2,
+          "testability": 1
+        },
         "total": 8,
         "passFail": "PASS",
         "antiPatterns": [],
         "criterionNotes": {
           "what": "Comprehensive description of fine-tuning requirements.",
           "why": "Strong strategic alignment with customer requests.",
-          "how": "Could provide more detail on supported model architectures.",
-          "task": "Clear acceptance criteria with measurable outcomes.",
-          "size": "Scope is broad; consider splitting into multiple RFEs."
+          "userFacing": "Could provide more detail on supported model architectures.",
+          "rightSized": "Clear acceptance criteria with measurable outcomes.",
+          "testability": "Scope is broad; consider splitting into multiple RFEs."
         },
         "verdict": "Strong RFE with room for improvement in scoping.",
         "feedback": "Well-written RFE with clear problem statement.\n\n**Suggestions:**\n- Consider splitting into separate RFEs for different model architectures\n- Add performance benchmarks as acceptance criteria",
-        "assessedAt": "2026-04-16T10:30:00Z"
+        "assessedAt": "2026-04-16T10:30:00Z",
+        "rubricVersion": "v2"
       },
       "history": [
         {
-          "scores": { "what": 1, "why": 2, "how": 0, "task": 1, "size": 1 },
+          "scores": {
+            "what": 1,
+            "why": 2,
+            "how": 0,
+            "task": 1,
+            "size": 1
+          },
           "total": 5,
           "passFail": "PASS",
-          "assessedAt": "2026-04-05T09:00:00Z"
+          "assessedAt": "2026-04-05T09:00:00Z",
+          "rubricVersion": "v1"
         },
         {
-          "scores": { "what": 1, "why": 1, "how": 0, "task": 0, "size": 1 },
+          "scores": {
+            "what": 1,
+            "why": 1,
+            "how": 0,
+            "task": 0,
+            "size": 1
+          },
           "total": 3,
           "passFail": "FAIL",
-          "assessedAt": "2026-03-28T15:00:00Z"
+          "assessedAt": "2026-03-28T15:00:00Z",
+          "rubricVersion": "v1"
         }
       ]
     },
     "RHAIRFE-1004": {
       "latest": {
-        "scores": { "what": 1, "why": 1, "how": 0, "task": 0, "size": 1 },
+        "scores": {
+          "what": 1,
+          "why": 1,
+          "how": 0,
+          "task": 0,
+          "size": 1
+        },
         "total": 3,
         "passFail": "FAIL",
-        "antiPatterns": ["HOW Void"],
+        "antiPatterns": [
+          "HOW Void"
+        ],
         "criterionNotes": {
           "what": "Mentions OpenTelemetry but lacks pipeline context.",
           "why": "Basic justification but could be stronger.",
@@ -94,13 +147,20 @@
         },
         "verdict": "Insufficient detail for implementation planning.",
         "feedback": "This RFE needs more detail before it can be actioned.\n\n- Describe the specific pipeline stages to be instrumented\n- Provide an implementation approach\n- Add measurable acceptance criteria",
-        "assessedAt": "2026-04-15T16:00:00Z"
+        "assessedAt": "2026-04-15T16:00:00Z",
+        "rubricVersion": "v1"
       },
       "history": []
     },
     "RHAIRFE-1005": {
       "latest": {
-        "scores": { "what": 2, "why": 2, "how": 2, "task": 2, "size": 2 },
+        "scores": {
+          "what": 2,
+          "why": 2,
+          "how": 2,
+          "task": 2,
+          "size": 2
+        },
         "total": 10,
         "passFail": "PASS",
         "antiPatterns": [],
@@ -113,13 +173,20 @@
         },
         "verdict": "Exemplary RFE. Could serve as a template for others.",
         "feedback": "**Outstanding quality across all criteria.**\n\nThis RFE demonstrates best practices:\n- Clear problem definition\n- Data-backed justification\n- Detailed technical approach\n- Measurable outcomes",
-        "assessedAt": "2026-04-18T08:00:00Z"
+        "assessedAt": "2026-04-18T08:00:00Z",
+        "rubricVersion": "v1"
       },
       "history": []
     },
     "RHAIRFE-1006": {
       "latest": {
-        "scores": { "what": 1, "why": 1, "how": 1, "task": 1, "size": 1 },
+        "scores": {
+          "what": 1,
+          "why": 1,
+          "how": 1,
+          "task": 1,
+          "size": 1
+        },
         "total": 5,
         "passFail": "PASS",
         "antiPatterns": [],
@@ -132,13 +199,20 @@
         },
         "verdict": "Meets minimum quality bar but has room for improvement.",
         "feedback": "This RFE passes the minimum threshold but could benefit from:\n- More specific data quality checks to validate\n- Clearer success metrics\n- Edge case handling",
-        "assessedAt": "2026-04-14T11:00:00Z"
+        "assessedAt": "2026-04-14T11:00:00Z",
+        "rubricVersion": "v1"
       },
       "history": []
     },
     "RHAIRFE-1007": {
       "latest": {
-        "scores": { "what": 2, "why": 1, "how": 2, "task": 1, "size": 2 },
+        "scores": {
+          "what": 2,
+          "why": 1,
+          "how": 2,
+          "task": 1,
+          "size": 2
+        },
         "total": 8,
         "passFail": "PASS",
         "antiPatterns": [],
@@ -151,16 +225,28 @@
         },
         "verdict": "Solid RFE with strong technical detail.",
         "feedback": "Good overall quality.\n\n**Suggestions:**\n- Reference specific compliance frameworks (SOC2, etc.)\n- Add edge cases for permission inheritance",
-        "assessedAt": "2026-04-13T09:30:00Z"
+        "assessedAt": "2026-04-13T09:30:00Z",
+        "rubricVersion": "v1"
       },
       "history": []
     },
     "RHAIRFE-1008": {
       "latest": {
-        "scores": { "what": 0, "why": 0, "how": 0, "task": 0, "size": 1 },
+        "scores": {
+          "what": 0,
+          "why": 0,
+          "how": 0,
+          "task": 0,
+          "size": 1
+        },
         "total": 1,
         "passFail": "FAIL",
-        "antiPatterns": ["WHY Void", "WHAT Void", "HOW Void", "Task Masquerade"],
+        "antiPatterns": [
+          "WHY Void",
+          "WHAT Void",
+          "HOW Void",
+          "Task Masquerade"
+        ],
         "criterionNotes": {
           "what": "One-line description with no detail.",
           "why": "No justification provided.",
@@ -170,16 +256,25 @@
         },
         "verdict": "Fails on nearly all criteria. Requires complete rewrite.",
         "feedback": "This RFE is essentially a placeholder. It needs:\n- A detailed problem description\n- Business justification\n- Technical approach\n- Acceptance criteria\n\nConsider using the RFE template to restructure.",
-        "assessedAt": "2026-04-12T17:00:00Z"
+        "assessedAt": "2026-04-12T17:00:00Z",
+        "rubricVersion": "v1"
       },
       "history": []
     },
     "RHAIRFE-1009": {
       "latest": {
-        "scores": { "what": 2, "why": 2, "how": 1, "task": 1, "size": 0 },
+        "scores": {
+          "what": 2,
+          "why": 2,
+          "how": 1,
+          "task": 1,
+          "size": 0
+        },
         "total": 6,
         "passFail": "PASS",
-        "antiPatterns": ["Size Scope Creep"],
+        "antiPatterns": [
+          "Size Scope Creep"
+        ],
         "criterionNotes": {
           "what": "Thorough description of federated learning needs.",
           "why": "Excellent strategic justification.",
@@ -189,16 +284,25 @@
         },
         "verdict": "Good content but needs to be split into smaller RFEs.",
         "feedback": "Strong problem statement and justification, but the scope is too large.\n\n**Recommendations:**\n- Split into 3 separate RFEs:\n  - Federated training infrastructure\n  - Model aggregation framework\n  - Privacy-preserving data handling",
-        "assessedAt": "2026-04-11T14:00:00Z"
+        "assessedAt": "2026-04-11T14:00:00Z",
+        "rubricVersion": "v1"
       },
       "history": []
     },
     "RHAIRFE-1010": {
       "latest": {
-        "scores": { "what": 1, "why": 1, "how": 1, "task": 0, "size": 1 },
+        "scores": {
+          "what": 1,
+          "why": 1,
+          "how": 1,
+          "task": 0,
+          "size": 1
+        },
         "total": 4,
         "passFail": "FAIL",
-        "antiPatterns": ["Task Masquerade"],
+        "antiPatterns": [
+          "Task Masquerade"
+        ],
         "criterionNotes": {
           "what": "Mentions latency improvement but vague on specifics.",
           "why": "General justification without data.",
@@ -208,7 +312,8 @@
         },
         "verdict": "Below quality threshold. Needs clearer requirements.",
         "feedback": "**Key issues:**\n- No specific latency targets defined\n- Multiple potential approaches without a recommendation\n- Missing acceptance criteria\n\n**Suggestions:**\n- Define target latency (e.g., p99 < 100ms)\n- Choose and justify one implementation approach\n- Add measurable acceptance criteria",
-        "assessedAt": "2026-04-10T10:00:00Z"
+        "assessedAt": "2026-04-10T10:00:00Z",
+        "rubricVersion": "v1"
       },
       "history": []
     }

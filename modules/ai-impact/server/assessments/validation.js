@@ -1,4 +1,15 @@
-const CRITERIA = ['what', 'why', 'how', 'task', 'size'];
+// PRD review rubric versions. Each assessment is tagged with `rubricVersion`;
+// v1 (legacy) and v2 (current) use different criterion keys.
+const CRITERIA_BY_VERSION = {
+  v1: ['what', 'why', 'how', 'task', 'size'],
+  v2: ['what', 'why', 'userFacing', 'rightSized', 'testability'],
+};
+// Backward-compatible default export (v1 criteria).
+const CRITERIA = CRITERIA_BY_VERSION.v1;
+
+function criteriaForVersion(version) {
+  return CRITERIA_BY_VERSION[version] || CRITERIA_BY_VERSION.v1;
+}
 
 /**
  * Validate an assessment request body.
@@ -12,11 +23,19 @@ function validateAssessment(body) {
     return { valid: false, errors: ['Request body must be an object'] };
   }
 
-  // scores: object with what/why/how/task/size each 0-2 integer
+  // rubricVersion: optional enum "v1" or "v2" (defaults to v1)
+  if (body.rubricVersion !== undefined &&
+      body.rubricVersion !== 'v1' && body.rubricVersion !== 'v2') {
+    errors.push('rubricVersion must be "v1" or "v2"');
+  }
+  const version = body.rubricVersion === 'v2' ? 'v2' : 'v1';
+  const criteria = criteriaForVersion(version);
+
+  // scores: object with the version's criteria each a 0-2 integer
   if (!body.scores || typeof body.scores !== 'object') {
-    errors.push('scores must be an object with keys: ' + CRITERIA.join(', '));
+    errors.push('scores must be an object with keys: ' + criteria.join(', '));
   } else {
-    for (const criterion of CRITERIA) {
+    for (const criterion of criteria) {
       const val = body.scores[criterion];
       if (!Number.isInteger(val) || val < 0 || val > 2) {
         errors.push(`scores.${criterion} must be an integer between 0 and 2`);
@@ -28,7 +47,7 @@ function validateAssessment(body) {
   if (!Number.isInteger(body.total) || body.total < 0 || body.total > 10) {
     errors.push('total must be an integer between 0 and 10');
   } else if (body.scores && typeof body.scores === 'object') {
-    const sum = CRITERIA.reduce((acc, c) => {
+    const sum = criteria.reduce((acc, c) => {
       const v = body.scores[c];
       return acc + (Number.isInteger(v) ? v : 0);
     }, 0);
@@ -59,7 +78,7 @@ function validateAssessment(body) {
     if (!body.criterionNotes || typeof body.criterionNotes !== 'object') {
       errors.push('criterionNotes must be an object');
     } else {
-      for (const criterion of CRITERIA) {
+      for (const criterion of criteria) {
         if (body.criterionNotes[criterion] !== undefined && typeof body.criterionNotes[criterion] !== 'string') {
           errors.push(`criterionNotes.${criterion} must be a string`);
         }
@@ -81,17 +100,16 @@ function validateAssessment(body) {
     return { valid: false, errors };
   }
 
-  // Return normalized data
+  // Return normalized data (scores built from the version's criteria)
+  const normalizedScores = {};
+  for (const criterion of criteria) {
+    normalizedScores[criterion] = body.scores[criterion];
+  }
   return {
     valid: true,
     data: {
-      scores: {
-        what: body.scores.what,
-        why: body.scores.why,
-        how: body.scores.how,
-        task: body.scores.task,
-        size: body.scores.size
-      },
+      rubricVersion: version,
+      scores: normalizedScores,
       total: body.total,
       passFail: body.passFail,
       antiPatterns: body.antiPatterns || [],

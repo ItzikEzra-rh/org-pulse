@@ -30,6 +30,7 @@ function writeAssessmentsAtomic(writeToStorageAtomic, data) {
  */
 function trimForHistory(assessment) {
   return {
+    rubricVersion: assessment.rubricVersion,
     scores: assessment.scores,
     total: assessment.total,
     passFail: assessment.passFail,
@@ -111,6 +112,7 @@ function getLatestProjection(data) {
   const projected = {};
   for (const [key, entry] of Object.entries(data.assessments)) {
     projected[key] = {
+      rubricVersion: entry.latest.rubricVersion,
       scores: entry.latest.scores,
       total: entry.latest.total,
       passFail: entry.latest.passFail,
