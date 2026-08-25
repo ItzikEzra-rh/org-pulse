@@ -41,22 +41,40 @@ test.describe('System Health Module @system-health', () => {
     expect(page.errors).toHaveLength(0);
   });
 
-  test('module header should be disabled', async ({ page }) => {
+  test('module header should be enabled and expandable', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
     const moduleHeader = page.locator('aside nav button').filter({ hasText: 'System Health' }).first();
     const isDisabled = await moduleHeader.getAttribute('disabled');
-    expect(isDisabled).not.toBeNull();
+    expect(isDisabled).toBeNull();
 
     const cursor = await moduleHeader.evaluate(el => window.getComputedStyle(el).cursor);
-    expect(cursor).toBe('not-allowed');
+    expect(cursor).not.toBe('not-allowed');
 
     expect(page.errors).toHaveLength(0);
   });
 
-  test('should use static data (no API calls required)', async ({ page }) => {
+  test('legacy quality-analysis and component-maturity items should be disabled', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const moduleHeader = page.locator('aside nav button').filter({ hasText: 'System Health' }).first();
+    await moduleHeader.click();
+    await page.waitForTimeout(500);
+
+    for (const label of ['Quality analysis', 'Component maturity']) {
+      const item = page.locator('aside nav button').filter({ hasText: label }).first();
+      const isDisabled = await item.getAttribute('disabled');
+      expect(isDisabled).not.toBeNull();
+    }
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('should use static data for legacy quality-analysis view (no API calls required)', async ({ page }) => {
     // Monitor network requests
     const apiRequests = [];
     page.on('request', request => {
@@ -86,11 +104,6 @@ test.describe('System Health Module @system-health', () => {
   });
 
 });
-
-/**
- * Module is disabled for OSAC — verify the header is grayed out.
- * Individual nav item tests removed since the module cannot be expanded.
- */
 
 /**
  * Active Components
@@ -131,6 +144,21 @@ test.describe('System Health Views @system-health', () => {
 
     expect(page.errors).toHaveLength(0);
   }
+
+  test('should load Operational Metrics view with embedded UOI dashboard', async ({ page }) => {
+    await testView(page, 'operational-metrics', 'Operational Metrics');
+
+    const iframe = page.locator('iframe');
+    await expect(iframe).toHaveCount(1);
+    const src = await iframe.getAttribute('src');
+    expect(src).toContain('devtools.pages.redhat.com/n8n-pulumi-poc');
+    expect(src).toContain('product=osac');
+
+    const openInNewTab = page.locator('a').filter({ hasText: 'Open in new tab' });
+    await expect(openInNewTab).toHaveAttribute('target', '_blank');
+    const href = await openInNewTab.getAttribute('href');
+    expect(href).toContain('devtools.pages.redhat.com/n8n-pulumi-poc');
+  });
 
   test('should load Quality Analysis view', async ({ page }) => {
     await testView(page, 'quality-analysis', 'Quality Analysis');

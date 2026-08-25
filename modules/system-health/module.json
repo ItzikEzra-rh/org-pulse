@@ -1,17 +1,17 @@
 {
   "name": "System Health",
   "slug": "system-health",
-  "description": "Operational health signals for repositories and related systems",
+  "description": "Operational metrics for the OSAC delivery pipeline (PR cycle time, AI impact, system health)",
   "icon": "hospital",
   "order": 18,
-  "disabled": true,
   "defaultEnabled": true,
   "requires": [],
   "client": {
     "entry": "./client/index.js",
     "navItems": [
-      { "id": "quality-analysis", "label": "Quality analysis", "icon": "clipboard-list", "default": true },
-      { "id": "component-maturity", "label": "Component maturity", "icon": "layers" }
+      { "id": "operational-metrics", "label": "Operational Metrics", "icon": "activity", "default": true },
+      { "id": "quality-analysis", "label": "Quality analysis", "icon": "clipboard-list", "separatorBefore": true, "disabled": true },
+      { "id": "component-maturity", "label": "Component maturity", "icon": "layers", "disabled": true }
     ],
     "hiddenRoutes": {
       "disconnected-repo-detail": "component-maturity"
