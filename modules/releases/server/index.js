@@ -16,6 +16,7 @@ const registerHygieneRoutes = require('./hygiene/routes');
 const registerTvFvDeltaRoutes = require('./tv-fv-delta/routes');
 const registerFeaturePressureRoutes = require('./feature-pressure/routes');
 const registerPmHubRoutes = require('./pm-hub/routes');
+const registerReleasePlanRoutes = require('./release-plan/routes');
 const { getAuditLog } = require('./planning/audit-log');
 
 /**
@@ -283,6 +284,9 @@ module.exports = function registerRoutes(router, context) {
     storage
   });
   router.use('/pm-hub', pmHubRouter);
+
+  // Release Plan routes (top-level under /api/modules/releases/, no LLM call — pure storage passthrough)
+  registerReleasePlanRoutes(router, { storage, requireAuth, requireScope });
 
   // ─── Unified Audit Routes ───
 

@@ -1,0 +1,184 @@
+{
+  "metadata": {
+    "version": "0.3",
+    "priorVersion": "0.2",
+    "generatedAt": "2026-08-19 14:35",
+    "badge": "Developer Preview"
+  },
+  "vision": {
+    "summary": "OSAC 0.3 extends the platform with cluster upgrade automation, per-project KMS, and the first MaaS inference metering surface, building on the multi-tenant CaaS/VMaaS foundation delivered in 0.1 and 0.2.",
+    "metrics": [
+      { "num": 41, "label": "Features in 0.3" },
+      { "num": 9, "label": "Use Cases" },
+      { "num": 8, "label": "Customer Drivers" },
+      { "num": 110, "label": "Total Features (0.1–0.3)" }
+    ]
+  },
+  "serviceMatrix": {
+    "services": ["CaaS", "VMaaS", "BMaaS", "MaaS"],
+    "rows": [
+      {
+        "dimension": "API",
+        "cells": {
+          "CaaS": [
+            { "version": "0.1", "isTarget": false, "text": "Cluster provisioning via HyperShift + Metal3" },
+            { "version": "0.2", "isTarget": false, "text": "Managed cluster versions" },
+            { "version": "+0.3", "isTarget": true, "text": "Cluster upgrade automation" }
+          ],
+          "VMaaS": [
+            { "version": "0.2", "isTarget": false, "text": "VM lifecycle management" },
+            { "version": "+0.3", "isTarget": true, "text": "VM worker nodes for CaaS clusters" }
+          ],
+          "BMaaS": "—",
+          "MaaS": [
+            { "version": "+0.3", "isTarget": true, "text": "Model serving inference API" }
+          ]
+        }
+      },
+      {
+        "dimension": "Networking",
+        "cells": {
+          "CaaS": [
+            { "version": "0.2", "isTarget": false, "text": "CaaS networking via Ansible VLAN" }
+          ],
+          "VMaaS": "—",
+          "BMaaS": "—",
+          "MaaS": "—"
+        }
+      },
+      {
+        "dimension": "Storage",
+        "cells": {
+          "CaaS": [
+            { "version": "0.2", "isTarget": false, "text": "CSI storage provisioning" }
+          ],
+          "VMaaS": "—",
+          "BMaaS": "—",
+          "MaaS": "—"
+        }
+      },
+      {
+        "dimension": "UI",
+        "cells": {
+          "CaaS": [
+            { "version": "+0.3", "isTarget": true, "text": "Cluster status report UI" }
+          ],
+          "VMaaS": [
+            { "version": "+0.3", "isTarget": true, "text": "Serial console access" }
+          ],
+          "BMaaS": "—",
+          "MaaS": "—"
+        }
+      }
+    ]
+  },
+  "useCaseCards": [
+    {
+      "key": "caas",
+      "title": "CaaS — Cluster Provisioning",
+      "items": [
+        { "jira": "OSAC-1415", "title": "Support cluster upgrade", "customers": ["Moc", "Telenor"] },
+        { "jira": "OSAC-1500", "title": "Scale CLI for cluster worker pools", "customers": [] }
+      ]
+    },
+    {
+      "key": "vmaas",
+      "title": "VMaaS — VM Management",
+      "items": [
+        { "jira": "OSAC-1622", "title": "VM worker nodes for CaaS clusters", "customers": ["NCP"] }
+      ]
+    },
+    {
+      "key": "core",
+      "title": "Core — Multi-Tenancy & Platform",
+      "items": [
+        { "jira": "OSAC-1701", "title": "Per-Project KMS", "customers": ["Telefónica"] }
+      ]
+    },
+    {
+      "key": "maas",
+      "title": "MaaS — Model as a Service",
+      "items": [
+        { "jira": "OSAC-1810", "title": "MaaS inference metering", "customers": ["AI Grid"] }
+      ]
+    }
+  ],
+  "customerCoverage": {
+    "ncp": [
+      { "req": "CNP01", "requirement": "Multi-Tenant Cluster Isolation", "coverage": "Namespace + RBAC isolation per tenant", "version": "0.1", "status": "Done ✅" },
+      { "req": "CNP02", "requirement": "Declarative Resource Interfaces", "coverage": "CaaS API for cluster lifecycle", "version": "0.2", "status": "Partial" },
+      { "req": "CNP03", "requirement": "VM Worker Node Support", "coverage": "VM worker nodes for CaaS clusters", "version": "0.3", "status": "In Review" }
+    ],
+    "byCustomer": [
+      {
+        "customer": "MOC",
+        "rows": [
+          { "key": "OSAC-1415", "feature": "Support cluster upgrade", "version": "0.3", "status": "In Review" }
+        ]
+      },
+      {
+        "customer": "Telenor",
+        "rows": [
+          { "key": "OSAC-1415", "feature": "Support cluster upgrade", "version": "0.3", "status": "In Review" }
+        ]
+      }
+    ]
+  },
+  "cumulativeProgression": [
+    {
+      "useCase": "CaaS — Cluster Provisioning",
+      "versions": [
+        { "version": "0.1", "isTarget": false, "items": [
+          { "jira": "OSAC-1191", "text": "Cluster provisioning via HyperShift + Metal3 + BCM inventory" }
+        ] },
+        { "version": "0.2", "isTarget": false, "items": [
+          { "jira": "OSAC-1288", "text": "Managed cluster versions, CaaS networking (Netris/VLAN)" }
+        ] },
+        { "version": "+0.3", "isTarget": true, "items": [
+          { "jira": "OSAC-1415", "text": "Support cluster upgrade" },
+          { "jira": "OSAC-1500", "text": "Scale CLI for cluster worker pools" }
+        ] }
+      ]
+    },
+    {
+      "useCase": "MaaS — Model as a Service",
+      "versions": [
+        { "version": "+0.3", "isTarget": true, "items": [
+          { "jira": "OSAC-1810", "text": "MaaS inference metering" }
+        ] }
+      ]
+    }
+  ],
+  "featureInventory": [
+    {
+      "group": "CaaS — Cluster Provisioning",
+      "features": [
+        { "key": "OSAC-1415", "summary": "Support cluster upgrade", "customers": ["Moc", "Telenor"], "status": "In Review" },
+        { "key": "OSAC-1500", "summary": "Scale CLI for cluster worker pools", "customers": [], "status": "In Progress" }
+      ]
+    },
+    {
+      "group": "VMaaS — VM Management",
+      "features": [
+        { "key": "OSAC-1622", "summary": "VM worker nodes for CaaS clusters", "customers": ["NCP"], "status": "Planned" }
+      ]
+    },
+    {
+      "group": "Spikes (Investigations)",
+      "features": [
+        { "key": "OSAC-2850", "summary": "[spike] Investigate Slurm cluster setup using BMaaS API", "customers": ["Moc", "Telefonica"], "status": "Planned" }
+      ]
+    }
+  ],
+  "notes": {
+    "needsDecomposition": [
+      { "jira": "OSAC-3784", "title": "Billing Integration MVP", "note": "large scope, needs epic breakdown" }
+    ],
+    "spikes": [
+      { "jira": "OSAC-2850", "title": "[spike] Investigate Slurm cluster setup using BMaaS API", "note": "investigation, not a delivered capability" }
+    ],
+    "backlog": [
+      { "jira": "OSAC-63", "title": "Activity and Audit Log API", "customers": ["MOC", "Telenor", "Jio", "Telus"], "note": "Backlog" }
+    ]
+  }
+}

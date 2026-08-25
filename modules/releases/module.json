@@ -14,7 +14,8 @@
       { "id": "execute", "label": "Execute", "icon": "GitBranch" },
       { "id": "deliver", "label": "Deliver", "icon": "Rocket" },
       { "id": "reports", "label": "Reports", "icon": "BarChart3" },
-      { "id": "audit", "label": "Audit", "icon": "History" }
+      { "id": "audit", "label": "Audit", "icon": "History" },
+      { "id": "release-plan", "label": "Release Plan", "icon": "Map" }
     ],
     "sotuWidgets": [
       {

@@ -181,6 +181,74 @@ test.describe('Releases Views @releases', () => {
   test('should load Schedule view', async ({ page }) => {
     await testView(page, 'schedule', 'Schedule');
   });
+
+  test('should load Release Plan view', async ({ page }) => {
+    await testView(page, 'release-plan', 'Release Plan');
+  });
+});
+
+/**
+ * Release Plan
+ *
+ * Forward-looking version plan (OSAC-4396/OSAC-4399/OSAC-4394), served as a
+ * pure readFromStorage passthrough — no LLM call in the app.
+ */
+test.describe('Releases Release Plan @releases', () => {
+  test.beforeEach(async ({ page }) => {
+    setupErrorTracking(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    logCapturedErrors(page, testInfo);
+  });
+
+  test('release-plans index endpoint returns published versions', async ({ request }) => {
+    const res = await request.get('/api/modules/releases/release-plans');
+    expect(res.ok()).toBe(true);
+    const body = await res.json();
+    expect(body).toHaveProperty('versions');
+    expect(Array.isArray(body.versions)).toBe(true);
+  });
+
+  test('release-plan endpoint requires a version parameter', async ({ request }) => {
+    const res = await request.get('/api/modules/releases/release-plan');
+    expect(res.status()).toBe(400);
+  });
+
+  test('release-plan endpoint 404s for an unknown version', async ({ request }) => {
+    const res = await request.get('/api/modules/releases/release-plan?version=99.9');
+    expect(res.status()).toBe(404);
+  });
+
+  test('version picker switches the rendered release plan', async ({ page }) => {
+    await page.goto('/#/releases/release-plan');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const picker = page.locator('#release-plan-version');
+    await expect(picker).toBeVisible();
+
+    const options = await picker.locator('option').allTextContents();
+    if (options.length < 2) {
+      test.skip();
+      return;
+    }
+
+    const initialValue = await picker.inputValue();
+    const otherOption = await picker.locator('option').evaluateAll((opts, current) => {
+      const match = opts.find((o) => o.value !== current);
+      return match ? match.value : null;
+    }, initialValue);
+    if (!otherOption) {
+      test.skip();
+      return;
+    }
+
+    await picker.selectOption(otherOption);
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    await expect(picker).toHaveValue(otherOption);
+    expect(page.errors).toHaveLength(0);
+  });
 });
 
 /**

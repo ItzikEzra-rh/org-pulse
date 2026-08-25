@@ -9,4 +9,5 @@ export const routes = {
   'deliver': defineAsyncComponent(() => import('./views/DeliverView.vue')),
   'reports': defineAsyncComponent(() => import('./views/ReportsView.vue')),
   'audit': defineAsyncComponent(() => import('./views/AuditView.vue')),
+  'release-plan': defineAsyncComponent(() => import('./views/ReleasePlanView.vue')),
 }
