@@ -16,12 +16,16 @@ async function loadVersions() {
   try {
     const data = await apiRequest('/modules/releases/release-plans')
     versions.value = data.versions || []
-  } catch {
+  } catch (e) {
+    error.value = e.message || 'Failed to load release plan versions'
     versions.value = []
   }
 }
 
+let planRequestId = 0
+
 async function loadPlan(version) {
+  const requestId = ++planRequestId
   if (!version) {
     plan.value = null
     return
@@ -29,12 +33,15 @@ async function loadPlan(version) {
   loading.value = true
   error.value = null
   try {
-    plan.value = await apiRequest(`/modules/releases/release-plan?version=${encodeURIComponent(version)}`)
+    const nextPlan = await apiRequest(`/modules/releases/release-plan?version=${encodeURIComponent(version)}`)
+    if (requestId === planRequestId) plan.value = nextPlan
   } catch (e) {
-    error.value = e.message || 'Failed to load release plan'
-    plan.value = null
+    if (requestId === planRequestId) {
+      error.value = e.message || 'Failed to load release plan'
+      plan.value = null
+    }
   } finally {
-    loading.value = false
+    if (requestId === planRequestId) loading.value = false
   }
 }
 
@@ -42,14 +49,30 @@ watch(selectedVersion, (v) => {
   loadPlan(v)
 })
 
-onMounted(async () => {
+async function bootstrap() {
+  loading.value = true
+  error.value = null
   await loadVersions()
+  if (error.value) {
+    loading.value = false
+    return
+  }
   if (versions.value.length > 0) {
     selectedVersion.value = versions.value[versions.value.length - 1]
   } else {
     loading.value = false
   }
-})
+}
+
+function retry() {
+  if (selectedVersion.value) {
+    loadPlan(selectedVersion.value)
+  } else {
+    bootstrap()
+  }
+}
+
+onMounted(bootstrap)
 
 const matrixCells = computed(() => {
   if (!plan.value) return {}
@@ -102,7 +125,7 @@ const matrixCells = computed(() => {
       <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">Failed to load release plan</h3>
       <p class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
       <button
-        @click="loadPlan(selectedVersion)"
+        @click="retry"
         class="mt-4 px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline"
       >Try again</button>
     </div>

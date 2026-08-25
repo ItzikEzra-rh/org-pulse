@@ -64,6 +64,16 @@ describe('ReleasePlanView', () => {
     expect(wrapper.text()).toContain('No release plan published')
   })
 
+  it('renders error state (not empty state) when the version index fetch fails', async () => {
+    apiRequest.mockRejectedValue(new Error('network down'))
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Failed to load release plan')
+    expect(wrapper.text()).toContain('network down')
+    expect(wrapper.text()).not.toContain('No release plan published')
+  })
+
   it('renders error state when the plan fetch fails', async () => {
     apiRequest.mockImplementation((path) => {
       if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: ['0.3'] })
@@ -115,5 +125,33 @@ describe('ReleasePlanView', () => {
 
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/release-plan?version=0.2')
     expect(wrapper.text()).toContain('A summary of 0.2.')
+  })
+
+  it('ignores a stale plan response when versions are switched quickly', async () => {
+    let resolveFirst
+    apiRequest.mockImplementation((path) => {
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: ['0.2', '0.3'] })
+      if (path === '/modules/releases/release-plan?version=0.3') {
+        return new Promise((resolve) => { resolveFirst = resolve })
+      }
+      if (path === '/modules/releases/release-plan?version=0.2') {
+        return Promise.resolve(makePlan({ vision: { summary: 'A summary of 0.2.', metrics: [] } }))
+      }
+      return Promise.reject(new Error('unexpected path: ' + path))
+    })
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+
+    // Switch to 0.2 before the initial (0.3) request resolves.
+    await wrapper.find('#release-plan-version').setValue('0.2')
+    await flushPromises()
+    expect(wrapper.text()).toContain('A summary of 0.2.')
+
+    // The stale 0.3 response arrives after — it must not clobber the 0.2 view.
+    resolveFirst(makePlan({ vision: { summary: 'A summary of 0.3.', metrics: [] } }))
+    await flushPromises()
+    expect(wrapper.text()).toContain('A summary of 0.2.')
+    expect(wrapper.text()).not.toContain('A summary of 0.3.')
   })
 })
