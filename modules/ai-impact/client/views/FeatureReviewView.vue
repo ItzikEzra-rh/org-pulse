@@ -12,10 +12,12 @@ const moduleNav = inject('moduleNav')
 const { navigateTo: crossNavigate } = useModuleLink()
 const selectedFeature = ref(null)
 const searchQuery = ref('')
+const aiInvolvementFilter = ref('all')
 const recommendationFilter = ref('all')
 const priorityFilter = ref('all')
 const humanReviewFilter = ref('all')
 const componentFilter = ref('all')
+const artifactFilter = ref('all')
 const sortBy = ref('default')
 const chartExpanded = ref(true)
 
@@ -70,10 +72,12 @@ watch(() => moduleNav.params.value, (params) => {
     const feature = Object.values(features.value).find(f => f.key === params.select)
     if (feature && selectedFeature.value?.key !== feature.key) {
       searchQuery.value = ''
+      aiInvolvementFilter.value = 'all'
       recommendationFilter.value = 'all'
       priorityFilter.value = 'all'
       humanReviewFilter.value = 'all'
       componentFilter.value = 'all'
+      artifactFilter.value = 'all'
       sortBy.value = 'default'
       selectedFeature.value = feature
     }
@@ -104,19 +108,23 @@ watch(() => Object.keys(features.value).length, () => {
       :timeWindow="featureTimeWindow"
       :chartExpanded="chartExpanded"
       :searchQuery="searchQuery"
+      :aiInvolvementFilter="aiInvolvementFilter"
       :recommendationFilter="recommendationFilter"
       :priorityFilter="priorityFilter"
       :humanReviewFilter="humanReviewFilter"
       :componentFilter="componentFilter"
+      :artifactFilter="artifactFilter"
       :sortBy="sortBy"
       :selectedFeature="selectedFeature"
       @update:timeWindow="featureTimeWindow = $event"
       @update:chartExpanded="chartExpanded = $event"
       @update:searchQuery="searchQuery = $event"
+      @update:aiInvolvementFilter="aiInvolvementFilter = $event"
       @update:recommendationFilter="recommendationFilter = $event"
       @update:priorityFilter="priorityFilter = $event"
       @update:humanReviewFilter="humanReviewFilter = $event"
       @update:componentFilter="componentFilter = $event"
+      @update:artifactFilter="artifactFilter = $event"
       @update:sortBy="sortBy = $event"
       @selectFeature="handleSelectFeature"
       @retry="handleRetry"

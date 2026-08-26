@@ -15,10 +15,12 @@ defineProps({
   timeWindow: { type: String, default: 'month' },
   chartExpanded: { type: Boolean, default: true },
   searchQuery: { type: String, default: '' },
+  aiInvolvementFilter: { type: String, default: 'all' },
   recommendationFilter: { type: String, default: 'all' },
   priorityFilter: { type: String, default: 'all' },
   humanReviewFilter: { type: String, default: 'all' },
   componentFilter: { type: String, default: 'all' },
+  artifactFilter: { type: String, default: 'all' },
   sortBy: { type: String, default: 'default' },
   selectedFeature: { type: Object, default: null }
 })
@@ -27,10 +29,12 @@ const emit = defineEmits([
   'update:timeWindow',
   'update:chartExpanded',
   'update:searchQuery',
+  'update:aiInvolvementFilter',
   'update:recommendationFilter',
   'update:priorityFilter',
   'update:humanReviewFilter',
   'update:componentFilter',
+  'update:artifactFilter',
   'update:sortBy',
   'selectFeature',
   'retry'
@@ -105,16 +109,20 @@ const emit = defineEmits([
         :features="features"
         :selectedFeature="selectedFeature"
         :searchQuery="searchQuery"
+        :aiInvolvementFilter="aiInvolvementFilter"
         :recommendationFilter="recommendationFilter"
         :priorityFilter="priorityFilter"
         :humanReviewFilter="humanReviewFilter"
         :componentFilter="componentFilter"
+        :artifactFilter="artifactFilter"
         :sortBy="sortBy"
         @update:searchQuery="emit('update:searchQuery', $event)"
+        @update:aiInvolvementFilter="emit('update:aiInvolvementFilter', $event)"
         @update:recommendationFilter="emit('update:recommendationFilter', $event)"
         @update:priorityFilter="emit('update:priorityFilter', $event)"
         @update:humanReviewFilter="emit('update:humanReviewFilter', $event)"
         @update:componentFilter="emit('update:componentFilter', $event)"
+        @update:artifactFilter="emit('update:artifactFilter', $event)"
         @update:sortBy="emit('update:sortBy', $event)"
         @selectFeature="emit('selectFeature', $event)"
       />

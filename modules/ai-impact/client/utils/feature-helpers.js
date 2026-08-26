@@ -112,3 +112,39 @@ export function getPrdSignOffStatus(prdPrStatus) {
   if (prdPrStatus === 'Merged') return 'approved'
   return 'awaiting-review'
 }
+
+// --- Shared filter-bar option sets (PRD Review + Design Review) ---
+// Centralized here so the two list filter bars can't drift apart again.
+
+export const AI_INVOLVEMENT_FILTER_OPTIONS = [
+  { value: 'all', label: 'All AI' },
+  { value: 'both', label: 'Created & Review' },
+  { value: 'created', label: 'AI Created' },
+  { value: 'revised', label: 'AI Review' },
+  { value: 'none', label: 'No AI' }
+]
+
+export const REVIEW_STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'All Review Status' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'awaiting-review', label: 'Awaiting Sign-off' },
+  { value: 'needs-review', label: 'Flagged' }
+]
+
+export const SORT_FILTER_OPTIONS = [
+  { value: 'default', label: 'Sort: Default' },
+  { value: 'score-desc', label: 'Score: High to Low' },
+  { value: 'score-asc', label: 'Score: Low to High' },
+  { value: 'newest', label: 'Sort: Newest' },
+  { value: 'oldest', label: 'Sort: Oldest' }
+]
+
+// Artifact = whether the underlying doc (PRD / design doc) exists at all.
+// `noun` is the tab-specific word ("PRD" / "Design") so the labels read naturally.
+export function getArtifactFilterOptions(noun) {
+  return [
+    { value: 'all', label: `All ${noun}` },
+    { value: 'has', label: `Has ${noun}` },
+    { value: 'missing', label: `Missing ${noun}` }
+  ]
+}

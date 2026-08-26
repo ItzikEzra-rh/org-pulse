@@ -1,7 +1,12 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import RFEListItem from './RFEListItem.vue'
-import { getPrdSignOffStatus } from '../utils/feature-helpers.js'
+import {
+  getPrdSignOffStatus, AI_INVOLVEMENT_FILTER_OPTIONS, REVIEW_STATUS_FILTER_OPTIONS,
+  SORT_FILTER_OPTIONS, getArtifactFilterOptions
+} from '../utils/feature-helpers.js'
+
+const artifactFilterOptions = getArtifactFilterOptions('PRD')
 
 const props = defineProps({
   rfes: { type: Array, default: () => [] },
@@ -13,13 +18,13 @@ const props = defineProps({
   sortBy: { type: String, default: 'default' },
   passFailFilter: { type: String, default: 'all' },
   priorityFilter: { type: String, default: 'all' },
-  statusFilter: { type: String, default: 'all' },
+  artifactFilter: { type: String, default: 'all' },
   reviewStatusFilter: { type: String, default: 'all' },
   componentFilter: { type: String, default: 'all' },
   rfeToFeature: { type: Object, default: () => ({}) }
 })
 
-const emit = defineEmits(['update:filter', 'update:searchQuery', 'update:sortBy', 'update:passFailFilter', 'update:priorityFilter', 'update:statusFilter', 'update:reviewStatusFilter', 'update:componentFilter', 'selectRFE'])
+const emit = defineEmits(['update:filter', 'update:searchQuery', 'update:sortBy', 'update:passFailFilter', 'update:priorityFilter', 'update:artifactFilter', 'update:reviewStatusFilter', 'update:componentFilter', 'selectRFE'])
 
 function extractNumericId(key) {
   const match = /(\d+)$/.exec(key || '')
@@ -31,14 +36,6 @@ const availablePriorities = computed(() => {
   const values = new Set()
   for (const rfe of props.rfes) {
     if (rfe.priority) values.add(rfe.priority)
-  }
-  return [...values].sort()
-})
-
-const availableStatuses = computed(() => {
-  const values = new Set()
-  for (const rfe of props.rfes) {
-    if (rfe.status) values.add(rfe.status)
   }
   return [...values].sort()
 })
@@ -70,9 +67,11 @@ const sortedAndFilteredRFEs = computed(() => {
     rfes = rfes.filter(rfe => rfe.priority === props.priorityFilter)
   }
 
-  // Apply status filter
-  if (props.statusFilter !== 'all') {
-    rfes = rfes.filter(rfe => rfe.status === props.statusFilter)
+  // Apply artifact filter (whether the PRD exists at all)
+  if (props.artifactFilter === 'has') {
+    rfes = rfes.filter(rfe => rfe.status !== 'No PR')
+  } else if (props.artifactFilter === 'missing') {
+    rfes = rfes.filter(rfe => rfe.status === 'No PR')
   }
 
   // Apply review status filter (derived human sign-off, independent of raw PR status)
@@ -104,6 +103,10 @@ const sortedAndFilteredRFEs = computed(() => {
       if (!sb) return -1
       return sb.total - sa.total
     })
+  } else if (props.sortBy === 'newest') {
+    rfes.sort((a, b) => new Date(b.created) - new Date(a.created))
+  } else if (props.sortBy === 'oldest') {
+    rfes.sort((a, b) => new Date(a.created) - new Date(b.created))
   } else {
     // Default: verified PRDs first, then newest Feature ID (numeric) first within each group
     rfes.sort((a, b) => {
@@ -128,7 +131,7 @@ const paginatedRFEs = computed(() => {
 })
 
 watch(
-  () => [props.filter, props.searchQuery, props.sortBy, props.passFailFilter, props.priorityFilter, props.statusFilter, props.reviewStatusFilter, props.componentFilter],
+  () => [props.filter, props.searchQuery, props.sortBy, props.passFailFilter, props.priorityFilter, props.artifactFilter, props.reviewStatusFilter, props.componentFilter],
   () => { currentPage.value = 1 }
 )
 
@@ -179,21 +182,24 @@ function handleSelectRFE(rfe) {
           @change="emit('update:filter', $event.target.value)"
           class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
         >
-          <option value="all">All AI</option>
-          <option value="both">Both AI</option>
-          <option value="created">Created</option>
-          <option value="revised">Review</option>
-          <option value="none">No AI</option>
+          <option v-for="o in AI_INVOLVEMENT_FILTER_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
         </select>
         <select
           :value="passFailFilter"
           @change="emit('update:passFailFilter', $event.target.value)"
           class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
         >
-          <option value="all">All Quality</option>
+          <option value="all">All AI Verdicts</option>
           <option value="pass">Pass</option>
           <option value="fail">Fail</option>
           <option value="unassessed">Not Assessed</option>
+        </select>
+        <select
+          :value="reviewStatusFilter"
+          @change="emit('update:reviewStatusFilter', $event.target.value)"
+          class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
+        >
+          <option v-for="o in REVIEW_STATUS_FILTER_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
         </select>
         <select
           :value="priorityFilter"
@@ -204,23 +210,6 @@ function handleSelectRFE(rfe) {
           <option v-for="p in availablePriorities" :key="p" :value="p">{{ p }}</option>
         </select>
         <select
-          :value="statusFilter"
-          @change="emit('update:statusFilter', $event.target.value)"
-          class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
-        >
-          <option value="all">All PR Statuses</option>
-          <option v-for="s in availableStatuses" :key="s" :value="s">{{ s }}</option>
-        </select>
-        <select
-          :value="reviewStatusFilter"
-          @change="emit('update:reviewStatusFilter', $event.target.value)"
-          class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
-        >
-          <option value="all">All Review Status</option>
-          <option value="approved">Approved</option>
-          <option value="awaiting-review">Awaiting Sign-off</option>
-        </select>
-        <select
           :value="componentFilter"
           @change="emit('update:componentFilter', $event.target.value)"
           class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
@@ -229,13 +218,18 @@ function handleSelectRFE(rfe) {
           <option v-for="c in availableComponents" :key="c" :value="c">{{ c }}</option>
         </select>
         <select
+          :value="artifactFilter"
+          @change="emit('update:artifactFilter', $event.target.value)"
+          class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
+        >
+          <option v-for="o in artifactFilterOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+        </select>
+        <select
           :value="sortBy"
           @change="emit('update:sortBy', $event.target.value)"
           class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
         >
-          <option value="default">Sort: Default</option>
-          <option value="score-asc">Score: Low to High</option>
-          <option value="score-desc">Score: High to Low</option>
+          <option v-for="o in SORT_FILTER_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
         </select>
       </div>
     </div>

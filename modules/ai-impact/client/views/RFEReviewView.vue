@@ -18,7 +18,7 @@ const chartExpanded = ref(true)
 const sortBy = ref('default')
 const passFailFilter = ref('all')
 const priorityFilter = ref('all')
-const statusFilter = ref('all')
+const artifactFilter = ref('all')
 const reviewStatusFilter = ref('all')
 const componentFilter = ref('all')
 
@@ -140,7 +140,7 @@ watch([() => moduleNav.params.value, rfeData], ([params]) => {
       searchQuery.value = ''
       passFailFilter.value = 'all'
       priorityFilter.value = 'all'
-      statusFilter.value = 'all'
+      artifactFilter.value = 'all'
       reviewStatusFilter.value = 'all'
       componentFilter.value = 'all'
       selectedRFE.value = rfe
@@ -182,7 +182,7 @@ watch([() => moduleNav.params.value, rfeData], ([params]) => {
       :sortBy="sortBy"
       :passFailFilter="passFailFilter"
       :priorityFilter="priorityFilter"
-      :statusFilter="statusFilter"
+      :artifactFilter="artifactFilter"
       :reviewStatusFilter="reviewStatusFilter"
       :componentFilter="componentFilter"
       :selectedRFE="selectedRFE"
@@ -195,7 +195,7 @@ watch([() => moduleNav.params.value, rfeData], ([params]) => {
       @update:sortBy="sortBy = $event"
       @update:passFailFilter="passFailFilter = $event"
       @update:priorityFilter="priorityFilter = $event"
-      @update:statusFilter="statusFilter = $event"
+      @update:artifactFilter="artifactFilter = $event"
       @update:reviewStatusFilter="reviewStatusFilter = $event"
       @update:componentFilter="componentFilter = $event"
       @selectRFE="handleSelectRFE"

@@ -24,7 +24,7 @@ const props = defineProps({
   sortBy: { type: String, default: 'default' },
   passFailFilter: { type: String, default: 'all' },
   priorityFilter: { type: String, default: 'all' },
-  statusFilter: { type: String, default: 'all' },
+  artifactFilter: { type: String, default: 'all' },
   reviewStatusFilter: { type: String, default: 'all' },
   componentFilter: { type: String, default: 'all' },
   selectedRFE: { type: Object, default: null },
@@ -40,7 +40,7 @@ const emit = defineEmits([
   'update:sortBy',
   'update:passFailFilter',
   'update:priorityFilter',
-  'update:statusFilter',
+  'update:artifactFilter',
   'update:reviewStatusFilter',
   'update:componentFilter',
   'selectRFE',
@@ -131,7 +131,7 @@ const isEmpty = computed(() => !props.rfeData?.fetchedAt)
           :sortBy="sortBy"
           :passFailFilter="passFailFilter"
           :priorityFilter="priorityFilter"
-          :statusFilter="statusFilter"
+          :artifactFilter="artifactFilter"
           :reviewStatusFilter="reviewStatusFilter"
           :componentFilter="componentFilter"
           :selectedRFE="selectedRFE"
@@ -141,7 +141,7 @@ const isEmpty = computed(() => !props.rfeData?.fetchedAt)
           @update:sortBy="emit('update:sortBy', $event)"
           @update:passFailFilter="emit('update:passFailFilter', $event)"
           @update:priorityFilter="emit('update:priorityFilter', $event)"
-          @update:statusFilter="emit('update:statusFilter', $event)"
+          @update:artifactFilter="emit('update:artifactFilter', $event)"
           @update:reviewStatusFilter="emit('update:reviewStatusFilter', $event)"
           @update:componentFilter="emit('update:componentFilter', $event)"
           @selectRFE="emit('selectRFE', $event)"

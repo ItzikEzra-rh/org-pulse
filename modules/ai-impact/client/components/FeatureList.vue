@@ -1,24 +1,34 @@
 <script setup>
 import { computed } from 'vue'
 import FeatureListItem from './FeatureListItem.vue'
+import {
+  AI_INVOLVEMENT_FILTER_OPTIONS, REVIEW_STATUS_FILTER_OPTIONS,
+  SORT_FILTER_OPTIONS, getArtifactFilterOptions
+} from '../utils/feature-helpers.js'
+
+const artifactFilterOptions = getArtifactFilterOptions('Design')
 
 const props = defineProps({
   features: { type: Object, default: () => ({}) },
   selectedFeature: { type: Object, default: null },
   searchQuery: { type: String, default: '' },
+  aiInvolvementFilter: { type: String, default: 'all' },
   recommendationFilter: { type: String, default: 'all' },
   priorityFilter: { type: String, default: 'all' },
   humanReviewFilter: { type: String, default: 'all' },
   componentFilter: { type: String, default: 'all' },
+  artifactFilter: { type: String, default: 'all' },
   sortBy: { type: String, default: 'default' }
 })
 
 const emit = defineEmits([
   'update:searchQuery',
+  'update:aiInvolvementFilter',
   'update:recommendationFilter',
   'update:priorityFilter',
   'update:humanReviewFilter',
   'update:componentFilter',
+  'update:artifactFilter',
   'update:sortBy',
   'selectFeature'
 ])
@@ -54,9 +64,14 @@ const sortedAndFilteredFeatures = computed(() => {
     )
   }
 
-  // Recommendation filter
-  if (props.recommendationFilter === 'no-design') {
-    items = items.filter(f => f.designStatus === 'no-design')
+  // AI involvement filter
+  if (props.aiInvolvementFilter !== 'all') {
+    items = items.filter(f => f.aiInvolvement === props.aiInvolvementFilter)
+  }
+
+  // AI verdict filter (the AI review's recommendation)
+  if (props.recommendationFilter === 'not-reviewed') {
+    items = items.filter(f => f.recommendation == null && f.designStatus !== 'no-design')
   } else if (props.recommendationFilter !== 'all') {
     items = items.filter(f => f.recommendation === props.recommendationFilter)
   }
@@ -76,11 +91,22 @@ const sortedAndFilteredFeatures = computed(() => {
     items = items.filter(f => (f.components || []).includes(props.componentFilter))
   }
 
+  // Artifact filter (whether the design doc exists at all)
+  if (props.artifactFilter === 'has') {
+    items = items.filter(f => f.designStatus !== 'no-design')
+  } else if (props.artifactFilter === 'missing') {
+    items = items.filter(f => f.designStatus === 'no-design')
+  }
+
   // Sort
-  if (props.sortBy === 'score-low') {
+  if (props.sortBy === 'score-asc') {
     items.sort((a, b) => (a.scores?.total || 0) - (b.scores?.total || 0))
-  } else if (props.sortBy === 'score-high') {
+  } else if (props.sortBy === 'score-desc') {
     items.sort((a, b) => (b.scores?.total || 0) - (a.scores?.total || 0))
+  } else if (props.sortBy === 'newest') {
+    items.sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0))
+  } else if (props.sortBy === 'oldest') {
+    items.sort((a, b) => new Date(a.created || 0) - new Date(b.created || 0))
   }
   // default: by key (natural order from Object.values)
 
@@ -110,15 +136,31 @@ const sortedAndFilteredFeatures = computed(() => {
       />
 
       <select
+        :value="aiInvolvementFilter"
+        @change="emit('update:aiInvolvementFilter', $event.target.value)"
+        class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
+      >
+        <option v-for="o in AI_INVOLVEMENT_FILTER_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+      </select>
+
+      <select
         :value="recommendationFilter"
         @change="emit('update:recommendationFilter', $event.target.value)"
         class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
       >
-        <option value="all">All AI Recommendations</option>
-        <option value="approve">AI Recommendation: Approve</option>
-        <option value="revise">AI Recommendation: Needs Revision</option>
-        <option value="reject">AI Recommendation: Reject</option>
-        <option value="no-design">No Design Doc</option>
+        <option value="all">All AI Verdicts</option>
+        <option value="approve">Approve</option>
+        <option value="revise">Needs Revision</option>
+        <option value="reject">Reject</option>
+        <option value="not-reviewed">Not Reviewed</option>
+      </select>
+
+      <select
+        :value="humanReviewFilter"
+        @change="emit('update:humanReviewFilter', $event.target.value)"
+        class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
+      >
+        <option v-for="o in REVIEW_STATUS_FILTER_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
       </select>
 
       <select
@@ -131,17 +173,6 @@ const sortedAndFilteredFeatures = computed(() => {
       </select>
 
       <select
-        :value="humanReviewFilter"
-        @change="emit('update:humanReviewFilter', $event.target.value)"
-        class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
-      >
-        <option value="all">All Review Status</option>
-        <option value="approved">Approved</option>
-        <option value="awaiting-review">Awaiting Sign-off</option>
-        <option value="needs-review">Flagged</option>
-      </select>
-
-      <select
         :value="componentFilter"
         @change="emit('update:componentFilter', $event.target.value)"
         class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
@@ -151,13 +182,19 @@ const sortedAndFilteredFeatures = computed(() => {
       </select>
 
       <select
+        :value="artifactFilter"
+        @change="emit('update:artifactFilter', $event.target.value)"
+        class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
+      >
+        <option v-for="o in artifactFilterOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+      </select>
+
+      <select
         :value="sortBy"
         @change="emit('update:sortBy', $event.target.value)"
         class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
       >
-        <option value="default">Sort: Default</option>
-        <option value="score-low">Score: Low to High</option>
-        <option value="score-high">Score: High to Low</option>
+        <option v-for="o in SORT_FILTER_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
       </select>
     </div>
 

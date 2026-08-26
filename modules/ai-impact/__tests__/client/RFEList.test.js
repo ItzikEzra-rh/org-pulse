@@ -91,12 +91,39 @@ describe('RFEList review status filter', () => {
     expect(renderedKeys(awaiting)).not.toContain('OSAC-4');
   });
 
-  it('applies both the raw status filter and the review status filter together', () => {
-    const wrapper = mount(RFEList, { props: { rfes, statusFilter: 'Closed', reviewStatusFilter: 'approved' } });
-    expect(renderedKeys(wrapper)).toEqual([]);
+  it('applies both the artifact filter and the review status filter together', () => {
+    const wrapper = mount(RFEList, { props: { rfes, artifactFilter: 'has', reviewStatusFilter: 'approved' } });
+    expect(renderedKeys(wrapper)).toEqual(['OSAC-1']);
 
-    const matching = mount(RFEList, { props: { rfes, statusFilter: 'Closed', reviewStatusFilter: 'awaiting-review' } });
-    expect(renderedKeys(matching)).toEqual(['OSAC-3']);
+    const missing = mount(RFEList, { props: { rfes, artifactFilter: 'missing', reviewStatusFilter: 'approved' } });
+    expect(renderedKeys(missing)).toEqual([]);
+  });
+});
+
+describe('RFEList artifact filter', () => {
+  function renderedKeys(wrapper) {
+    return wrapper.findAllComponents(RFEListItem).map(c => c.props('rfe').key);
+  }
+
+  const rfes = [
+    makeRFE({ key: 'OSAC-1', status: 'Merged' }),
+    makeRFE({ key: 'OSAC-2', status: 'Open' }),
+    makeRFE({ key: 'OSAC-3', status: 'No PR' })
+  ];
+
+  it('"has" excludes rows with No PR', () => {
+    const wrapper = mount(RFEList, { props: { rfes, artifactFilter: 'has' } });
+    expect(renderedKeys(wrapper).sort()).toEqual(['OSAC-1', 'OSAC-2']);
+  });
+
+  it('"missing" includes only rows with No PR', () => {
+    const wrapper = mount(RFEList, { props: { rfes, artifactFilter: 'missing' } });
+    expect(renderedKeys(wrapper)).toEqual(['OSAC-3']);
+  });
+
+  it('"all" (default) includes every row', () => {
+    const wrapper = mount(RFEList, { props: { rfes } });
+    expect(renderedKeys(wrapper)).toHaveLength(3);
   });
 });
 
@@ -146,5 +173,19 @@ describe('RFEList default ordering', () => {
 
     const descending = mount(RFEList, { props: { rfes, assessments, sortBy: 'score-desc' } });
     expect(renderedKeys(descending)).toEqual(['OSAC-4000', 'OSAC-63']);
+  });
+
+  it('sorts by created date for the Newest and Oldest options', () => {
+    const rfes = [
+      makeRFE({ key: 'OSAC-1', created: '2026-01-01' }),
+      makeRFE({ key: 'OSAC-2', created: '2026-03-01' }),
+      makeRFE({ key: 'OSAC-3', created: '2026-02-01' })
+    ];
+
+    const newest = mount(RFEList, { props: { rfes, sortBy: 'newest' } });
+    expect(renderedKeys(newest)).toEqual(['OSAC-2', 'OSAC-3', 'OSAC-1']);
+
+    const oldest = mount(RFEList, { props: { rfes, sortBy: 'oldest' } });
+    expect(renderedKeys(oldest)).toEqual(['OSAC-1', 'OSAC-3', 'OSAC-2']);
   });
 });

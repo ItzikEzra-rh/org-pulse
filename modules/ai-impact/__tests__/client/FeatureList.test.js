@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import FeatureList from '../../client/components/FeatureList.vue';
+import FeatureListItem from '../../client/components/FeatureListItem.vue';
 
 function makeFeature(overrides = {}) {
   return {
@@ -60,5 +61,99 @@ describe('FeatureList component filter', () => {
 
     await filtered.setProps({ componentFilter: 'all' });
     expect(filtered.text()).toContain('(3 of 3 total)');
+  });
+});
+
+describe('FeatureList AI Involvement filter (aligned with PRD Review)', () => {
+  function renderedKeys(wrapper) {
+    return wrapper.findAllComponents(FeatureListItem).map(c => c.props('feature').key);
+  }
+
+  const features = {
+    A: makeFeature({ key: 'A', aiInvolvement: 'both' }),
+    B: makeFeature({ key: 'B', aiInvolvement: 'created' }),
+    C: makeFeature({ key: 'C', aiInvolvement: 'none' })
+  };
+
+  it('filters by aiInvolvement, matching the PRD tab semantics', () => {
+    const wrapper = mount(FeatureList, { props: { features, aiInvolvementFilter: 'created' } });
+    expect(renderedKeys(wrapper)).toEqual(['B']);
+  });
+
+  it('"all" (default) includes every AI involvement state', () => {
+    const wrapper = mount(FeatureList, { props: { features } });
+    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'B', 'C']);
+  });
+});
+
+describe('FeatureList AI Verdict filter', () => {
+  function renderedKeys(wrapper) {
+    return wrapper.findAllComponents(FeatureListItem).map(c => c.props('feature').key);
+  }
+
+  const features = {
+    A: makeFeature({ key: 'A', recommendation: 'approve' }),
+    B: makeFeature({ key: 'B', recommendation: null, designStatus: null }),
+    C: makeFeature({ key: 'C', recommendation: null, designStatus: 'no-design' })
+  };
+
+  it('"Not Reviewed" matches unreviewed features but excludes missing-design ones', () => {
+    const wrapper = mount(FeatureList, { props: { features, recommendationFilter: 'not-reviewed' } });
+    expect(renderedKeys(wrapper)).toEqual(['B']);
+  });
+
+  it('filters by a specific recommendation value', () => {
+    const wrapper = mount(FeatureList, { props: { features, recommendationFilter: 'approve' } });
+    expect(renderedKeys(wrapper)).toEqual(['A']);
+  });
+});
+
+describe('FeatureList artifact filter (aligned with PRD Review)', () => {
+  function renderedKeys(wrapper) {
+    return wrapper.findAllComponents(FeatureListItem).map(c => c.props('feature').key);
+  }
+
+  const features = {
+    A: makeFeature({ key: 'A', designStatus: null }),
+    B: makeFeature({ key: 'B', designStatus: 'reviewed' }),
+    C: makeFeature({ key: 'C', designStatus: 'no-design' })
+  };
+
+  it('"has" excludes rows with no design doc', () => {
+    const wrapper = mount(FeatureList, { props: { features, artifactFilter: 'has' } });
+    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'B']);
+  });
+
+  it('"missing" includes only rows with no design doc', () => {
+    const wrapper = mount(FeatureList, { props: { features, artifactFilter: 'missing' } });
+    expect(renderedKeys(wrapper)).toEqual(['C']);
+  });
+});
+
+describe('FeatureList sort (aligned with PRD Review)', () => {
+  function renderedKeys(wrapper) {
+    return wrapper.findAllComponents(FeatureListItem).map(c => c.props('feature').key);
+  }
+
+  const features = {
+    A: makeFeature({ key: 'A', created: '2026-01-01', scores: { total: 2 } }),
+    B: makeFeature({ key: 'B', created: '2026-03-01', scores: { total: 8 } }),
+    C: makeFeature({ key: 'C', created: '2026-02-01', scores: { total: 5 } })
+  };
+
+  it('sorts by score using the shared score-asc/score-desc values', () => {
+    const asc = mount(FeatureList, { props: { features, sortBy: 'score-asc' } });
+    expect(renderedKeys(asc)).toEqual(['A', 'C', 'B']);
+
+    const desc = mount(FeatureList, { props: { features, sortBy: 'score-desc' } });
+    expect(renderedKeys(desc)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('sorts by created date for the Newest and Oldest options', () => {
+    const newest = mount(FeatureList, { props: { features, sortBy: 'newest' } });
+    expect(renderedKeys(newest)).toEqual(['B', 'C', 'A']);
+
+    const oldest = mount(FeatureList, { props: { features, sortBy: 'oldest' } });
+    expect(renderedKeys(oldest)).toEqual(['A', 'C', 'B']);
   });
 });

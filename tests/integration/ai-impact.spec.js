@@ -191,7 +191,9 @@ test.describe('AI Impact Views @ai-impact', () => {
 
     const reviewStatusFilter = page.locator('select').filter({ hasText: 'All Review Status' });
     await expect(reviewStatusFilter).toBeVisible();
-    await expect(reviewStatusFilter.locator('option')).toHaveText(['All Review Status', 'Approved', 'Awaiting Sign-off']);
+    // Shared option list with Design Review (PRD sign-off never yields Flagged, but the
+    // dropdown carries the same four options on both tabs).
+    await expect(reviewStatusFilter.locator('option')).toHaveText(['All Review Status', 'Approved', 'Awaiting Sign-off', 'Flagged']);
 
     await expect(page.getByText('Signed Off')).toBeVisible();
 
@@ -208,9 +210,35 @@ test.describe('AI Impact Views @ai-impact', () => {
     await expect(page.getByText('AI Created', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('AI Review', { exact: true }).first()).toBeVisible();
 
-    // "PR Status" (raw Jira/PR status) is distinct from "Review Status" (human sign-off)
-    const prStatusFilter = page.locator('select').filter({ hasText: 'All PR Statuses' });
-    await expect(prStatusFilter).toBeVisible();
+    // "Artifact" (does the PRD exist at all) is distinct from "Review Status" (human sign-off)
+    const artifactFilter = page.locator('select').filter({ hasText: 'All PRD' });
+    await expect(artifactFilter).toBeVisible();
+    await expect(artifactFilter.locator('option')).toHaveText(['All PRD', 'Has PRD', 'Missing PRD']);
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('PRD Review and Design Review share the same filter bar (AI Involvement, Review Status, Artifact)', async ({ page }) => {
+    // "All AI" is also a substring of the AI-Verdict select's "All AI Verdicts" default
+    // option, so match on the exact default-option text rather than a loose hasText.
+    function selectByDefaultOptionText(text) {
+      return page.locator('select').filter({ has: page.locator(`option[value="all"]:text-is("${text}")`) });
+    }
+
+    await page.goto('/#/ai-impact/prd-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    const prdInvolvement = selectByDefaultOptionText('All AI');
+    await expect(prdInvolvement.locator('option')).toHaveText(['All AI', 'Created & Review', 'AI Created', 'AI Review', 'No AI']);
+
+    await page.goto('/#/ai-impact/design-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    const designInvolvement = selectByDefaultOptionText('All AI');
+    await expect(designInvolvement.locator('option')).toHaveText(['All AI', 'Created & Review', 'AI Created', 'AI Review', 'No AI']);
+
+    const designArtifact = selectByDefaultOptionText('All Design');
+    await expect(designArtifact.locator('option')).toHaveText(['All Design', 'Has Design', 'Missing Design']);
 
     expect(page.errors).toHaveLength(0);
   });
