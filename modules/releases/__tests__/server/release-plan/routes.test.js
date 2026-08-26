@@ -55,8 +55,9 @@ describe('release-plan routes', () => {
   })
 
   describe('GET /release-plans', () => {
-    it('returns the index from storage', () => {
-      storage = makeStorage({ 'releases/release-plans/index.json': { versions: ['0.3'] } })
+    it('returns the index from storage as-is (pure passthrough)', () => {
+      const index = { schemaVersion: 1, versions: [{ version: '0.3', generatedAt: '2026-08-19 14:35', priorVersion: '0.2', badge: 'Developer Preview' }] }
+      storage = makeStorage({ 'releases/release-plans/index.json': index })
       const r = makeRouter()
       registerReleasePlanRoutes(r, { ...context, storage })
 
@@ -64,7 +65,7 @@ describe('release-plan routes', () => {
       const res = makeRes()
       handler({}, res)
 
-      expect(res._json).toEqual({ versions: ['0.3'] })
+      expect(res._json).toEqual(index)
     })
 
     it('returns an empty versions list when no index is stored', () => {

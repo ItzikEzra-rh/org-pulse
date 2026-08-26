@@ -1318,11 +1318,15 @@ Produced by an `agentic-ci` GitLab CI job (OSAC-4398) running the `/release-plan
 
 ```json
 {
-  "versions": ["0.3"]
+  "schemaVersion": 1,
+  "versions": [
+    { "version": "0.3", "generatedAt": "2026-08-19 14:35", "priorVersion": "0.2", "badge": "Developer Preview" }
+  ]
 }
 ```
 
 **Notes:**
+- `versions` is an array of version-metadata objects, **not bare strings** — each entry carries `version` plus a copy of the target version's `metadata` fields. Consumers must read `.version` off each entry (e.g. to populate a picker); do not assume `versions` is `string[]`.
 - List of published release-plan versions, used to populate the frontend version picker. Adding a new published version (new file + this index update) requires no dashboard code change.
 
 ## Releases — Release Plan (`data/releases/release-plans/{version}.json`)
