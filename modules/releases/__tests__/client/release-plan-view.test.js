@@ -46,6 +46,10 @@ function makePlan(overrides = {}) {
   }
 }
 
+function makeIndexEntry(version, overrides = {}) {
+  return { version, generatedAt: '2026-08-19 14:35', priorVersion: '0.2', badge: 'Developer Preview', ...overrides }
+}
+
 describe('ReleasePlanView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -76,7 +80,7 @@ describe('ReleasePlanView', () => {
 
   it('renders error state when the plan fetch fails', async () => {
     apiRequest.mockImplementation((path) => {
-      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: ['0.3'] })
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.3')] })
       return Promise.reject(new Error('boom'))
     })
     const wrapper = mount(ReleasePlanView)
@@ -88,7 +92,7 @@ describe('ReleasePlanView', () => {
 
   it('loads the newest version by default and renders all sections', async () => {
     apiRequest.mockImplementation((path) => {
-      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: ['0.2', '0.3'] })
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.2'), makeIndexEntry('0.3')] })
       if (path === '/modules/releases/release-plan?version=0.3') return Promise.resolve(makePlan())
       return Promise.reject(new Error('unexpected path: ' + path))
     })
@@ -109,9 +113,28 @@ describe('ReleasePlanView', () => {
     expect(link.exists()).toBe(true)
   })
 
+  it('extracts the version string from index entries instead of passing the object (prod regression)', async () => {
+    // Production incident: index entries are metadata objects, not bare strings.
+    // A naive `versions.value = data.versions` let an object reach the query
+    // string as "[object Object]", which the backend rejected with 400.
+    apiRequest.mockImplementation((path) => {
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ schemaVersion: 1, versions: [makeIndexEntry('0.3')] })
+      if (path === '/modules/releases/release-plan?version=0.3') return Promise.resolve(makePlan())
+      return Promise.reject(new Error('unexpected path: ' + path))
+    })
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+
+    const calledPaths = apiRequest.mock.calls.map((c) => c[0])
+    expect(calledPaths.some((p) => p.includes('[object Object]'))).toBe(false)
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/release-plan?version=0.3')
+    expect(wrapper.find('#release-plan-version option').text()).toBe('0.3')
+  })
+
   it('refetches the plan when the version picker changes', async () => {
     apiRequest.mockImplementation((path) => {
-      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: ['0.2', '0.3'] })
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.2'), makeIndexEntry('0.3')] })
       if (path === '/modules/releases/release-plan?version=0.3') return Promise.resolve(makePlan())
       if (path === '/modules/releases/release-plan?version=0.2') return Promise.resolve(makePlan({ vision: { summary: 'A summary of 0.2.', metrics: [] } }))
       return Promise.reject(new Error('unexpected path: ' + path))
@@ -130,7 +153,7 @@ describe('ReleasePlanView', () => {
   it('ignores a stale plan response when versions are switched quickly', async () => {
     let resolveFirst
     apiRequest.mockImplementation((path) => {
-      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: ['0.2', '0.3'] })
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.2'), makeIndexEntry('0.3')] })
       if (path === '/modules/releases/release-plan?version=0.3') {
         return new Promise((resolve) => { resolveFirst = resolve })
       }

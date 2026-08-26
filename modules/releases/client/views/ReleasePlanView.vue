@@ -15,7 +15,11 @@ function jiraLink(key) {
 async function loadVersions() {
   try {
     const data = await apiRequest('/modules/releases/release-plans')
-    versions.value = data.versions || []
+    // Index entries are version-metadata objects ({ version, generatedAt, ... }),
+    // not bare strings — normalize to the version string the picker/API need.
+    versions.value = (data.versions || [])
+      .map((v) => (typeof v === 'string' ? v : v?.version))
+      .filter(Boolean)
   } catch (e) {
     error.value = e.message || 'Failed to load release plan versions'
     versions.value = []
