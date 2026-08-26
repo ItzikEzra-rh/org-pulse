@@ -206,9 +206,10 @@ test.describe('AI Impact Views @ai-impact', () => {
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
     await expect(page.getByText('PRD List')).toBeVisible();
-    // Demo fixtures include PRDs in every AI-involvement state
-    await expect(page.getByText('AI Created', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('AI Review', { exact: true }).first()).toBeVisible();
+    // Demo fixtures include PRDs in every AI-involvement state. Scope to <span> so this
+    // doesn't match the (hidden) filter dropdown's identically-worded <option> elements.
+    await expect(page.locator('span:text-is("AI Created")').first()).toBeVisible();
+    await expect(page.locator('span:text-is("AI Review")').first()).toBeVisible();
 
     // "Artifact" (does the PRD exist at all) is distinct from "Review Status" (human sign-off)
     const artifactFilter = page.locator('select').filter({ hasText: 'All PRD' });
@@ -252,8 +253,9 @@ test.describe('AI Impact Views @ai-impact', () => {
     await expect(page.getByText('Design List')).toBeVisible();
 
     // Design cards mirror PRD: cards with a design doc carry an AI-provenance pill
-    // in the title row (demo fixtures include a scored feature -> "AI Review").
-    await expect(page.getByText('AI Review', { exact: true }).first()).toBeVisible();
+    // in the title row (demo fixtures include a scored feature -> "AI Review"). Scope to
+    // <span> so this doesn't match the filter dropdown's identically-worded <option>.
+    await expect(page.locator('span:text-is("AI Review")').first()).toBeVisible();
 
     expect(page.errors).toHaveLength(0);
   });
@@ -262,14 +264,15 @@ test.describe('AI Impact Views @ai-impact', () => {
     await page.goto('/#/ai-impact/prd-review');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
-    // PRDs with no PR render the "Missing PRD" pill (demo fixtures include these).
-    await expect(page.getByText('Missing PRD', { exact: true }).first()).toBeVisible();
+    // PRDs with no PR render the "Missing PRD" pill (demo fixtures include these). Scope to
+    // <span> so this doesn't match the Artifact filter's identically-worded <option>.
+    await expect(page.locator('span:text-is("Missing PRD")').first()).toBeVisible();
 
     await page.goto('/#/ai-impact/design-review');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
     // Features with no design doc render the mirrored "Missing Design" pill.
-    await expect(page.getByText('Missing Design', { exact: true }).first()).toBeVisible();
+    await expect(page.locator('span:text-is("Missing Design")').first()).toBeVisible();
 
     expect(page.errors).toHaveLength(0);
   });
