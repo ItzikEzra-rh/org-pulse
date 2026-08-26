@@ -182,9 +182,9 @@ function buildTrendData(issues, timeWindow) {
 
 function buildBreakdownData(issues) {
   return [
-    { name: 'Created & Revised', value: issues.filter(i => i.aiInvolvement === 'both').length },
+    { name: 'Created & Review', value: issues.filter(i => i.aiInvolvement === 'both').length },
     { name: 'AI Created', value: issues.filter(i => i.aiInvolvement === 'created').length },
-    { name: 'AI Revised', value: issues.filter(i => i.aiInvolvement === 'revised').length },
+    { name: 'AI Review', value: issues.filter(i => i.aiInvolvement === 'revised').length },
     { name: 'No AI', value: issues.filter(i => i.aiInvolvement === 'none').length },
   ];
 }

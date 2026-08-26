@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
 
 // Singleton state — fetch once, share refs
@@ -8,6 +8,10 @@ const featureLoading = ref(false)
 const featureError = ref(null)
 const detailCache = ref({})
 let hasFetched = false
+
+const featureTrendData = ref([])
+const featureBreakdown = ref([])
+const featureTimeWindow = ref('month')
 
 async function loadFeatures() {
   featureLoading.value = true
@@ -27,6 +31,17 @@ async function loadFeatures() {
   }
 }
 
+async function loadFeatureTrend() {
+  try {
+    const tw = featureTimeWindow.value || 'month'
+    const data = await apiRequest(`/modules/ai-impact/features/trend?timeWindow=${tw}`)
+    featureTrendData.value = data.trendData || []
+    featureBreakdown.value = data.breakdown || []
+  } catch {
+    // Trend is a supplementary chart; leave prior data in place on failure.
+  }
+}
+
 async function loadFeatureDetail(key) {
   if (detailCache.value[key]) {
     return detailCache.value[key]
@@ -43,10 +58,14 @@ async function loadFeatureDetail(key) {
   }
 }
 
+// Re-fetch trend when its time window changes
+watch(featureTimeWindow, () => loadFeatureTrend())
+
 export function useFeatures() {
   if (!hasFetched) {
     hasFetched = true
     loadFeatures()
+    loadFeatureTrend()
   }
   return {
     features,
@@ -55,7 +74,11 @@ export function useFeatures() {
     featureError,
     loadFeatures,
     loadFeatureDetail,
-    detailCache
+    detailCache,
+    featureTrendData,
+    featureBreakdown,
+    featureTimeWindow,
+    loadFeatureTrend
   }
 }
 
@@ -65,5 +88,8 @@ export function _resetForTesting() {
   featureLoading.value = false
   featureError.value = null
   detailCache.value = {}
+  featureTrendData.value = []
+  featureBreakdown.value = []
+  featureTimeWindow.value = 'month'
   hasFetched = true // prevent auto-fetch so tests control when loading happens
 }

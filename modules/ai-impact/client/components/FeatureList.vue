@@ -90,6 +90,15 @@ const sortedAndFilteredFeatures = computed(() => {
 
 <template>
   <div class="p-6">
+    <h3 class="font-medium dark:text-gray-200 flex items-center gap-2 mb-4">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+      </svg>
+      Design List
+      <span class="text-sm font-normal text-gray-500 dark:text-gray-400">({{ sortedAndFilteredFeatures.length }} of {{ featureList.length }} total)</span>
+    </h3>
+
     <!-- Filters -->
     <div class="flex flex-wrap gap-3 mb-4">
       <input
@@ -127,9 +136,9 @@ const sortedAndFilteredFeatures = computed(() => {
         class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
       >
         <option value="all">All Review Status</option>
-        <option value="needs-review">Flagged</option>
-        <option value="awaiting-review">Awaiting Sign-off</option>
         <option value="approved">Approved</option>
+        <option value="awaiting-review">Awaiting Sign-off</option>
+        <option value="needs-review">Flagged</option>
       </select>
 
       <select
@@ -151,11 +160,6 @@ const sortedAndFilteredFeatures = computed(() => {
         <option value="score-high">Score: High to Low</option>
       </select>
     </div>
-
-    <!-- Results count -->
-    <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
-      {{ sortedAndFilteredFeatures.length }} feature{{ sortedAndFilteredFeatures.length !== 1 ? 's' : '' }}
-    </p>
 
     <!-- Feature list -->
     <div class="space-y-2">

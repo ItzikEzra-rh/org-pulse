@@ -291,9 +291,9 @@ describe('buildBreakdownData', () => {
     const result = buildBreakdownData(issues);
 
     expect(result).toEqual([
-      { name: 'Created & Revised', value: 2 },
+      { name: 'Created & Review', value: 2 },
       { name: 'AI Created', value: 1 },
-      { name: 'AI Revised', value: 1 },
+      { name: 'AI Review', value: 1 },
       { name: 'No AI', value: 3 },
     ]);
   });
@@ -301,9 +301,9 @@ describe('buildBreakdownData', () => {
   it('handles empty issues', () => {
     const result = buildBreakdownData([]);
     expect(result).toEqual([
-      { name: 'Created & Revised', value: 0 },
+      { name: 'Created & Review', value: 0 },
       { name: 'AI Created', value: 0 },
-      { name: 'AI Revised', value: 0 },
+      { name: 'AI Review', value: 0 },
       { name: 'No AI', value: 0 },
     ]);
   });

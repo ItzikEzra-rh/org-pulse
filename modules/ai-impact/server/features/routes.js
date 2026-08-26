@@ -1,5 +1,6 @@
 const express = require('express');
 const { validateFeature } = require('./validation');
+const { buildTrendData, buildBreakdownData, getTimeWindowDates } = require('../metrics');
 const {
   readFeatures,
   getLatestProjection,
@@ -232,6 +233,45 @@ module.exports = function registerFeatureRoutes(router, context) {
   router.get('/features', requireScope('ai-impact:read'), function(req, res) {
     const data = readFeatures(readFromStorage);
     res.json(getLatestProjection(data));
+  });
+
+  /**
+   * @openapi
+   * /modules/ai-impact/features/trend:
+   *   get:
+   *     summary: Weekly AI-involvement trend and breakdown for Design Review features
+   *     tags: [ai-impact]
+   *     parameters:
+   *       - in: query
+   *         name: timeWindow
+   *         schema:
+   *           type: string
+   *           enum: [week, month, 3months]
+   *           default: month
+   *         description: Time window for the breakdown's cutoff date
+   *     responses:
+   *       200:
+   *         description: Weekly trend points and an AI-involvement breakdown, matching the /rfe-data trend shape
+   */
+  router.get('/features/trend', requireScope('ai-impact:read'), function(req, res) {
+    const timeWindow = req.query.timeWindow || 'month';
+    const projection = getLatestProjection(readFeatures(readFromStorage));
+
+    // buildTrendData/buildBreakdownData (shared with the PRD side) expect
+    // { created, aiInvolvement, revisedLabelDate }. Features have no distinct
+    // revision-label date, so the AI review timestamp stands in for "when the
+    // review happened".
+    const trendInput = Object.values(projection.features).map(function(f) {
+      return { created: f.created, aiInvolvement: f.aiInvolvement || 'none', revisedLabelDate: f.reviewedAt };
+    });
+
+    const { cutoff } = getTimeWindowDates(new Date(), timeWindow);
+    const windowInput = trendInput.filter(function(i) { return i.created && new Date(i.created) >= cutoff; });
+
+    res.json({
+      trendData: buildTrendData(trendInput, timeWindow),
+      breakdown: buildBreakdownData(windowInput)
+    });
   });
 
   // ─── 2. Parameterized routes AFTER ───

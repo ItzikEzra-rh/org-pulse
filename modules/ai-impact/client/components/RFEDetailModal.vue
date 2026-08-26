@@ -5,7 +5,10 @@ import AssessmentBreakdown from './AssessmentBreakdown.vue'
 import AssessmentHistory from './AssessmentHistory.vue'
 import FeedbackText from './FeedbackText.vue'
 import { useTestPlans } from '../composables/useTestPlans.js'
-import { getReviewStatusClass, getReviewStatusLabel, getPrdSignOffStatus } from '../utils/feature-helpers.js'
+import {
+  getReviewStatusClass, getReviewStatusLabel, getPrdSignOffStatus,
+  getInvolvementLabel, getInvolvementClass
+} from '../utils/feature-helpers.js'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -94,23 +97,6 @@ function handleKeydown(e) {
   }
 }
 
-function getInvolvementLabel(involvement) {
-  switch (involvement) {
-    case 'both': return 'Created & Revised'
-    case 'created': return 'AI Created'
-    case 'revised': return 'AI Revised'
-    default: return 'No AI'
-  }
-}
-
-function getInvolvementClass(involvement) {
-  switch (involvement) {
-    case 'both': return 'bg-blue-500 text-white'
-    case 'created': return 'bg-green-500 text-white'
-    case 'revised': return 'bg-amber-500 text-white'
-    default: return 'bg-gray-200 text-gray-600'
-  }
-}
 </script>
 
 <template>

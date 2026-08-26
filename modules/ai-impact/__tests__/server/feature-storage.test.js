@@ -69,6 +69,49 @@ describe('readFeatures', () => {
     expect(result.features['RHAISTRAT-1168'].history).toHaveLength(1);
   });
 
+  it('surfaces aiInvolvement, provenanceKind, and created when the pipeline provides them', () => {
+    const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' } };
+    const featureFile = makeFeatureFile({ aiInvolvement: 'both', provenanceKind: 'design-workflow' });
+    featureFile.created = '2026-03-01T00:00:00Z';
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return makeReleasesIndex([indexEntry]);
+      if (key === 'releases/execution/features/RHAISTRAT-1168.json') return featureFile;
+      return null;
+    });
+
+    const result = readFeatures(read);
+    expect(result.features['RHAISTRAT-1168'].latest.aiInvolvement).toBe('both');
+    expect(result.features['RHAISTRAT-1168'].latest.provenanceKind).toBe('design-workflow');
+    expect(result.features['RHAISTRAT-1168'].latest.created).toBe('2026-03-01T00:00:00Z');
+  });
+
+  it('defaults aiInvolvement, provenanceKind, and created to null when the pipeline has not provided them yet', () => {
+    const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' } };
+    const featureFile = makeFeatureFile();
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return makeReleasesIndex([indexEntry]);
+      if (key === 'releases/execution/features/RHAISTRAT-1168.json') return featureFile;
+      return null;
+    });
+
+    const result = readFeatures(read);
+    expect(result.features['RHAISTRAT-1168'].latest.aiInvolvement).toBeNull();
+    expect(result.features['RHAISTRAT-1168'].latest.provenanceKind).toBeNull();
+    expect(result.features['RHAISTRAT-1168'].latest.created).toBeNull();
+  });
+
+  it('does not throw when the per-feature detail file is missing', () => {
+    const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' } };
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return makeReleasesIndex([indexEntry]);
+      return null;
+    });
+
+    expect(() => readFeatures(read)).not.toThrow();
+    const result = readFeatures(read);
+    expect(result.features['RHAISTRAT-1168'].latest.created).toBeNull();
+  });
+
   it('prefers the canonical Jira components field from the releases index entry over the feature file', () => {
     const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' }, components: ['Storage'] };
     const featureFile = makeFeatureFile();
@@ -213,7 +256,10 @@ describe('getLatestProjection', () => {
             reviewers: { feasibility: 'approve', testability: 'approve', scope: 'approve', architecture: 'approve' },
             labels: ['some-label'],
             runId: 'run-1',
-            reviewedAt: '2026-04-19T12:00:00Z'
+            reviewedAt: '2026-04-19T12:00:00Z',
+            aiInvolvement: 'created',
+            provenanceKind: 'design-workflow',
+            created: '2026-03-01T00:00:00Z'
           },
           history: []
         }
@@ -227,6 +273,9 @@ describe('getLatestProjection', () => {
     expect(proj.features['A'].scores).toBeDefined();
     expect(proj.features['A'].reviewers).toBeDefined();
     expect(proj.features['A'].reviewedAt).toBeDefined();
+    expect(proj.features['A'].aiInvolvement).toBe('created');
+    expect(proj.features['A'].provenanceKind).toBe('design-workflow');
+    expect(proj.features['A'].created).toBe('2026-03-01T00:00:00Z');
     // Should NOT have these fields
     expect(proj.features['A'].labels).toBeUndefined();
     expect(proj.features['A'].runId).toBeUndefined();

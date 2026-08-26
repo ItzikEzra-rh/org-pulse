@@ -17,10 +17,15 @@ const priorityFilter = ref('all')
 const humanReviewFilter = ref('all')
 const componentFilter = ref('all')
 const sortBy = ref('default')
+const chartExpanded = ref(true)
 
-const { features, featureMeta, featureLoading, featureError, loadFeatures, loadFeatureDetail } = useFeatures()
+const {
+  features, featureMeta, featureLoading, featureError, loadFeatures, loadFeatureDetail,
+  featureTrendData, featureBreakdown, featureTimeWindow, loadFeatureTrend
+} = useFeatures()
 
 loadFeatures()
+loadFeatureTrend()
 
 // Load RFE data only for jiraHost (used by detail panel links)
 const timeWindow = ref('month')
@@ -28,6 +33,7 @@ const { rfeData } = useAIImpact(timeWindow)
 
 function handleRetry() {
   loadFeatures()
+  loadFeatureTrend()
 }
 
 function handleSelectFeature(feature) {
@@ -92,6 +98,10 @@ watch(() => Object.keys(features.value).length, () => {
       :error="featureError"
       :features="features"
       :featureMeta="featureMeta"
+      :trendData="featureTrendData"
+      :breakdown="featureBreakdown"
+      :timeWindow="featureTimeWindow"
+      :chartExpanded="chartExpanded"
       :searchQuery="searchQuery"
       :recommendationFilter="recommendationFilter"
       :priorityFilter="priorityFilter"
@@ -99,6 +109,8 @@ watch(() => Object.keys(features.value).length, () => {
       :componentFilter="componentFilter"
       :sortBy="sortBy"
       :selectedFeature="selectedFeature"
+      @update:timeWindow="featureTimeWindow = $event"
+      @update:chartExpanded="chartExpanded = $event"
       @update:searchQuery="searchQuery = $event"
       @update:recommendationFilter="recommendationFilter = $event"
       @update:priorityFilter="priorityFilter = $event"

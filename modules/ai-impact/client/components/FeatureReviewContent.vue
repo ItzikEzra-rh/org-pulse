@@ -3,12 +3,17 @@ import LoadingOverlay from '@shared/client/components/LoadingOverlay.vue'
 import FeatureMetricsRow from './FeatureMetricsRow.vue'
 import FeatureCharts from './FeatureCharts.vue'
 import FeatureList from './FeatureList.vue'
+import TrendCharts from './TrendCharts.vue'
 
 defineProps({
   loading: { type: Boolean, default: false },
   error: { type: String, default: null },
   features: { type: Object, default: () => ({}) },
   featureMeta: { type: Object, default: () => ({}) },
+  trendData: { type: Array, default: () => [] },
+  breakdown: { type: Array, default: () => [] },
+  timeWindow: { type: String, default: 'month' },
+  chartExpanded: { type: Boolean, default: true },
   searchQuery: { type: String, default: '' },
   recommendationFilter: { type: String, default: 'all' },
   priorityFilter: { type: String, default: 'all' },
@@ -19,6 +24,8 @@ defineProps({
 })
 
 const emit = defineEmits([
+  'update:timeWindow',
+  'update:chartExpanded',
   'update:searchQuery',
   'update:recommendationFilter',
   'update:priorityFilter',
@@ -32,6 +39,27 @@ const emit = defineEmits([
 
 <template>
   <main class="flex-1 flex flex-col overflow-auto">
+    <!-- Top Bar -->
+    <header class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-3 shrink-0 flex items-center justify-between">
+      <div>
+        <h2 class="text-lg font-semibold dark:text-gray-100">Design Review</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">AI adoption metrics and design tracking</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <label for="design-time-window" class="text-sm text-gray-500 dark:text-gray-400">Showing:</label>
+        <select
+          id="design-time-window"
+          :value="timeWindow"
+          @change="emit('update:timeWindow', $event.target.value)"
+          class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
+        >
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="3months">Last 3 Months</option>
+        </select>
+      </div>
+    </header>
+
     <!-- Loading -->
     <LoadingOverlay v-if="loading" message="Loading design reviews..." />
 
@@ -64,6 +92,14 @@ const emit = defineEmits([
     <!-- Data loaded -->
     <template v-else>
       <FeatureMetricsRow :features="features" />
+      <TrendCharts
+        :trendData="trendData"
+        :breakdown="breakdown"
+        :expanded="chartExpanded"
+        :timeWindow="timeWindow"
+        itemLabel="design docs"
+        @toggle="emit('update:chartExpanded', !chartExpanded)"
+      />
       <FeatureCharts :features="features" />
       <FeatureList
         :features="features"

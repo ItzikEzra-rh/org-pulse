@@ -314,14 +314,14 @@
     {
       "key": "RHAIRFE-1023",
       "summary": "Integrate compliance audit logging for regulated ML workloads",
-      "status": "In Review",
+      "status": "No PR",
       "priority": "High",
       "created": "2026-06-04T14:00:00Z",
       "creator": "mgarcia",
       "creatorDisplayName": "Maria Garcia",
       "components": ["Platform Core", "Infrastructure Services"],
       "labels": ["rfe-creator-auto-created", "rfe-creator-autofix-rubric-pass", "rfe-creator-needs-attention"],
-      "aiInvolvement": "created",
+      "aiInvolvement": "none",
       "needsAttentionSince": "2026-06-09T10:00:00Z",
       "rubricPassSince": "2026-06-08T09:00:00Z",
       "linkedFeature": null

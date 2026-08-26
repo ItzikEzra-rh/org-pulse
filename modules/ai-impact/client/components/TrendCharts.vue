@@ -27,7 +27,8 @@ const props = defineProps({
   breakdown: { type: Array, default: () => [] },
   expanded: { type: Boolean, default: true },
   filteredAssessments: { type: Object, default: () => ({}) },
-  timeWindow: { type: String, default: 'month' }
+  timeWindow: { type: String, default: 'month' },
+  itemLabel: { type: String, default: 'PRDs' }
 })
 
 const hasAssessments = computed(() => Object.keys(props.filteredAssessments).length > 0)
@@ -80,7 +81,7 @@ const createdPctChartOptions = computed(() => ({
 const revisedCountChartData = computed(() => ({
   labels: props.trendData.map(p => p.date),
   datasets: [{
-    label: 'Revised with AI',
+    label: 'Review with AI',
     data: props.trendData.map(p => p.revisedCount),
     backgroundColor: 'rgba(245, 158, 11, 0.6)',
     borderColor: 'rgba(245, 158, 11, 0.8)',
@@ -94,7 +95,7 @@ const revisedCountChartOptions = computed(() => ({
   plugins: { legend: { display: false } },
   scales: {
     x: { ticks: { font: { size: 10 }, color: textColor.value }, grid: { color: gridColor.value } },
-    y: { beginAtZero: true, ticks: { font: { size: 10 }, color: textColor.value, precision: 0 }, title: { display: true, text: 'Revised (count)', color: textColor.value }, grid: { color: gridColor.value } }
+    y: { beginAtZero: true, ticks: { font: { size: 10 }, color: textColor.value, precision: 0 }, title: { display: true, text: 'Review (count)', color: textColor.value }, grid: { color: gridColor.value } }
   }
 }))
 
@@ -152,7 +153,7 @@ const breakdownChartOptions = computed(() => ({
                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div class="absolute right-0 top-6 z-10 hidden group-hover:block w-64 p-2 text-xs text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900/50">
-              Percentage of PRDs created with AI per week over the selected time window.
+              Percentage of {{ itemLabel }} created with AI per week over the selected time window.
             </div>
           </div>
         </div>
@@ -163,14 +164,14 @@ const breakdownChartOptions = computed(() => ({
 
       <div class="min-w-[280px] flex-1 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-sm font-medium dark:text-gray-300">Revised with AI</h3>
+          <h3 class="text-sm font-medium dark:text-gray-300">Review with AI</h3>
           <div class="relative group">
             <svg class="h-4 w-4 text-gray-400 dark:text-gray-500 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div class="absolute right-0 top-6 z-10 hidden group-hover:block w-64 p-2 text-xs text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900/50">
-              Count of PRDs revised with AI per week over the selected time window.
+              Count of {{ itemLabel }} reviewed with AI per week over the selected time window.
             </div>
           </div>
         </div>
@@ -188,7 +189,7 @@ const breakdownChartOptions = computed(() => ({
                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div class="absolute right-0 top-6 z-10 hidden group-hover:block w-64 p-2 text-xs text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900/50">
-              Counts of PRDs by AI involvement: created with AI, revised with AI, both, or no AI involvement.
+              Counts of {{ itemLabel }} by AI involvement: created with AI, reviewed with AI, both, or no AI involvement.
             </div>
           </div>
         </div>

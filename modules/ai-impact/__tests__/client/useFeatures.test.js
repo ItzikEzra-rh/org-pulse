@@ -99,4 +99,31 @@ describe('useFeatures', () => {
     const { loadFeatureDetail } = useFeatures();
     await expect(loadFeatureDetail('KEY')).rejects.toThrow('Server error');
   });
+
+  it('loadFeatureTrend fetches trend and breakdown data for the current time window', async () => {
+    const mockData = {
+      trendData: [{ date: '2026-04-19', createdPct: 50, revisedCount: 1, total: 2 }],
+      breakdown: [{ name: 'AI Created', value: 1 }]
+    };
+    mockApiRequest.mockResolvedValue(mockData);
+
+    const { featureTrendData, featureBreakdown, loadFeatureTrend } = useFeatures();
+    await loadFeatureTrend();
+
+    expect(mockApiRequest).toHaveBeenCalledWith('/modules/ai-impact/features/trend?timeWindow=month');
+    expect(featureTrendData.value).toEqual(mockData.trendData);
+    expect(featureBreakdown.value).toEqual(mockData.breakdown);
+  });
+
+  it('loadFeatureTrend leaves prior data in place on failure', async () => {
+    mockApiRequest.mockResolvedValue({ trendData: [{ date: 'x' }], breakdown: [{ name: 'y', value: 1 }] });
+    const { featureTrendData, featureBreakdown, loadFeatureTrend } = useFeatures();
+    await loadFeatureTrend();
+
+    mockApiRequest.mockRejectedValue(new Error('Network error'));
+    await loadFeatureTrend();
+
+    expect(featureTrendData.value).toEqual([{ date: 'x' }]);
+    expect(featureBreakdown.value).toEqual([{ name: 'y', value: 1 }]);
+  });
 });

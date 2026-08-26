@@ -1,3 +1,25 @@
+// "created" = the doc carries the AI-workflow provenance stamp; "revised" = an AI review
+// score exists (surfaced in the UI as "Review"); "both" = stamp + score. Shared by PRD
+// and Design cards so the provenance badge reads identically on both tabs.
+export function getInvolvementLabel(involvement) {
+  switch (involvement) {
+    case 'both': return 'AI Created & Review'
+    case 'created': return 'AI Created'
+    case 'revised': return 'AI Review'
+    default: return 'No AI'
+  }
+}
+
+// Categorical provenance colors (solid), not success/failure semantics.
+export function getInvolvementClass(involvement) {
+  switch (involvement) {
+    case 'both': return 'bg-blue-500 text-white'
+    case 'created': return 'bg-green-500 text-white'
+    case 'revised': return 'bg-amber-500 text-white'
+    default: return 'bg-gray-200 text-gray-600'
+  }
+}
+
 export function getRecommendationClass(rec) {
   switch (rec) {
     case 'approve': return 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
@@ -43,6 +65,15 @@ export function getReviewStatusTooltip(status) {
   }
 }
 
+// PRD-side review-status tooltip. PRD sign-off is derived from PR state
+// (getPrdSignOffStatus), so it only ever yields 'approved' or 'awaiting-review'.
+export function getPrdReviewStatusTooltip(status) {
+  switch (status) {
+    case 'approved': return 'The PRD pull request has been merged — reviewed and signed off. No further action needed.'
+    default: return 'This PRD still needs review and sign-off. Merge the PRD pull request once approved.'
+  }
+}
+
 export function getRecommendationTooltip(rec) {
   switch (rec) {
     case 'approve': return 'All AI reviewers recommend approval. The feature still needs human sign-off.'
@@ -58,18 +89,19 @@ export function getScoreClass(score) {
   return 'text-red-600 dark:text-red-400'
 }
 
+// The "no design doc" state — the Design-tab mirror of PRD's "Missing PRD".
+// (The legacy 'pending' state was dropped: it duplicated the review pill's
+// "Awaiting Sign-off" and had no PRD equivalent.)
 export function getDesignStatusClass(designStatus) {
   switch (designStatus) {
     case 'no-design': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'
-    case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
     default: return ''
   }
 }
 
 export function getDesignStatusLabel(designStatus) {
   switch (designStatus) {
-    case 'no-design': return 'No Design'
-    case 'pending': return 'Pending Review'
+    case 'no-design': return 'Missing Design'
     default: return null
   }
 }

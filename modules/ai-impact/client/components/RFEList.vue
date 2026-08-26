@@ -182,7 +182,7 @@ function handleSelectRFE(rfe) {
           <option value="all">All AI</option>
           <option value="both">Both AI</option>
           <option value="created">Created</option>
-          <option value="revised">Revised</option>
+          <option value="revised">Review</option>
           <option value="none">No AI</option>
         </select>
         <select
@@ -208,7 +208,7 @@ function handleSelectRFE(rfe) {
           @change="emit('update:statusFilter', $event.target.value)"
           class="h-9 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-2 bg-white dark:bg-gray-800 dark:text-gray-300"
         >
-          <option value="all">All Statuses</option>
+          <option value="all">All PR Statuses</option>
           <option v-for="s in availableStatuses" :key="s" :value="s">{{ s }}</option>
         </select>
         <select

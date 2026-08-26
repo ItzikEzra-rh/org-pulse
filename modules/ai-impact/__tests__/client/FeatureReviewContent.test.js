@@ -4,13 +4,17 @@ import FeatureReviewContent from '../../client/components/FeatureReviewContent.v
 
 // Mock chart.js to avoid canvas errors in tests
 vi.mock('vue-chartjs', () => ({
-  Bar: { template: '<div class="mock-bar-chart" />' }
+  Bar: { template: '<div class="mock-bar-chart" />' },
+  Line: { template: '<div class="mock-line-chart" />' }
 }));
 vi.mock('chart.js', () => ({
   Chart: { register: vi.fn() },
   CategoryScale: {},
   LinearScale: {},
+  PointElement: {},
+  LineElement: {},
   BarElement: {},
+  Filler: {},
   Title: {},
   Tooltip: {},
   Legend: {}

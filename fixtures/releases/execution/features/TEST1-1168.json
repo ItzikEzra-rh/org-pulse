@@ -114,6 +114,8 @@
     "designPrUrl": "https://github.com/osac-project/enhancement-proposals/pull/131",
     "labels": ["strat-creator-auto-created", "strat-creator-rubric-pass", "tech-reviewed", "strat-creator-human-sign-off"],
     "reviewedAt": "2026-04-19T01:30:35Z",
+    "aiInvolvement": "both",
+    "provenanceKind": "design-workflow",
     "runId": "20260419-013035",
     "history": [
       {

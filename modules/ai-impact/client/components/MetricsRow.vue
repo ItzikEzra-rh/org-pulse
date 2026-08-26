@@ -70,14 +70,14 @@ function formatFrictionChange(change) {
         </p>
       </div>
 
-      <!-- Revised with AI -->
+      <!-- Review with AI -->
       <div class="space-y-1">
         <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
           <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
           </svg>
-          Revised with AI
+          Review with AI
         </p>
         <div class="flex items-baseline gap-2">
           <span class="text-3xl font-bold dark:text-gray-100">{{ metrics.revisedCount }}</span>

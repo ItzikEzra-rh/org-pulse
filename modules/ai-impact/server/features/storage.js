@@ -76,6 +76,12 @@ function readFeatures(readFromStorage) {
         labels: entry.labels || [],
         components: components,
         reviewedAt: aiReview.reviewedAt || (entry.aiReview && entry.aiReview.reviewedAt) || null,
+        // aiInvolvement/provenanceKind are only present once the design-provenance pipeline
+        // change lands (org-pulse-data); left null (not a fallback string) so the frontend
+        // provenance badge stays hidden until real data exists.
+        aiInvolvement: aiReview.aiInvolvement || (entry.aiReview && entry.aiReview.aiInvolvement) || null,
+        provenanceKind: aiReview.provenanceKind || (entry.aiReview && entry.aiReview.provenanceKind) || null,
+        created: (featureFile && featureFile.created) || entry.created || null,
         runId: aiReview.runId || undefined,
         approvedBy: aiReview.approvedBy || null,
         approvedAt: aiReview.approvedAt || null,
@@ -118,6 +124,9 @@ function getLatestProjection(data) {
       scores: entry.latest.scores,
       reviewers: entry.latest.reviewers,
       reviewedAt: entry.latest.reviewedAt,
+      aiInvolvement: entry.latest.aiInvolvement || null,
+      provenanceKind: entry.latest.provenanceKind || null,
+      created: entry.latest.created || null,
       components: entry.latest.components || [],
       approvedBy: entry.latest.approvedBy || null,
       approvedAt: entry.latest.approvedAt || null,

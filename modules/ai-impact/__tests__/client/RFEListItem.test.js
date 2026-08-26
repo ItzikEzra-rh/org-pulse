@@ -25,62 +25,82 @@ describe('RFEListItem', () => {
     expect(wrapper.text()).not.toContain('Missing PRD');
   });
 
-  it('prefixes the Created & Revised provenance value with AI so the axis is explicit', () => {
+  it('labels a PRD with both a provenance stamp and an AI review score as Created & Review', () => {
     const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ aiInvolvement: 'both' }) } });
 
-    expect(wrapper.text()).toContain('AI Created & Revised');
+    expect(wrapper.text()).toContain('AI Created & Review');
   });
 
-  it('labels no AI involvement as AI N/A on a real PRD', () => {
+  it('labels a PRD with only an AI review score as AI Review', () => {
+    const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ aiInvolvement: 'revised' }) } });
+
+    expect(wrapper.text()).toContain('AI Review');
+    expect(wrapper.text()).not.toContain('AI Created');
+  });
+
+  it('labels no AI involvement as No AI on a real PRD', () => {
     const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ aiInvolvement: 'none' }) } });
 
-    expect(wrapper.text()).toContain('AI N/A');
+    expect(wrapper.text()).toContain('No AI');
   });
 
-  it('gives AI Created a teal pill distinct from neutral metadata pills', () => {
+  it('gives AI Created a solid green pill', () => {
     const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ aiInvolvement: 'created' }) } });
 
     const aiPill = wrapper.findAll('span').find(el => el.text() === 'AI Created');
-    expect(aiPill.classes()).toContain('bg-teal-100');
-    expect(aiPill.classes()).toContain('text-teal-800');
-
-    const priorityPill = wrapper.findAll('span').find(el => el.text().startsWith('Priority'));
-    expect(priorityPill.classes()).not.toContain('bg-teal-100');
+    expect(aiPill.classes()).toContain('bg-green-500');
+    expect(aiPill.classes()).toContain('text-white');
   });
 
-  it('gives AI Created & Revised a green pill distinct from the teal AI Created pill', () => {
+  it('gives AI Created & Review a solid blue pill', () => {
     const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ aiInvolvement: 'both' }) } });
 
-    const aiPill = wrapper.findAll('span').find(el => el.text() === 'AI Created & Revised');
-    expect(aiPill.classes()).toContain('bg-green-100');
-    expect(aiPill.classes()).toContain('text-green-800');
-    expect(aiPill.classes()).not.toContain('bg-teal-100');
+    const aiPill = wrapper.findAll('span').find(el => el.text() === 'AI Created & Review');
+    expect(aiPill.classes()).toContain('bg-blue-500');
+    expect(aiPill.classes()).toContain('text-white');
   });
 
-  it('gives AI Revised an amber pill', () => {
+  it('gives AI Review a solid amber pill', () => {
     const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ aiInvolvement: 'revised' }) } });
 
-    const aiPill = wrapper.findAll('span').find(el => el.text() === 'AI Revised');
-    expect(aiPill.classes()).toContain('bg-amber-100');
-    expect(aiPill.classes()).toContain('text-amber-800');
+    const aiPill = wrapper.findAll('span').find(el => el.text() === 'AI Review');
+    expect(aiPill.classes()).toContain('bg-amber-500');
+    expect(aiPill.classes()).toContain('text-white');
   });
 
-  it('falls back to a neutral AI pill when there is no AI involvement', () => {
+  it('falls back to a neutral gray pill when there is no AI involvement', () => {
     const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ aiInvolvement: 'none' }) } });
 
-    const aiPill = wrapper.findAll('span').find(el => el.text() === 'AI N/A');
-    expect(aiPill.classes()).toContain('bg-gray-100');
-    expect(aiPill.classes()).not.toContain('bg-green-100');
-    expect(aiPill.classes()).not.toContain('bg-teal-100');
+    const aiPill = wrapper.findAll('span').find(el => el.text() === 'No AI');
+    expect(aiPill.classes()).toContain('bg-gray-200');
+    expect(aiPill.classes()).not.toContain('bg-green-500');
+    expect(aiPill.classes()).not.toContain('bg-blue-500');
   });
 
-  it('does not show Author or Created date in the list for a real PRD', () => {
+  it('shows the Created date chip but not an Author chip for a real PRD', () => {
     const rfe = makeRFE();
     const wrapper = mount(RFEListItem, { props: { rfe } });
 
+    expect(wrapper.text()).toContain('Created');
+    expect(wrapper.text()).toContain(new Date(rfe.created).toLocaleDateString());
     expect(wrapper.text()).not.toContain('Author');
     expect(wrapper.text()).not.toContain('Alice');
-    expect(wrapper.text()).not.toContain(new Date(rfe.created).toLocaleDateString());
+  });
+
+  it('renders an info tooltip next to the Review pill (aligned with Design Review)', () => {
+    const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ status: 'Open' }) } });
+
+    // InfoBubble renders a "More info" button; tooltip text is only shown on click.
+    expect(wrapper.find('button[aria-label="More info"]').exists()).toBe(true);
+  });
+
+  it('omits the Created chip when the PRD has no creation date but keeps the row', () => {
+    // aiInvolvement 'revised' → "AI Review" pill, so "Created" only appears if the chip renders.
+    const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ status: 'Open', created: null, aiInvolvement: 'revised' }) } });
+
+    expect(wrapper.text()).not.toContain('Created');
+    expect(wrapper.text()).toContain('Score');
+    expect(wrapper.text()).toContain('Priority');
   });
 
   it('shows a Missing PRD badge instead of the AI involvement badge when status is No PR', () => {
@@ -101,12 +121,12 @@ describe('RFEListItem', () => {
     expect(pill.classes()).toContain('rounded-full');
   });
 
-  it('does not render Author or Created chips when status is No PR', () => {
+  it('does not render Created or Score chips when status is No PR', () => {
     const rfe = makeRFE({ status: 'No PR', creatorDisplayName: 'Dev One', aiInvolvement: 'none' });
     const wrapper = mount(RFEListItem, { props: { rfe } });
 
-    expect(wrapper.text()).not.toContain('Author');
     expect(wrapper.text()).not.toContain('Created');
+    expect(wrapper.text()).not.toContain('Score');
   });
 
   it('does not throw on a null created date when status is No PR', () => {
@@ -145,7 +165,7 @@ describe('RFEListItem', () => {
   it('keeps the AI provenance badge distinct from the review status badge', () => {
     const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ status: 'Merged', aiInvolvement: 'revised' }) } });
 
-    expect(wrapper.text()).toContain('AI Revised');
+    expect(wrapper.text()).toContain('AI Review');
     expect(wrapper.text()).toContain('Review Approved');
   });
 

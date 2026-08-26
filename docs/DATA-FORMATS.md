@@ -1113,6 +1113,8 @@ AI review scores and metadata pushed by the strat-creator pipeline via the AI Im
     },
     "labels": ["strat-creator-auto-created", "strat-creator-human-sign-off"],
     "reviewedAt": "2026-05-15T00:00:00Z",
+    "aiInvolvement": "both",
+    "provenanceKind": "design-workflow",
     "runId": "run-abc-123",
     "history": [
       {
@@ -1141,6 +1143,8 @@ AI review scores and metadata pushed by the strat-creator pipeline via the AI Im
 | `reviewers` | object | Per-dimension verdicts (`approve\|revise\|reject`) |
 | `labels` | string[] | Label snapshot from the AI pipeline push |
 | `reviewedAt` | string | ISO 8601 timestamp of this review |
+| `aiInvolvement` | `both\|created\|revised\|none`\|null | AI provenance: `created` = the design.md carries the AI-workflow stamp, `revised` = an AI review score exists (surfaced in the UI as "Review"), `both` = stamp + score. `null` until the pipeline populates it. Mirrors the same field on PRDs (`rfe-data.json`). |
+| `provenanceKind` | string\|null | Sub-type of the detected provenance stamp (e.g. `design-workflow`); `null` when no stamp is present |
 | `runId` | string | Pipeline run identifier |
 | `verdict` | string\|null | One-sentence summary of the review outcome (optional) |
 | `feedback` | string\|null | Structured markdown feedback with strengths/suggestions (optional) |

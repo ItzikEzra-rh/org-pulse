@@ -2,13 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock chart.js to avoid canvas errors in tests
 vi.mock('vue-chartjs', () => ({
-  Bar: { template: '<div class="mock-bar-chart" />' }
+  Bar: { template: '<div class="mock-bar-chart" />' },
+  Line: { template: '<div class="mock-line-chart" />' }
 }));
 vi.mock('chart.js', () => ({
   Chart: { register: vi.fn() },
   CategoryScale: {},
   LinearScale: {},
+  PointElement: {},
+  LineElement: {},
   BarElement: {},
+  Filler: {},
   Title: {},
   Tooltip: {},
   Legend: {}
@@ -55,7 +59,11 @@ vi.mock('../../client/composables/useFeatures.js', () => ({
     featureLoading: ref(false),
     featureError: ref(null),
     loadFeatures: vi.fn(),
-    loadFeatureDetail: vi.fn()
+    loadFeatureDetail: vi.fn(),
+    featureTrendData: ref([]),
+    featureBreakdown: ref([]),
+    featureTimeWindow: ref('month'),
+    loadFeatureTrend: vi.fn()
   })
 }));
 
@@ -95,7 +103,7 @@ describe('FeatureReviewView', () => {
     const wrapper = mountView();
 
     const selects = wrapper.findAll('select');
-    const componentSelect = selects.find(s => s.find('option[value="all"]').text() === 'All Components');
+    const componentSelect = selects.find(s => { const opt = s.find('option[value="all"]'); return opt.exists() && opt.text() === 'All Components' });
     await componentSelect.setValue('Core');
     expect(componentSelect.element.value).toBe('Core');
 
@@ -103,7 +111,7 @@ describe('FeatureReviewView', () => {
     await nextTick();
 
     const resetSelects = wrapper.findAll('select');
-    const resetComponentSelect = resetSelects.find(s => s.find('option[value="all"]').text() === 'All Components');
+    const resetComponentSelect = resetSelects.find(s => { const opt = s.find('option[value="all"]'); return opt.exists() && opt.text() === 'All Components' });
     expect(resetComponentSelect.element.value).toBe('all');
   });
 
@@ -114,7 +122,7 @@ describe('FeatureReviewView', () => {
     expect(wrapper.text()).toContain('UI feature');
 
     const selects = wrapper.findAll('select');
-    const componentSelect = selects.find(s => s.find('option[value="all"]').text() === 'All Components');
+    const componentSelect = selects.find(s => { const opt = s.find('option[value="all"]'); return opt.exists() && opt.text() === 'All Components' });
     await componentSelect.setValue('Core');
 
     expect(wrapper.text()).toContain('Core feature');

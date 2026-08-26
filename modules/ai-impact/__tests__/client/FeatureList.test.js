@@ -27,7 +27,8 @@ describe('FeatureList component filter', () => {
     const selects = wrapper.findAll('select');
     const componentSelect = selects.find(s => s.find('option[value="all"]').text() === 'All Components');
     expect(componentSelect.find('option[value="all"]').text()).toBe('All Components');
-    expect(wrapper.text()).toContain('3 features');
+    expect(wrapper.text()).toContain('Design List');
+    expect(wrapper.text()).toContain('(3 of 3 total)');
   });
 
   it('lists unique components derived from the data, sorted', () => {
@@ -40,7 +41,7 @@ describe('FeatureList component filter', () => {
 
   it('filters to only features matching the selected component', () => {
     const wrapper = mount(FeatureList, { props: { features, componentFilter: 'UI' } });
-    expect(wrapper.text()).toContain('1 feature');
+    expect(wrapper.text()).toContain('(1 of 3 total)');
     expect(wrapper.text()).toContain('UI feature');
     expect(wrapper.text()).not.toContain('Core feature');
   });
@@ -55,9 +56,9 @@ describe('FeatureList component filter', () => {
 
   it('restores the full list when switched back to All Components', async () => {
     const filtered = mount(FeatureList, { props: { features, componentFilter: 'Core' } });
-    expect(filtered.text()).toContain('1 feature');
+    expect(filtered.text()).toContain('(1 of 3 total)');
 
     await filtered.setProps({ componentFilter: 'all' });
-    expect(filtered.text()).toContain('3 features');
+    expect(filtered.text()).toContain('(3 of 3 total)');
   });
 });

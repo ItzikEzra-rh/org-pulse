@@ -198,6 +198,54 @@ test.describe('AI Impact Views @ai-impact', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('PRD Review shows the PRD List header and AI provenance badges above the title', async ({ page }) => {
+    await page.goto('/#/ai-impact/prd-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByText('PRD List')).toBeVisible();
+    // Demo fixtures include PRDs in every AI-involvement state
+    await expect(page.getByText('AI Created', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('AI Review', { exact: true }).first()).toBeVisible();
+
+    // "PR Status" (raw Jira/PR status) is distinct from "Review Status" (human sign-off)
+    const prStatusFilter = page.locator('select').filter({ hasText: 'All PR Statuses' });
+    await expect(prStatusFilter).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Design Review shows a Design List header and page title, matching PRD Review', async ({ page }) => {
+    await page.goto('/#/ai-impact/design-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByRole('heading', { name: 'Design Review', exact: true })).toBeVisible();
+    await expect(page.getByText('Design List')).toBeVisible();
+
+    // Design cards mirror PRD: every card carries an AI-provenance pill in the title row.
+    // Demo fixtures have no provenance data yet, so it renders as "No AI".
+    await expect(page.getByText('No AI', { exact: true }).first()).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('the no-artifact badge is aligned: "Missing PRD" on PRD, "Missing Design" on Design', async ({ page }) => {
+    await page.goto('/#/ai-impact/prd-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    // PRDs with no PR render the "Missing PRD" pill (demo fixtures include these).
+    await expect(page.getByText('Missing PRD', { exact: true }).first()).toBeVisible();
+
+    await page.goto('/#/ai-impact/design-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    // Features with no design doc render the mirrored "Missing Design" pill.
+    await expect(page.getByText('Missing Design', { exact: true }).first()).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
   test('Design Review view loads data from unified store', async ({ page }) => {
     // Monitor API requests — Design Review reads from ai-impact/features
     // which internally reads from the releases execution store
