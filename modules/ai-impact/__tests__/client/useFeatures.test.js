@@ -115,6 +115,29 @@ describe('useFeatures', () => {
     expect(featureBreakdown.value).toEqual(mockData.breakdown);
   });
 
+  it('ignores a stale trend response when the time window changed mid-flight', async () => {
+    const { featureTrendData, featureTimeWindow, loadFeatureTrend } = useFeatures();
+
+    // First (slow) request for 'week'; second (fast) request for 'month'.
+    let resolveWeek;
+    const weekData = { trendData: [{ date: 'week' }], breakdown: [] };
+    const monthData = { trendData: [{ date: 'month' }], breakdown: [] };
+    mockApiRequest
+      .mockImplementationOnce(() => new Promise(r => { resolveWeek = () => r(weekData); }))
+      .mockResolvedValueOnce(monthData);
+
+    featureTimeWindow.value = 'week';
+    const weekPromise = loadFeatureTrend();
+
+    featureTimeWindow.value = 'month';
+    await loadFeatureTrend();          // month resolves first, sets the data
+    resolveWeek();                     // week (stale) resolves last
+    await weekPromise;
+
+    // The stale 'week' response must NOT overwrite the current 'month' data.
+    expect(featureTrendData.value).toEqual(monthData.trendData);
+  });
+
   it('loadFeatureTrend leaves prior data in place on failure', async () => {
     mockApiRequest.mockResolvedValue({ trendData: [{ date: 'x' }], breakdown: [{ name: 'y', value: 1 }] });
     const { featureTrendData, featureBreakdown, loadFeatureTrend } = useFeatures();

@@ -25,7 +25,8 @@ const {
 } = useFeatures()
 
 loadFeatures()
-loadFeatureTrend()
+// Trend is auto-loaded by useFeatures() on first use and refetched by its
+// watcher when the time window changes; no explicit call needed here.
 
 // Load RFE data only for jiraHost (used by detail panel links)
 const timeWindow = ref('month')

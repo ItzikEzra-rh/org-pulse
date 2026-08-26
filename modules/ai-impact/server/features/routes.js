@@ -254,7 +254,11 @@ module.exports = function registerFeatureRoutes(router, context) {
    *         description: Weekly trend points and an AI-involvement breakdown, matching the /rfe-data trend shape
    */
   router.get('/features/trend', requireScope('ai-impact:read'), function(req, res) {
-    const timeWindow = req.query.timeWindow || 'month';
+    // Normalize to a supported window, matching the sibling /rfe-data route
+    // (unknown values fall back to 'month' rather than erroring).
+    const timeWindow = ['week', 'month', '3months'].includes(req.query.timeWindow)
+      ? req.query.timeWindow
+      : 'month';
     const projection = getLatestProjection(readFeatures(readFromStorage));
 
     // buildTrendData/buildBreakdownData (shared with the PRD side) expect

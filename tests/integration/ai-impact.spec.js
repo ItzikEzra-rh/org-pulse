@@ -223,9 +223,9 @@ test.describe('AI Impact Views @ai-impact', () => {
     await expect(page.getByRole('heading', { name: 'Design Review', exact: true })).toBeVisible();
     await expect(page.getByText('Design List')).toBeVisible();
 
-    // Design cards mirror PRD: every card carries an AI-provenance pill in the title row.
-    // Demo fixtures have no provenance data yet, so it renders as "No AI".
-    await expect(page.getByText('No AI', { exact: true }).first()).toBeVisible();
+    // Design cards mirror PRD: cards with a design doc carry an AI-provenance pill
+    // in the title row (demo fixtures include a scored feature -> "AI Review").
+    await expect(page.getByText('AI Review', { exact: true }).first()).toBeVisible();
 
     expect(page.errors).toHaveLength(0);
   });

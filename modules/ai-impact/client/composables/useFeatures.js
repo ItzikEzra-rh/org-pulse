@@ -32,9 +32,12 @@ async function loadFeatures() {
 }
 
 async function loadFeatureTrend() {
+  const tw = featureTimeWindow.value || 'month'
   try {
-    const tw = featureTimeWindow.value || 'month'
     const data = await apiRequest(`/modules/ai-impact/features/trend?timeWindow=${tw}`)
+    // Ignore a stale response if the window changed while this request was in
+    // flight, so an earlier request can't clobber a newer selection's data.
+    if ((featureTimeWindow.value || 'month') !== tw) return
     featureTrendData.value = data.trendData || []
     featureBreakdown.value = data.breakdown || []
   } catch {

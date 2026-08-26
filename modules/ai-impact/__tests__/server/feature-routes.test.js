@@ -202,6 +202,30 @@ describe('GET /features/trend', () => {
     ]));
   });
 
+  it('normalizes an unsupported timeWindow to a valid window instead of erroring', async () => {
+    const data = {
+      lastSyncedAt: 'x',
+      totalFeatures: 1,
+      features: {
+        A: { latest: { key: 'A', aiInvolvement: 'created', created: daysAgo(3) }, history: [] }
+      }
+    };
+    const { router, routes } = createRouter();
+    registerFeatureRoutes(router, makeContext(data));
+
+    // Handler reads req.query; pass a bogus window and confirm it still responds
+    // with the standard trend shape (matching the /rfe-data fallback behavior).
+    const key = 'GET /features/trend';
+    const res = { json: vi.fn(), status: vi.fn().mockReturnThis() };
+    const req = { body: {}, params: {}, query: { timeWindow: 'bogus' } };
+    await routes[key][routes[key].length - 1](req, res);
+
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    const payload = res.json.mock.calls[0][0];
+    expect(Array.isArray(payload.trendData)).toBe(true);
+    expect(Array.isArray(payload.breakdown)).toBe(true);
+  });
+
   it('excludes features with no created date from the breakdown', async () => {
     const data = {
       lastSyncedAt: 'x',
