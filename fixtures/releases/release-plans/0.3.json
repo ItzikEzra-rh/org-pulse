@@ -77,29 +77,31 @@
       "key": "caas",
       "title": "CaaS — Cluster Provisioning",
       "items": [
-        { "jira": "OSAC-1415", "title": "Support cluster upgrade", "customers": ["Moc", "Telenor"] },
-        { "jira": "OSAC-1500", "title": "Scale CLI for cluster worker pools", "customers": [] }
+        { "jira": "OSAC-1191", "title": "Cluster provisioning via HyperShift + Metal3 + BCM inventory", "version": "0.1", "isTarget": false, "customers": [] },
+        { "jira": "OSAC-1288", "title": "Managed cluster versions, CaaS networking (Netris/VLAN)", "version": "0.2", "isTarget": false, "customers": [] },
+        { "jira": "OSAC-1415", "title": "Support cluster upgrade", "version": "+0.3", "isTarget": true, "customers": ["Moc", "Telenor"] },
+        { "jira": "OSAC-1500", "title": "Scale CLI for cluster worker pools", "version": "+0.3", "isTarget": true, "customers": [] }
       ]
     },
     {
       "key": "vmaas",
       "title": "VMaaS — VM Management",
       "items": [
-        { "jira": "OSAC-1622", "title": "VM worker nodes for CaaS clusters", "customers": ["NCP"] }
+        { "jira": "OSAC-1622", "title": "VM worker nodes for CaaS clusters", "version": "+0.3", "isTarget": true, "customers": ["NCP"] }
       ]
     },
     {
       "key": "core",
       "title": "Core — Multi-Tenancy & Platform",
       "items": [
-        { "jira": "OSAC-1701", "title": "Per-Project KMS", "customers": ["Telefónica"] }
+        { "jira": "OSAC-1701", "title": "Per-Project KMS", "version": "+0.3", "isTarget": true, "customers": ["Telefónica"] }
       ]
     },
     {
       "key": "maas",
       "title": "MaaS — Model as a Service",
       "items": [
-        { "jira": "OSAC-1810", "title": "MaaS inference metering", "customers": ["AI Grid"] }
+        { "jira": "OSAC-1810", "title": "MaaS inference metering", "version": "+0.3", "isTarget": true, "customers": ["AI Grid"] }
       ]
     }
   ],

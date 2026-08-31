@@ -91,6 +91,31 @@ const matrixCells = computed(() => {
   }
   return result
 })
+
+// Version strings look like "0.1", "0.2", or "+<TARGET>" — strip the
+// leading "+" and compare dotted segments numerically so cumulative
+// items/cells render oldest-first regardless of producer ordering.
+function versionSortKey(version) {
+  return (version || '').replace(/^\+/, '').split('.').map((n) => parseInt(n, 10) || 0)
+}
+
+function compareVersions(a, b) {
+  const ka = versionSortKey(a)
+  const kb = versionSortKey(b)
+  for (let i = 0; i < Math.max(ka.length, kb.length); i++) {
+    const diff = (ka[i] || 0) - (kb[i] || 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+const sortedUseCaseCards = computed(() => {
+  const cards = plan.value?.useCaseCards || []
+  return cards.map((card) => ({
+    ...card,
+    items: [...(card.items || [])].sort((a, b) => compareVersions(a.version, b.version))
+  }))
+})
 </script>
 
 <template>
@@ -197,7 +222,7 @@ const matrixCells = computed(() => {
                   :key="cell.service"
                   class="px-4 py-3"
                 >
-                  <span v-if="cell.value === '—' || !cell.value" class="text-gray-300 dark:text-gray-600">—</span>
+                  <span v-if="cell.value === '—' || !cell.value || cell.value.length === 0" class="text-gray-300 dark:text-gray-600">—</span>
                   <ul v-else class="space-y-1">
                     <li v-for="(entry, i) in cell.value" :key="i" class="text-xs">
                       <span
@@ -221,13 +246,20 @@ const matrixCells = computed(() => {
         <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Use Cases</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div
-            v-for="card in plan.useCaseCards"
+            v-for="card in sortedUseCaseCards"
             :key="card.key"
             class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4"
           >
             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">{{ card.title }}</h3>
             <ul class="space-y-1.5">
-              <li v-for="item in card.items" :key="item.jira" class="text-xs flex items-start gap-1.5">
+              <li v-for="item in card.items" :key="item.jira" class="text-xs flex items-start gap-1.5 flex-wrap">
+                <span
+                  v-if="item.version"
+                  class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0"
+                  :class="item.isTarget
+                    ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+                >{{ item.version }}</span>
                 <a
                   :href="jiraLink(item.jira)"
                   target="_blank"

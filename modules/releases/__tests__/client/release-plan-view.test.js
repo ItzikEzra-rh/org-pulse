@@ -25,7 +25,14 @@ function makePlan(overrides = {}) {
       ]
     },
     useCaseCards: [
-      { key: 'caas', title: 'CaaS — Cluster Provisioning', items: [{ jira: 'OSAC-1415', title: 'Support cluster upgrade', customers: ['Moc'] }] }
+      {
+        key: 'caas',
+        title: 'CaaS — Cluster Provisioning',
+        items: [
+          { jira: 'OSAC-1415', title: 'Support cluster upgrade', version: '+0.3', isTarget: true, customers: ['Moc'] },
+          { jira: 'OSAC-1191', title: 'Cluster provisioning via HyperShift + Metal3', version: '0.1', isTarget: false, customers: [] }
+        ]
+      }
     ],
     customerCoverage: {
       ncp: [{ req: 'CNP01', requirement: 'Multi-Tenant Isolation', coverage: 'RBAC', version: '0.1', status: 'Done ✅' }],
@@ -176,5 +183,53 @@ describe('ReleasePlanView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('A summary of 0.2.')
     expect(wrapper.text()).not.toContain('A summary of 0.3.')
+  })
+
+  it('renders use-case card items sorted oldest-first with version badges, regardless of fixture order', async () => {
+    // Fixture intentionally lists the +0.3 item before the 0.1 item.
+    apiRequest.mockImplementation((path) => {
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.3')] })
+      if (path === '/modules/releases/release-plan?version=0.3') return Promise.resolve(makePlan())
+      return Promise.reject(new Error('unexpected path: ' + path))
+    })
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+
+    const useCasesSection = wrapper.findAll('section').find((s) => s.text().includes('Use Cases'))
+    const items = useCasesSection.findAll('li')
+    expect(items).toHaveLength(2)
+    expect(items[0].text()).toContain('OSAC-1191')
+    expect(items[1].text()).toContain('OSAC-1415')
+
+    const priorBadge = items[0].find('span')
+    expect(priorBadge.text()).toBe('0.1')
+    expect(priorBadge.classes()).toContain('bg-gray-100')
+
+    const targetBadge = items[1].find('span')
+    expect(targetBadge.text()).toBe('+0.3')
+    expect(targetBadge.classes()).toContain('bg-green-100')
+  })
+
+  it('shows a dash for a matrix cell with an empty array instead of an empty list', async () => {
+    apiRequest.mockImplementation((path) => {
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.3')] })
+      if (path === '/modules/releases/release-plan?version=0.3') {
+        return Promise.resolve(makePlan({
+          serviceMatrix: {
+            services: ['CaaS', 'VMaaS'],
+            rows: [{ dimension: 'API', cells: { CaaS: [{ version: '+0.3', isTarget: true, text: 'Cluster upgrade automation' }], VMaaS: [] } }]
+          }
+        }))
+      }
+      return Promise.reject(new Error('unexpected path: ' + path))
+    })
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+
+    const row = wrapper.findAll('tbody tr')[0]
+    const cells = row.findAll('td')
+    expect(cells[2].text()).toBe('—')
   })
 })

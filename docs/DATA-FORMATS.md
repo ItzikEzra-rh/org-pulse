@@ -1362,7 +1362,10 @@ Structured JSON output of the `/release-plan` skill (schema owned by `osac-ai-sk
     {
       "key": "caas",
       "title": "CaaS — Cluster Provisioning",
-      "items": [{ "jira": "OSAC-1415", "title": "Support cluster upgrade", "customers": ["Moc", "Telenor"] }]
+      "items": [
+        { "jira": "OSAC-1191", "title": "Cluster provisioning via HyperShift + Metal3", "version": "0.1", "isTarget": false, "customers": [] },
+        { "jira": "OSAC-1415", "title": "Support cluster upgrade", "version": "+0.3", "isTarget": true, "customers": ["Moc", "Telenor"] }
+      ]
     }
   ],
   "customerCoverage": {
@@ -1395,7 +1398,8 @@ Structured JSON output of the `/release-plan` skill (schema owned by `osac-ai-sk
 
 **Notes:**
 - All Jira references are bare keys (`jira`/`key` fields, e.g. `"OSAC-1415"`) — no embedded URLs anywhere in the JSON. Consumers (the frontend view) build `https://redhat.atlassian.net/browse/<key>` themselves.
-- `serviceMatrix.rows[].cells[service]` is either an array of `{version, isTarget, text}` entries, or the literal string `"—"` when that service/dimension has no history in any version — consumers must handle both shapes per cell.
+- `serviceMatrix.rows[].cells[service]` is either an array of `{version, isTarget, text}` entries, or the literal string `"—"` when that service/dimension has no history in any version — consumers must handle both shapes per cell. When the array form is used, it only contains entries for versions that actually added a capability — a version that added nothing to an otherwise-populated cell is omitted from the array entirely, never included with placeholder/dash text.
+- `useCaseCards[].items` are cumulative across all versions, not just the target: each item carries `version` (`"0.1"`, `"0.2"`, …, or `"+<TARGET>"`) and `isTarget` (`true` only for the target version's additions), same convention as `serviceMatrix` cell entries. Versions that added nothing to a use case are omitted, same as `cumulativeProgression`.
 - `cumulativeProgression[].versions` omits versions that added nothing to that use case — never backfilled with empty rows.
 - `featureInventory` groups spikes into their own `"Spikes (Investigations)"` group; there is never a standalone `"UI"` group (UI work is attributed to the service it serves).
 - `status` strings are already the display-ready mapped Jira status (`"Done ✅"`, `"In Progress"`, `"In Review"`, `"Planned"`) — render verbatim.
