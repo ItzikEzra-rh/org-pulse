@@ -71,10 +71,12 @@ describe('FeatureList AI Involvement filter (aligned with PRD Review)', () => {
     return wrapper.findAllComponents(FeatureListItem).map(c => c.props('feature').key);
   }
 
+  // The real API never sends the string 'none' -- aiInvolvement is null
+  // until the design-provenance pipeline reviews the feature.
   const features = {
     A: makeFeature({ key: 'A', aiInvolvement: 'both' }),
     B: makeFeature({ key: 'B', aiInvolvement: 'created' }),
-    C: makeFeature({ key: 'C', aiInvolvement: 'none' })
+    C: makeFeature({ key: 'C', aiInvolvement: null })
   };
 
   it('filters by aiInvolvement, matching the PRD tab semantics', () => {
@@ -85,6 +87,20 @@ describe('FeatureList AI Involvement filter (aligned with PRD Review)', () => {
   it('"all" (default) includes every AI involvement state', () => {
     const wrapper = mount(FeatureList, { props: { features } });
     expect(renderedKeys(wrapper).sort()).toEqual(['A', 'B', 'C']);
+  });
+
+  it('"No AI" matches a null aiInvolvement (not just the literal string "none")', () => {
+    const wrapper = mount(FeatureList, { props: { features, aiInvolvementFilter: 'none' } });
+    expect(renderedKeys(wrapper)).toEqual(['C']);
+  });
+
+  it('excludes features with no design PR from "No AI", matching the breakdown chart', () => {
+    const withNoDesignDoc = {
+      ...features,
+      D: makeFeature({ key: 'D', aiInvolvement: null, sourceRfe: null })
+    };
+    const wrapper = mount(FeatureList, { props: { features: withNoDesignDoc, aiInvolvementFilter: 'none' } });
+    expect(renderedKeys(wrapper)).toEqual(['C']);
   });
 });
 

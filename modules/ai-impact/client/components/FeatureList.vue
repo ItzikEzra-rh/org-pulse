@@ -82,9 +82,13 @@ const sortedAndFilteredFeatures = computed(() => {
     )
   }
 
-  // AI involvement filter
+  // AI involvement filter. Features with no design PR yet (sourceRfe null)
+  // are excluded here too, matching the breakdown chart on this tab: a
+  // feature with nothing to review yet isn't "No AI", it's "no doc yet".
+  // aiInvolvement is null (not the string 'none') until reviewed, so it's
+  // normalized the same way the breakdown endpoint does.
   if (props.aiInvolvementFilter !== 'all') {
-    items = items.filter(f => f.aiInvolvement === props.aiInvolvementFilter)
+    items = items.filter(f => f.sourceRfe && (f.aiInvolvement || 'none') === props.aiInvolvementFilter)
   }
 
   // AI verdict filter (the AI review's recommendation)
