@@ -29,8 +29,8 @@ function makePlan(overrides = {}) {
         key: 'caas',
         title: 'CaaS — Cluster Provisioning',
         items: [
-          { jira: 'OSAC-1415', title: 'Support cluster upgrade', version: '+0.3', isTarget: true, customers: ['Moc'] },
-          { jira: 'OSAC-1191', title: 'Cluster provisioning via HyperShift + Metal3', version: '0.1', isTarget: false, customers: [] }
+          { jira: 'OSAC-1415', title: 'Support cluster upgrade', version: '+0.3', isTarget: true, status: 'In Review', customers: ['Moc'] },
+          { jira: 'OSAC-1191', title: 'Cluster provisioning via HyperShift + Metal3', version: '0.1', isTarget: false, status: 'Done ✅', customers: [] }
         ]
       }
     ],
@@ -209,6 +209,43 @@ describe('ReleasePlanView', () => {
     const targetBadge = items[1].find('span')
     expect(targetBadge.text()).toBe('+0.3')
     expect(targetBadge.classes()).toContain('bg-green-100')
+  })
+
+  it('flags an unfinished prior-version card item but not a finished one or a target item', async () => {
+    apiRequest.mockImplementation((path) => {
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.3')] })
+      if (path === '/modules/releases/release-plan?version=0.3') {
+        return Promise.resolve(makePlan({
+          useCaseCards: [
+            {
+              key: 'caas',
+              title: 'CaaS — Cluster Provisioning',
+              items: [
+                { jira: 'OSAC-1191', title: 'Finished prior feature', version: '0.1', isTarget: false, status: 'Done ✅', customers: [] },
+                { jira: 'OSAC-1200', title: 'Unfinished prior feature', version: '0.2', isTarget: false, status: 'In Progress', customers: [] },
+                { jira: 'OSAC-1415', title: 'Target feature still planned', version: '+0.3', isTarget: true, status: 'Planned', customers: [] }
+              ]
+            }
+          ]
+        }))
+      }
+      return Promise.reject(new Error('unexpected path: ' + path))
+    })
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+
+    const useCasesSection = wrapper.findAll('section').find((s) => s.text().includes('Use Cases'))
+    const items = useCasesSection.findAll('li')
+
+    expect(items[0].text()).toContain('Finished prior feature')
+    expect(items[0].text()).not.toContain('In Progress')
+
+    expect(items[1].text()).toContain('Unfinished prior feature')
+    expect(items[1].text()).toContain('(In Progress)')
+
+    expect(items[2].text()).toContain('Target feature still planned')
+    expect(items[2].text()).not.toContain('Planned')
   })
 
   it('shows a dash for a matrix cell with an empty array instead of an empty list', async () => {

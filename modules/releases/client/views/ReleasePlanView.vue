@@ -116,6 +116,16 @@ const sortedUseCaseCards = computed(() => {
     items: [...(card.items || [])].sort((a, b) => compareVersions(a.version, b.version))
   }))
 })
+
+// Prior-version items are fetched regardless of Jira status, so a
+// not-yet-finished feature can appear alongside shipped ones. Flag it
+// only when it isn't the target version and its status isn't Closed/Done
+// -- a target-version item being Planned/In Progress is expected.
+function isUnfinishedPriorWork(item) {
+  if (item.isTarget) return false
+  const status = item.status || ''
+  return status !== '' && !status.startsWith('Done') && !status.startsWith('Closed')
+}
 </script>
 
 <template>
@@ -266,6 +276,10 @@ const sortedUseCaseCards = computed(() => {
                   class="text-primary-600 dark:text-blue-400 hover:underline font-mono flex-shrink-0"
                 >{{ item.jira }}</a>
                 <span class="text-gray-700 dark:text-gray-300">{{ item.title }}</span>
+                <span
+                  v-if="isUnfinishedPriorWork(item)"
+                  class="text-amber-600 dark:text-amber-400 text-[10px] font-medium flex-shrink-0"
+                >({{ item.status }})</span>
                 <span
                   v-for="c in item.customers || []"
                   :key="c"
