@@ -266,15 +266,19 @@ module.exports = function registerFeatureRoutes(router, context) {
     // revision-label date, so the AI review timestamp stands in for "when the
     // review happened".
     const trendInput = Object.values(projection.features).map(function(f) {
-      return { created: f.created, aiInvolvement: f.aiInvolvement || 'none', revisedLabelDate: f.reviewedAt };
+      return { created: f.created, aiInvolvement: f.aiInvolvement || 'none', revisedLabelDate: f.reviewedAt, sourceRfe: f.sourceRfe };
     });
 
     const { cutoff } = getTimeWindowDates(new Date(), timeWindow);
     const windowInput = trendInput.filter(function(i) { return i.created && new Date(i.created) >= cutoff; });
+    // Features with no design PR yet (sourceRfe null) can't have AI
+    // involvement one way or the other — exclude them from the breakdown,
+    // mirroring the 'No PR' exclusion on the PRD side.
+    const breakdownInput = windowInput.filter(function(i) { return i.sourceRfe; });
 
     res.json({
       trendData: buildTrendData(trendInput, timeWindow),
-      breakdown: buildBreakdownData(windowInput)
+      breakdown: buildBreakdownData(breakdownInput)
     });
   });
 

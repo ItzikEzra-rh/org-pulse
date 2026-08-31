@@ -184,8 +184,8 @@ describe('GET /features/trend', () => {
       lastSyncedAt: 'x',
       totalFeatures: 2,
       features: {
-        A: { latest: { key: 'A', aiInvolvement: 'created', created: daysAgo(3) }, history: [] },
-        B: { latest: { key: 'B', aiInvolvement: 'none', created: daysAgo(3) }, history: [] }
+        A: { latest: { key: 'A', aiInvolvement: 'created', created: daysAgo(3), sourceRfe: 'EP-1' }, history: [] },
+        B: { latest: { key: 'B', aiInvolvement: 'none', created: daysAgo(3), sourceRfe: 'EP-2' }, history: [] }
       }
     };
     const { router, routes } = createRouter();
@@ -199,6 +199,27 @@ describe('GET /features/trend', () => {
     expect(payload.breakdown).toEqual(expect.arrayContaining([
       { name: 'AI Created', value: 1 },
       { name: 'No AI', value: 1 }
+    ]));
+  });
+
+  it('excludes features with no design PR (sourceRfe) from the breakdown', async () => {
+    const data = {
+      lastSyncedAt: 'x',
+      totalFeatures: 2,
+      features: {
+        A: { latest: { key: 'A', aiInvolvement: 'created', created: daysAgo(3), sourceRfe: 'EP-1' }, history: [] },
+        B: { latest: { key: 'B', aiInvolvement: 'none', created: daysAgo(3), sourceRfe: null }, history: [] }
+      }
+    };
+    const { router, routes } = createRouter();
+    registerFeatureRoutes(router, makeContext(data));
+
+    const { res } = await callHandler(routes, 'GET', '/features/trend');
+    const payload = res.json.mock.calls[0][0];
+
+    expect(payload.breakdown).toEqual(expect.arrayContaining([
+      { name: 'AI Created', value: 1 },
+      { name: 'No AI', value: 0 }
     ]));
   });
 

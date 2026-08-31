@@ -322,4 +322,15 @@ describe('computeAllMetrics', () => {
     expect(result.pipelineFriction).toHaveProperty('needsAttentionPct');
     expect(result.pipelineFriction).toHaveProperty('feasibilityBlockedPct');
   });
+
+  it('excludes RFEs with no PRD PR yet (status "No PR") from the breakdown', () => {
+    const withPRD = makeIssue(5, 'created');
+    const noPRD = { ...makeIssue(5, 'none'), status: 'No PR' };
+    const result = computeAllMetrics([withPRD, noPRD], 'month', { trendThresholdPp: 2 });
+
+    expect(result.breakdown).toEqual(expect.arrayContaining([
+      { name: 'AI Created', value: 1 },
+      { name: 'No AI', value: 0 }
+    ]));
+  });
 });

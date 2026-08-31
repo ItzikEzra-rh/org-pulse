@@ -82,10 +82,14 @@ function computePipelineFrictionMetrics(issues, timeWindow, config) {
 function computeAllMetrics(issues, timeWindow, config) {
   const { cutoff } = getTimeWindowDates(new Date(), timeWindow);
   const windowIssues = issues.filter(i => new Date(i.created) >= cutoff);
+  // RFEs with no PRD PR yet ('No PR') can't have AI involvement one way or
+  // the other — exclude them so the breakdown reflects PRDs that actually
+  // exist, matching the totalRFEs exclusion in computeMetrics().
+  const breakdownIssues = windowIssues.filter(i => i.status !== 'No PR');
   return {
     metrics: computeMetrics(issues, timeWindow, config),
     trendData: buildTrendData(issues, timeWindow),
-    breakdown: buildBreakdownData(windowIssues),
+    breakdown: buildBreakdownData(breakdownIssues),
     pipelineFriction: computePipelineFrictionMetrics(issues, timeWindow, config)
   };
 }
