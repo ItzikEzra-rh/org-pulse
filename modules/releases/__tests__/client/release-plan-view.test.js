@@ -10,7 +10,7 @@ import ReleasePlanView from '../../client/views/ReleasePlanView.vue'
 
 function makePlan(overrides = {}) {
   return {
-    metadata: { version: '0.3', priorVersion: '0.2', badge: 'Developer Preview' },
+    metadata: { version: '0.3', priorVersion: '0.2', badge: 'Developer Preview', generatedAt: '2026-08-19 14:35' },
     vision: { summary: 'A summary of 0.3.', metrics: [{ num: 41, label: 'Features in 0.3' }] },
     serviceMatrix: {
       services: ['CaaS', 'VMaaS'],
@@ -110,6 +110,7 @@ describe('ReleasePlanView', () => {
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/release-plans')
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/release-plan?version=0.3')
     expect(wrapper.text()).toContain('A summary of 0.3.')
+    expect(wrapper.text()).toContain('Generated: 2026-08-19 14:35')
     expect(wrapper.text()).toContain('Cluster upgrade automation')
     expect(wrapper.text()).toContain('CaaS — Cluster Provisioning')
     expect(wrapper.text()).toContain('Support cluster upgrade')
@@ -268,5 +269,20 @@ describe('ReleasePlanView', () => {
     const row = wrapper.findAll('tbody tr')[0]
     const cells = row.findAll('td')
     expect(cells[2].text()).toBe('—')
+  })
+
+  it('omits the generated-at line when metadata has no generatedAt', async () => {
+    apiRequest.mockImplementation((path) => {
+      if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.3')] })
+      if (path === '/modules/releases/release-plan?version=0.3') {
+        return Promise.resolve(makePlan({ metadata: { version: '0.3', priorVersion: '0.2', badge: 'Developer Preview' } }))
+      }
+      return Promise.reject(new Error('unexpected path: ' + path))
+    })
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Generated:')
   })
 })

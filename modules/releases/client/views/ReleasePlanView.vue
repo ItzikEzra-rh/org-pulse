@@ -190,6 +190,10 @@ function isUnfinishedPriorWork(item) {
             class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300"
           >{{ plan.metadata.badge }}</span>
         </div>
+        <p
+          v-if="plan.metadata?.generatedAt"
+          class="text-xs text-gray-400 dark:text-gray-500 mb-2"
+        >Generated: {{ plan.metadata.generatedAt }}</p>
         <p class="text-sm text-gray-700 dark:text-gray-300 mb-4">{{ plan.vision?.summary }}</p>
         <div class="flex flex-wrap gap-4">
           <div
