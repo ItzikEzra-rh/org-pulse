@@ -1,5 +1,6 @@
 const express = require('express');
 const registerDisconnectedRoutes = require('./disconnected/routes');
+const registerComponentMaturityRoutes = require('./component-maturity/routes');
 const scheduler = require('./disconnected/scheduler');
 
 module.exports = function registerRoutes(router, context) {
@@ -21,6 +22,14 @@ module.exports = function registerRoutes(router, context) {
     scheduler
   });
   router.use('/disconnected', disconnectedRouter);
+
+  const componentMaturityRouter = express.Router();
+  registerComponentMaturityRoutes(componentMaturityRouter, {
+    storage,
+    requireAuth,
+    requireScope
+  });
+  router.use('/component-maturity', componentMaturityRouter);
 
   if (context.registerRefresh) {
     context.registerRefresh('disconnected-readiness', {

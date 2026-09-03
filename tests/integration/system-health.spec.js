@@ -56,7 +56,7 @@ test.describe('System Health Module @system-health', () => {
     expect(page.errors).toHaveLength(0);
   });
 
-  test('legacy quality-analysis and component-maturity items should be disabled', async ({ page }) => {
+  test('quality analysis should be disabled and component maturity enabled', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
@@ -65,11 +65,11 @@ test.describe('System Health Module @system-health', () => {
     await moduleHeader.click();
     await page.waitForTimeout(500);
 
-    for (const label of ['Quality analysis', 'Component maturity']) {
-      const item = page.locator('aside nav button').filter({ hasText: label }).first();
-      const isDisabled = await item.getAttribute('disabled');
-      expect(isDisabled).not.toBeNull();
-    }
+    const qualityAnalysis = page.locator('aside nav button').filter({ hasText: 'Quality analysis' }).first();
+    await expect(qualityAnalysis).toBeDisabled();
+
+    const componentMaturity = page.locator('aside nav button').filter({ hasText: 'Component maturity' }).first();
+    await expect(componentMaturity).toBeEnabled();
 
     expect(page.errors).toHaveLength(0);
   });
@@ -166,6 +166,51 @@ test.describe('System Health Views @system-health', () => {
 
   test('should load Component Maturity view', async ({ page }) => {
     await testView(page, 'component-maturity', 'Component Maturity');
+
+    await expect(page.getByRole('heading', { name: 'OSAC Component Maturity Report' })).toBeVisible();
+    await expect(page.getByText('Avg score')).toBeVisible();
+    await expect(page.getByText('Evidence coverage', { exact: true })).toBeVisible();
+    await expect(page.getByText('Blocker gaps').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'By Requirement' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Mapping Problems' })).toBeVisible();
+    await expect(page.locator('iframe')).toHaveCount(0);
+  });
+
+  test('should fetch the native Component Maturity report API', async ({ page }) => {
+    const reportRequest = page.waitForRequest(request =>
+      request.url().includes('/api/modules/system-health/component-maturity/report')
+    );
+
+    await page.goto('/#/system-health/component-maturity');
+    await reportRequest;
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByText('Core', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Billing and Quota', { exact: true }).first()).toBeVisible();
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('should filter and drill into native Component Maturity evidence', async ({ page }) => {
+    await page.goto('/#/system-health/component-maturity');
+    await page.waitForLoadState('networkidle');
+
+    await page.getByRole('button', { name: 'Toggle Core details' }).click();
+    await expect(page.getByText('Stage readiness', { exact: true })).toBeVisible();
+    await expect(page.getByText('Component requirements', { exact: true })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Target' }).first()).toBeVisible();
+    await expect(page.getByText('Deliverable pipeline status', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'By Requirement' }).click();
+    await expect(page.getByText('Process Checkpoints', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Toggle Feature signoff completed for TP stage requirement details' }).click();
+    await expect(page.getByText(/Define and approve how an OSAC component and TP signoff/)).toBeVisible();
+    await expect(page.getByText(/No approved machine-readable OSAC Jira evidence convention/).first()).toBeVisible();
+
+    await page.getByRole('button', { name: 'Mapping Problems' }).click();
+    for (const heading of ['Severity', 'Signal', 'Entity', 'Type', 'Message']) {
+      await expect(page.getByRole('columnheader', { name: heading })).toBeVisible();
+    }
+    expect(page.errors).toHaveLength(0);
   });
 
   test('should show empty state for repos without scan data', async ({ page }) => {
