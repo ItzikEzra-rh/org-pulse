@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, inject } from 'vue'
+import { ref, computed, watch, inject } from 'vue'
 import { useFeatures } from '../composables/useFeatures.js'
 import { useAIImpact } from '../composables/useAIImpact.js'
 import { useModuleLink } from '@shared/client/composables/useModuleLink.js'
@@ -33,6 +33,24 @@ loadFeatures()
 
 // Load RFE data only for jiraHost (used by detail panel links)
 const { rfeData } = useAIImpact()
+
+const timeWindowCutoff = computed(() => {
+  const days = featureTimeWindow.value === 'week' ? 7 : featureTimeWindow.value === '3months' ? 90 : 30
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+})
+
+const isInTimeWindow = feature => new Date(feature.created) >= timeWindowCutoff.value
+
+// Time-window scoped only, mirroring PRD Review's windowedRFEs, so the
+// summary KPI row reflects the selected period. The feature list/table
+// below intentionally keeps using the full, unfiltered `features` store.
+const windowedFeatures = computed(() => {
+  const result = {}
+  for (const [key, feature] of Object.entries(features.value)) {
+    if (isInTimeWindow(feature)) result[key] = feature
+  }
+  return result
+})
 
 function handleRetry() {
   loadFeatures()
@@ -103,6 +121,7 @@ watch(() => Object.keys(features.value).length, () => {
       :loading="featureLoading"
       :error="featureError"
       :features="features"
+      :windowedFeatures="windowedFeatures"
       :featureMeta="featureMeta"
       :trendData="featureTrendData"
       :breakdown="featureBreakdown"

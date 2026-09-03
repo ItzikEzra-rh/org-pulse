@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  features: { type: Object, default: () => ({}) }
+  features: { type: Object, default: () => ({}) },
+  allTimeTotal: { type: Number, default: null }
 })
 
 const featureList = computed(() => Object.values(props.features))
@@ -11,14 +12,16 @@ const totalFeatures = computed(() => featureList.value.length)
 
 const reviewedFeatures = computed(() => featureList.value.filter(f => f.designStatus !== 'no-design'))
 
+// null (not 0) when there is no reviewed population, so the template can
+// render "—" instead of a misleading 0%/0 that looks like a real result.
 const approvalRate = computed(() => {
-  if (reviewedFeatures.value.length === 0) return 0
+  if (reviewedFeatures.value.length === 0) return null
   const approved = reviewedFeatures.value.filter(f => f.recommendation === 'approve').length
   return Math.round((approved / reviewedFeatures.value.length) * 100)
 })
 
 const avgScore = computed(() => {
-  if (reviewedFeatures.value.length === 0) return 0
+  if (reviewedFeatures.value.length === 0) return null
   const sum = reviewedFeatures.value.reduce((acc, f) => acc + (f.scores?.total || 0), 0)
   return (sum / reviewedFeatures.value.length).toFixed(1)
 })
@@ -41,16 +44,17 @@ const signedOffCount = computed(() => {
       <div class="space-y-1">
         <p class="text-sm text-gray-500 dark:text-gray-400">Total Features</p>
         <span class="text-3xl font-bold dark:text-gray-100">{{ totalFeatures }}</span>
+        <p v-if="allTimeTotal !== null" class="text-xs text-gray-400 dark:text-gray-500">{{ allTimeTotal }} all time</p>
       </div>
 
       <div class="space-y-1">
         <p class="text-sm text-gray-500 dark:text-gray-400">Approval Rate</p>
-        <span class="text-3xl font-bold dark:text-gray-100">{{ approvalRate }}%</span>
+        <span class="text-3xl font-bold dark:text-gray-100">{{ approvalRate === null ? '—' : `${approvalRate}%` }}</span>
       </div>
 
       <div class="space-y-1">
         <p class="text-sm text-gray-500 dark:text-gray-400">Avg Score</p>
-        <span class="text-3xl font-bold dark:text-gray-100">{{ avgScore }}</span>
+        <span class="text-3xl font-bold dark:text-gray-100">{{ avgScore === null ? '—' : avgScore }}</span>
         <p class="text-xs text-gray-400 dark:text-gray-500">out of 8</p>
       </div>
 

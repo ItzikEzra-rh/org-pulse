@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import LoadingOverlay from '@shared/client/components/LoadingOverlay.vue'
 import FeatureMetricsRow from './FeatureMetricsRow.vue'
 import FeatureCharts from './FeatureCharts.vue'
@@ -6,10 +7,11 @@ import FeatureList from './FeatureList.vue'
 import TrendCharts from './TrendCharts.vue'
 import { FIX_VERSION_FILTER_ALL } from '../constants.js'
 
-defineProps({
+const props = defineProps({
   loading: { type: Boolean, default: false },
   error: { type: String, default: null },
   features: { type: Object, default: () => ({}) },
+  windowedFeatures: { type: Object, default: () => ({}) },
   featureMeta: { type: Object, default: () => ({}) },
   trendData: { type: Array, default: () => [] },
   breakdown: { type: Array, default: () => [] },
@@ -42,6 +44,8 @@ const emit = defineEmits([
   'selectFeature',
   'retry'
 ])
+
+const allTimeTotal = computed(() => Object.keys(props.features).length)
 </script>
 
 <template>
@@ -98,7 +102,7 @@ const emit = defineEmits([
 
     <!-- Data loaded -->
     <template v-else>
-      <FeatureMetricsRow :features="features" />
+      <FeatureMetricsRow :features="windowedFeatures" :allTimeTotal="allTimeTotal" />
       <TrendCharts
         :trendData="trendData"
         :breakdown="breakdown"

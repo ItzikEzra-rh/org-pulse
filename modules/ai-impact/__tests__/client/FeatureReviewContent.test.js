@@ -69,10 +69,42 @@ describe('FeatureReviewContent', () => {
       }
     };
     const wrapper = mount(FeatureReviewContent, {
-      props: { features }
+      props: { features, windowedFeatures: features }
     });
     // Should render metrics row with total count
     expect(wrapper.text()).toContain('1');
     expect(wrapper.text()).toContain('100%'); // approval rate
+  });
+
+  it('scopes the summary KPI row to windowedFeatures, not the full features store', () => {
+    const inWindow = {
+      key: 'RHAISTRAT-1',
+      title: 'In window',
+      recommendation: 'approve',
+      humanReviewStatus: 'approved',
+      scores: { total: 8 },
+      designStatus: 'reviewed'
+    };
+    const outOfWindow = {
+      key: 'RHAISTRAT-2',
+      title: 'Out of window',
+      recommendation: 'revise',
+      humanReviewStatus: 'needs-review',
+      scores: { total: 2 },
+      designStatus: 'reviewed'
+    };
+    const features = { 'RHAISTRAT-1': inWindow, 'RHAISTRAT-2': outOfWindow };
+    const windowedFeatures = { 'RHAISTRAT-1': inWindow };
+
+    const wrapper = mount(FeatureReviewContent, {
+      props: { features, windowedFeatures }
+    });
+
+    // Summary tiles reflect only the windowed subset (1 feature, 100% approval)...
+    expect(wrapper.text()).toContain('100%');
+    // ...while the all-time subtext and the feature list below still reflect the full store.
+    expect(wrapper.text()).toContain('2 all time');
+    expect(wrapper.text()).toContain('In window');
+    expect(wrapper.text()).toContain('Out of window');
   });
 });

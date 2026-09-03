@@ -542,6 +542,61 @@ test.describe('AI Impact Views @ai-impact', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('Design Review period selector scopes the summary KPIs but not the feature list', async ({ page }) => {
+    const now = Date.now();
+    const recentCreated = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString();
+    // Outside the default "This Month" (30-day) window but inside "Last 3 Months" (90-day).
+    const olderCreated = new Date(now - 45 * 24 * 60 * 60 * 1000).toISOString();
+
+    await page.route('**/api/modules/ai-impact/features', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          lastSyncedAt: new Date(now).toISOString(),
+          totalFeatures: 2,
+          features: {
+            'OSAC-RECENT': {
+              key: 'OSAC-RECENT', title: 'Recently created design feature', priority: 'Major',
+              humanReviewStatus: 'awaiting-review', recommendation: 'approve', designStatus: 'reviewed',
+              components: [], fixVersions: [], created: recentCreated
+            },
+            'OSAC-OLDER': {
+              key: 'OSAC-OLDER', title: 'Older design feature outside the month window', priority: 'Major',
+              humanReviewStatus: 'awaiting-review', recommendation: 'approve', designStatus: 'reviewed',
+              components: [], fixVersions: [], created: olderCreated
+            }
+          }
+        })
+      });
+    });
+
+    await page.goto('/#/ai-impact/design-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const totalFeaturesCard = page.locator('div.space-y-1').filter({ hasText: 'Total Features' });
+    const totalFeaturesValue = totalFeaturesCard.locator('span.text-3xl');
+
+    // Default period is "This Month": only the recent feature falls in the window.
+    await expect(totalFeaturesValue).toHaveText('1');
+    await expect(totalFeaturesCard.getByText('2 all time')).toBeVisible();
+
+    // The feature list is not period-scoped: both features are visible regardless.
+    await expect(page.getByText('Recently created design feature')).toBeVisible();
+    await expect(page.getByText('Older design feature outside the month window')).toBeVisible();
+
+    // Widening the period pulls the older feature into the KPI population.
+    await page.locator('#design-time-window').selectOption('3months');
+    await expect(totalFeaturesValue).toHaveText('2');
+
+    // The feature list still shows both, unaffected by the period change.
+    await expect(page.getByText('Recently created design feature')).toBeVisible();
+    await expect(page.getByText('Older design feature outside the month window')).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
   test('should load Jira AutoFix view', async ({ page }) => {
     await testView(page, 'autofix', 'AutoFix');
   });
