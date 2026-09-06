@@ -209,6 +209,49 @@ describe('computeMetrics', () => {
 
     expect(result.totalRFEs).toBe(2);
   });
+
+  it('counts an eligible PRD created with AI toward createdPct', () => {
+    const result = computeMetrics([makeIssue(5, 'created')], 'month', { trendThresholdPp: 2 });
+
+    expect(result.windowTotal).toBe(1);
+    expect(result.createdPct).toBe(100);
+  });
+
+  it('counts an eligible PRD with no AI toward the denominator only', () => {
+    const result = computeMetrics([makeIssue(5, 'none')], 'month', { trendThresholdPp: 2 });
+
+    expect(result.windowTotal).toBe(1);
+    expect(result.createdPct).toBe(0);
+  });
+
+  it('excludes a "No PR" RFE from the createdPct denominator and numerator', () => {
+    const issues = [
+      makeIssue(5, 'created'),
+      // Would drag createdPct to 50% if not excluded.
+      { ...makeIssue(5, 'none'), status: 'No PR' },
+    ];
+
+    const result = computeMetrics(issues, 'month', { trendThresholdPp: 2 });
+
+    expect(result.windowTotal).toBe(1);
+    expect(result.createdPct).toBe(100);
+  });
+
+  it('computes the expected percentage across a mixed eligible population', () => {
+    const issues = [
+      makeIssue(5, 'created'),
+      makeIssue(6, 'both'),
+      makeIssue(7, 'revised'),
+      makeIssue(8, 'none'),
+      { ...makeIssue(5, 'created'), status: 'No PR' },
+    ];
+
+    const result = computeMetrics(issues, 'month', { trendThresholdPp: 2 });
+
+    // Eligible: 4 issues (created, both, revised, none); 2 with AI created/both = 50%
+    expect(result.windowTotal).toBe(4);
+    expect(result.createdPct).toBe(50);
+  });
 });
 
 describe('buildTrendData', () => {
@@ -332,5 +375,59 @@ describe('computeAllMetrics', () => {
       { name: 'AI Created', value: 1 },
       { name: 'No AI', value: 0 }
     ]));
+  });
+
+  it('reports createdPct as null (not 0) for a week with only "No PR" RFEs', () => {
+    const noPRD = { ...makeIssue(2, 'created'), status: 'No PR' };
+    const result = computeAllMetrics([noPRD], 'week', { trendThresholdPp: 2 });
+
+    for (const point of result.trendData) {
+      expect(point.total).toBe(0);
+      expect(point.createdPct).toBeNull();
+    }
+  });
+
+  it('computes trend createdPct from eligible PRDs only, ignoring "No PR" rows in the same week', () => {
+    const issues = [
+      makeIssue(2, 'created'),
+      { ...makeIssue(2, 'created'), status: 'No PR' },
+    ];
+    const result = computeAllMetrics(issues, 'week', { trendThresholdPp: 2 });
+
+    const point = result.trendData.find(p => p.total > 0);
+    expect(point.total).toBe(1);
+    expect(point.createdPct).toBe(100);
+  });
+
+  it('keeps revisedCount on the full population while Created-with-AI total/createdPct stay eligible-only', () => {
+    const recentLabel = new Date();
+    recentLabel.setDate(recentLabel.getDate() - 1);
+    const issues = [
+      makeIssue(2, 'created'),
+      { ...makeIssue(2, 'revised', { revisedLabelDate: recentLabel.toISOString() }), status: 'No PR' },
+    ];
+
+    const result = computeAllMetrics(issues, 'week', { trendThresholdPp: 2 });
+
+    expect(result.metrics.revisedCount).toBe(1);
+    const point = result.trendData.find(p => p.total > 0 || p.revisedCount > 0);
+    expect(point.total).toBe(1);
+    expect(point.revisedCount).toBe(1);
+  });
+
+  it('agrees on the eligible PRD population across windowTotal, the current trend point, and breakdown', () => {
+    const issues = [
+      makeIssue(2, 'created'),
+      makeIssue(3, 'none'),
+      { ...makeIssue(2, 'created'), status: 'No PR' },
+    ];
+
+    const result = computeAllMetrics(issues, 'week', { trendThresholdPp: 2 });
+    const currentPoint = result.trendData[result.trendData.length - 1];
+    const breakdownTotal = result.breakdown.reduce((sum, b) => sum + b.value, 0);
+
+    expect(result.metrics.windowTotal).toBe(2);
+    expect(currentPoint.total).toBe(2);
+    expect(breakdownTotal).toBe(2);
   });
 });

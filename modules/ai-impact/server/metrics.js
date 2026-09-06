@@ -86,9 +86,23 @@ function computeAllMetrics(issues, timeWindow, config) {
   // the other — exclude them so the breakdown reflects PRDs that actually
   // exist, matching the totalRFEs exclusion in computeMetrics().
   const breakdownIssues = windowIssues.filter(i => i.status !== 'No PR');
+  const eligibleIssues = issues.filter(i => i.status !== 'No PR');
+
+  // buildTrendData computes both createdPct/total (Created-with-AI) and revisedCount
+  // (Review-with-AI) from one input. revisedCount must keep using all issues, so we
+  // run it twice and overlay only the Created-with-AI fields from the eligible run —
+  // a week with zero eligible PRDs is no-data (createdPct: null), not 0%.
+  const fullTrend = buildTrendData(issues, timeWindow);
+  const eligibleTrend = buildTrendData(eligibleIssues, timeWindow);
+  const trendData = fullTrend.map((point, i) => ({
+    ...point,
+    total: eligibleTrend[i].total,
+    createdPct: eligibleTrend[i].total === 0 ? null : eligibleTrend[i].createdPct
+  }));
+
   return {
     metrics: computeMetrics(issues, timeWindow, config),
-    trendData: buildTrendData(issues, timeWindow),
+    trendData,
     breakdown: buildBreakdownData(breakdownIssues),
     pipelineFriction: computePipelineFrictionMetrics(issues, timeWindow, config)
   };
@@ -106,11 +120,11 @@ function computeMetrics(issues, timeWindow, config) {
   const now = new Date();
   const { cutoff, priorCutoff } = getTimeWindowDates(now, timeWindow);
 
-  // Window issues filtered by creation date only
-  const currentIssues = issues.filter(i => new Date(i.created) >= cutoff);
+  // Excludes 'No PR' issues so the KPI denominator matches breakdown/totalRFEs.
+  const currentIssues = issues.filter(i => new Date(i.created) >= cutoff && i.status !== 'No PR');
   const priorIssues = issues.filter(i => {
     const d = new Date(i.created);
-    return d >= priorCutoff && d < cutoff;
+    return d >= priorCutoff && d < cutoff && i.status !== 'No PR';
   });
 
   const currentCreated = currentIssues.filter(i =>

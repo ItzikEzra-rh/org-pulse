@@ -18,6 +18,7 @@ const props = defineProps({
 })
 
 const signedOffCount = computed(() => props.rfes.filter(rfe => getPrdSignOffStatus(rfe.status) === 'approved').length)
+const hasEligibleData = computed(() => props.metrics?.windowTotal > 0)
 
 function getTrendClass(trend) {
   if (trend === 'growing') return 'text-green-600 dark:text-green-400'
@@ -50,8 +51,8 @@ function formatFrictionChange(change) {
           Created with AI
         </p>
         <div class="flex items-baseline gap-2">
-          <span class="text-3xl font-bold dark:text-gray-100">{{ metrics.createdPct }}%</span>
-          <span class="text-sm flex items-center gap-1" :class="getTrendClass(metrics.trend)">
+          <span class="text-3xl font-bold dark:text-gray-100">{{ hasEligibleData ? `${metrics.createdPct}%` : '—' }}</span>
+          <span v-if="hasEligibleData" class="text-sm flex items-center gap-1" :class="getTrendClass(metrics.trend)">
             <svg v-if="metrics.trend === 'growing'" class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
@@ -102,16 +103,16 @@ function formatFrictionChange(change) {
       <div class="space-y-1">
         <p class="text-sm text-gray-500 dark:text-gray-400">Trend Status</p>
         <div class="flex items-center gap-2">
-          <svg v-if="metrics.trend === 'growing'" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-if="hasEligibleData && metrics.trend === 'growing'" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
-          <svg v-else-if="metrics.trend === 'declining'" class="h-5 w-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-else-if="hasEligibleData && metrics.trend === 'declining'" class="h-5 w-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
           </svg>
-          <svg v-else class="h-5 w-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-else-if="hasEligibleData" class="h-5 w-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
           </svg>
-          <span class="text-lg font-semibold capitalize dark:text-gray-100">{{ metrics.trend }}</span>
+          <span class="text-lg font-semibold capitalize dark:text-gray-100">{{ hasEligibleData ? metrics.trend : '—' }}</span>
         </div>
       </div>
 
