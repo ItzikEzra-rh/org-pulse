@@ -12,6 +12,11 @@ import {
 
 const artifactFilterOptions = getArtifactFilterOptions('Design')
 
+function extractNumericId(key) {
+  const match = /(\d+)$/.exec(key || '')
+  return match ? Number(match[1]) : 0
+}
+
 const props = defineProps({
   features: { type: Object, default: () => ({}) },
   selectedFeature: { type: Object, default: null },
@@ -137,8 +142,15 @@ const sortedAndFilteredFeatures = computed(() => {
     items.sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0))
   } else if (props.sortBy === 'oldest') {
     items.sort((a, b) => new Date(a.created || 0) - new Date(b.created || 0))
+  } else {
+    // Default: features with a Design first, then missing Designs, newest Feature ID (numeric) first within each group
+    items.sort((a, b) => {
+      const aMissing = a.designStatus === 'no-design'
+      const bMissing = b.designStatus === 'no-design'
+      if (aMissing !== bMissing) return aMissing ? 1 : -1
+      return extractNumericId(b.key) - extractNumericId(a.key)
+    })
   }
-  // default: by key (natural order from Object.values)
 
   return items
 })

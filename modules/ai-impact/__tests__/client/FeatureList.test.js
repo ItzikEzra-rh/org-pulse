@@ -174,6 +174,44 @@ describe('FeatureList sort (aligned with PRD Review)', () => {
     const oldest = mount(FeatureList, { props: { features, sortBy: 'oldest' } });
     expect(renderedKeys(oldest)).toEqual(['A', 'C', 'B']);
   });
+
+  it('defaults to numeric Feature key descending across digit boundaries, matching PRD Review default ordering', () => {
+    const numericFeatures = {
+      'OSAC-1': makeFeature({ key: 'OSAC-1' }),
+      'OSAC-999': makeFeature({ key: 'OSAC-999' }),
+      'OSAC-1000': makeFeature({ key: 'OSAC-1000' }),
+      'OSAC-48': makeFeature({ key: 'OSAC-48' })
+    };
+
+    const wrapper = mount(FeatureList, { props: { features: numericFeatures, sortBy: 'default' } });
+
+    // Lexical sort would produce ['OSAC-1', 'OSAC-1000', 'OSAC-48', 'OSAC-999'] (string comparison)
+    expect(renderedKeys(wrapper)).toEqual(['OSAC-1000', 'OSAC-999', 'OSAC-48', 'OSAC-1']);
+  });
+
+  it('defaults to features with a Design before missing Designs, even when a missing-Design feature has a higher numeric key', () => {
+    const mixedFeatures = {
+      'OSAC-50': makeFeature({ key: 'OSAC-50', designStatus: 'no-design' }),
+      'OSAC-10': makeFeature({ key: 'OSAC-10', designStatus: 'reviewed' })
+    };
+
+    const wrapper = mount(FeatureList, { props: { features: mixedFeatures, sortBy: 'default' } });
+
+    expect(renderedKeys(wrapper)).toEqual(['OSAC-10', 'OSAC-50']);
+  });
+
+  it('sorts each Has-Design/Missing-Design group by numeric Feature ID descending', () => {
+    const groupedFeatures = {
+      'OSAC-63': makeFeature({ key: 'OSAC-63', designStatus: 'no-design' }),
+      'OSAC-4000': makeFeature({ key: 'OSAC-4000', designStatus: 'reviewed' }),
+      'OSAC-983': makeFeature({ key: 'OSAC-983', designStatus: 'no-design' }),
+      'OSAC-100': makeFeature({ key: 'OSAC-100', designStatus: 'reviewed' })
+    };
+
+    const wrapper = mount(FeatureList, { props: { features: groupedFeatures, sortBy: 'default' } });
+
+    expect(renderedKeys(wrapper)).toEqual(['OSAC-4000', 'OSAC-100', 'OSAC-983', 'OSAC-63']);
+  });
 });
 
 describe('FeatureList fixVersion filter', () => {
