@@ -1,17 +1,20 @@
 <script setup>
+import { computed } from 'vue'
 import {
   getReviewStatusClass, getReviewStatusLabel, getReviewStatusTooltip,
-  getDesignStatusClass, getDesignStatusLabel,
+  getDesignStatusClass, getDesignStatusLabel, getMeaningfulDesignReviewStatus,
   getInvolvementLabel, getInvolvementClass
 } from '../utils/feature-helpers.js'
 import InfoBubble from './InfoBubble.vue'
 
-defineProps({
+const props = defineProps({
   feature: { type: Object, required: true },
   selected: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['select'])
+
+const reviewStatus = computed(() => getMeaningfulDesignReviewStatus(props.feature))
 </script>
 
 <template>
@@ -28,11 +31,11 @@ const emit = defineEmits(['select'])
         <div class="flex items-center gap-2 mb-1">
           <span class="font-mono text-xs text-gray-500 dark:text-gray-400">{{ feature.key }}</span>
           <span
-            v-if="getDesignStatusLabel(feature.designStatus)"
+            v-if="getDesignStatusLabel(feature.designPrStatus)"
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-            :class="getDesignStatusClass(feature.designStatus)"
+            :class="getDesignStatusClass(feature.designPrStatus)"
           >
-            {{ getDesignStatusLabel(feature.designStatus) }}
+            {{ getDesignStatusLabel(feature.designPrStatus) }}
           </span>
           <span
             v-else
@@ -43,17 +46,17 @@ const emit = defineEmits(['select'])
           </span>
         </div>
         <h4 class="font-medium text-sm truncate dark:text-gray-200">{{ feature.title }}</h4>
-        <div v-if="feature.designStatus !== 'no-design'" class="flex items-center flex-wrap gap-2 mt-2">
-          <span class="inline-flex items-center">
+        <div v-if="feature.designPrStatus != null" class="flex items-center flex-wrap gap-2 mt-2">
+          <span v-if="reviewStatus" class="inline-flex items-center">
             <span
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-              :class="getReviewStatusClass(feature.humanReviewStatus)"
+              :class="getReviewStatusClass(reviewStatus)"
             >
-              <svg v-if="feature.humanReviewStatus === 'needs-review'" class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <svg v-if="reviewStatus === 'needs-review'" class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               <span class="font-medium opacity-75">Review</span>
-              {{ getReviewStatusLabel(feature.humanReviewStatus) }}
+              {{ getReviewStatusLabel(reviewStatus) }}
             </span>
-            <InfoBubble :text="getReviewStatusTooltip(feature.humanReviewStatus)" />
+            <InfoBubble :text="getReviewStatusTooltip(reviewStatus)" />
           </span>
           <span v-if="feature.created" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
             <span class="font-medium text-gray-500 dark:text-gray-400">Created</span>

@@ -111,8 +111,10 @@ describe('FeatureList AI Verdict filter', () => {
 
   const features = {
     A: makeFeature({ key: 'A', recommendation: 'approve' }),
-    B: makeFeature({ key: 'B', recommendation: null, designStatus: null }),
-    C: makeFeature({ key: 'C', recommendation: null, designStatus: 'no-design' })
+    // Design artifact exists (designPrStatus set) but has no recommendation yet.
+    B: makeFeature({ key: 'B', recommendation: null, designPrStatus: 'Open' }),
+    // No Design artifact at all -- belongs in "Missing", not "Not Reviewed".
+    C: makeFeature({ key: 'C', recommendation: null, designPrStatus: null })
   };
 
   it('"Not Reviewed" matches unreviewed features but excludes missing-design ones', () => {
@@ -132,19 +134,58 @@ describe('FeatureList artifact filter (aligned with PRD Review)', () => {
   }
 
   const features = {
-    A: makeFeature({ key: 'A', designStatus: null }),
-    B: makeFeature({ key: 'B', designStatus: 'reviewed' }),
-    C: makeFeature({ key: 'C', designStatus: 'no-design' })
+    A: makeFeature({ key: 'A', designPrStatus: 'Open' }),
+    B: makeFeature({ key: 'B', designPrStatus: 'Merged' }),
+    C: makeFeature({ key: 'C', designPrStatus: null }),
+    // Artifact exists (Merged) but never got an AI Design Review score.
+    // Must count as "has", not "missing".
+    D: makeFeature({ key: 'D', designPrStatus: 'Merged', designPrUrl: null, recommendation: null, scores: null })
   };
 
   it('"has" excludes rows with no design doc', () => {
     const wrapper = mount(FeatureList, { props: { features, artifactFilter: 'has' } });
-    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'B']);
+    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'B', 'D']);
   });
 
   it('"missing" includes only rows with no design doc', () => {
     const wrapper = mount(FeatureList, { props: { features, artifactFilter: 'missing' } });
     expect(renderedKeys(wrapper)).toEqual(['C']);
+  });
+
+  it('an unscored Design artifact (designPrUrl null) is never labeled Missing Design', () => {
+    const wrapper = mount(FeatureList, { props: { features } });
+    const item = wrapper.findAllComponents(FeatureListItem).find(c => c.props('feature').key === 'D');
+    expect(item.text()).not.toContain('Missing Design');
+  });
+});
+
+describe('FeatureList Human Review Status filter (meaningful humanReviewStatus only)', () => {
+  function renderedKeys(wrapper) {
+    return wrapper.findAllComponents(FeatureListItem).map(c => c.props('feature').key);
+  }
+
+  const features = {
+    // existing + unscored + default awaiting-review: not "Awaiting Sign-off"
+    A: makeFeature({ key: 'A', designPrStatus: 'Merged', scores: null, humanReviewStatus: 'awaiting-review' }),
+    // existing + unscored + approved: still "Approved"
+    B: makeFeature({ key: 'B', designPrStatus: 'Merged', scores: null, humanReviewStatus: 'approved' }),
+    // existing + unscored + needs-review: still "Flagged"
+    C: makeFeature({ key: 'C', designPrStatus: 'Merged', scores: null, humanReviewStatus: 'needs-review' }),
+    // existing + scored + awaiting-review: genuinely "Awaiting Sign-off"
+    D: makeFeature({ key: 'D', designPrStatus: 'Merged', scores: { total: 6 }, humanReviewStatus: 'awaiting-review' })
+  };
+
+  it('"Awaiting Sign-off" excludes an unscored default and only matches a scored one', () => {
+    const wrapper = mount(FeatureList, { props: { features, humanReviewFilter: 'awaiting-review' } });
+    expect(renderedKeys(wrapper)).toEqual(['D']);
+  });
+
+  it('"Approved" and "Flagged" still match without an AI score', () => {
+    const approved = mount(FeatureList, { props: { features, humanReviewFilter: 'approved' } });
+    expect(renderedKeys(approved)).toEqual(['B']);
+
+    const flagged = mount(FeatureList, { props: { features, humanReviewFilter: 'needs-review' } });
+    expect(renderedKeys(flagged)).toEqual(['C']);
   });
 });
 

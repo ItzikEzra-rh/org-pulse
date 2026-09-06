@@ -46,6 +46,12 @@ function dimensionCard(label) {
     .find(el => el.textContent.toLowerCase().includes(label));
 }
 
+// Quality Assessment's Score value sits in the <p> right after the "Score" label.
+function scoreValue() {
+  const label = [...document.body.querySelectorAll('p')].find(p => p.textContent === 'Score');
+  return label.nextElementSibling.textContent;
+}
+
 describe('FeatureDetailPanel dimension selection', () => {
   it('keeps the 2-column grid stable when a dimension is selected', async () => {
     wrapper = mountPanel(makeFeature());
@@ -182,5 +188,44 @@ describe('FeatureDetailPanel Quality Assessment Score/Recommendation', () => {
     wrapper = mountPanel(makeFeature({ humanReviewStatus: 'approved' }));
     const metadataGrid = document.body.querySelector('.grid.grid-cols-3');
     expect(metadataGrid.textContent).toContain('Review Status');
+  });
+});
+
+describe('FeatureDetailPanel Design artifact/review semantics', () => {
+  it('existing + unscored + default review state: no Awaiting Sign-off, no fabricated 0/8 or 0/2, no missing-design message', () => {
+    wrapper = mountPanel(makeFeature({ designPrStatus: 'Merged', scores: null, reviewers: null, criterionNotes: null, humanReviewStatus: 'awaiting-review' }));
+    expect(document.body.textContent).not.toContain('Awaiting Sign-off');
+    expect(document.body.textContent).not.toContain('0/8');
+    expect(scoreValue()).toBe('—');
+    expect(dimensionCard('feasibility').textContent).not.toContain('0/2');
+    expect(document.body.textContent).not.toContain('No design document');
+  });
+
+  it('existing + unscored + approved: shows Approved without a score', () => {
+    wrapper = mountPanel(makeFeature({
+      designPrStatus: 'Merged', scores: null, reviewers: null, criterionNotes: null,
+      humanReviewStatus: 'approved', approvedBy: 'Jane Doe'
+    }));
+    expect(document.body.textContent).toContain('Approved');
+    expect(document.body.textContent).toContain('Jane Doe');
+  });
+
+  it('genuine missing Design: shows the missing-design message and no fabricated review/score state', () => {
+    wrapper = mountPanel(makeFeature({ designPrStatus: null, scores: null, reviewers: null, criterionNotes: null }));
+    expect(document.body.textContent).toContain('No design document. This feature has a PRD only.');
+    expect(document.body.textContent).not.toContain('Awaiting Sign-off');
+    expect(document.body.textContent).not.toContain('0/8');
+  });
+
+  it('normal scored Design: unchanged score and review-status rendering', () => {
+    wrapper = mountPanel(makeFeature({ designPrStatus: 'Merged', humanReviewStatus: 'awaiting-review' }));
+    expect(document.body.textContent).toContain('7/8');
+    expect(document.body.textContent).toContain('Awaiting Sign-off');
+    expect(document.body.textContent).not.toContain('No design document');
+  });
+
+  it('never fabricates a Design PR link when designPrUrl is null', () => {
+    wrapper = mountPanel(makeFeature({ designPrStatus: 'Merged', designPrUrl: null }));
+    expect(document.body.querySelector('a[title="View design PR on GitHub"]')).toBeNull();
   });
 });

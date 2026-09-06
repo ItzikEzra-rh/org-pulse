@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { getMeaningfulDesignReviewStatus } from '../utils/feature-helpers.js'
 
 const props = defineProps({
   features: { type: Object, default: () => ({}) },
@@ -10,31 +11,37 @@ const featureList = computed(() => Object.values(props.features))
 
 const totalFeatures = computed(() => featureList.value.length)
 
-const reviewedFeatures = computed(() => featureList.value.filter(f => f.designStatus !== 'no-design'))
+// Avg Score / Approval Rate aggregate AI scores, so their population is
+// features with an actual score. humanReviewStatus (below) is set from Jira
+// sign-off labels independently of scoring, so it needs its own population.
+const scoredFeatures = computed(() => featureList.value.filter(f => f.scores?.total != null))
 
-// null (not 0) when there is no reviewed population, so the template can
+// null (not 0) when there is no scored population, so the template can
 // render "—" instead of a misleading 0%/0 that looks like a real result.
 const approvalRate = computed(() => {
-  if (reviewedFeatures.value.length === 0) return null
-  const approved = reviewedFeatures.value.filter(f => f.recommendation === 'approve').length
-  return Math.round((approved / reviewedFeatures.value.length) * 100)
+  if (scoredFeatures.value.length === 0) return null
+  const approved = scoredFeatures.value.filter(f => f.recommendation === 'approve').length
+  return Math.round((approved / scoredFeatures.value.length) * 100)
 })
 
 const avgScore = computed(() => {
-  if (reviewedFeatures.value.length === 0) return null
-  const sum = reviewedFeatures.value.reduce((acc, f) => acc + (f.scores?.total || 0), 0)
-  return (sum / reviewedFeatures.value.length).toFixed(1)
+  if (scoredFeatures.value.length === 0) return null
+  const sum = scoredFeatures.value.reduce((acc, f) => acc + (f.scores?.total || 0), 0)
+  return (sum / scoredFeatures.value.length).toFixed(1)
 })
 
-// Review-status tiles count only reviewed features. No-design features default
-// to 'awaiting-review' but have nothing to sign off, so counting them would
-// inflate "Needs Action" once every feature is listed on the tab.
+// Needs Action / Signed Off use the same meaningful-review rule as the list
+// badge/filter (see getMeaningfulDesignReviewStatus), so an unscored default
+// 'awaiting-review' doesn't inflate "Needs Action" the way a real one does.
 const needsActionCount = computed(() => {
-  return reviewedFeatures.value.filter(f => f.humanReviewStatus === 'needs-review' || f.humanReviewStatus === 'awaiting-review').length
+  return featureList.value.filter(f => {
+    const status = getMeaningfulDesignReviewStatus(f)
+    return status === 'needs-review' || status === 'awaiting-review'
+  }).length
 })
 
 const signedOffCount = computed(() => {
-  return reviewedFeatures.value.filter(f => f.humanReviewStatus === 'approved').length
+  return featureList.value.filter(f => getMeaningfulDesignReviewStatus(f) === 'approved').length
 })
 </script>
 

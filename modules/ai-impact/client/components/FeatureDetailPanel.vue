@@ -2,7 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import PipelineTimeline from './PipelineTimeline.vue'
 import FeedbackText from './FeedbackText.vue'
-import { getRecommendationClass, getRecommendationLabel, getRecommendationTooltip, getScoreClass, getTotalScoreClass, getReviewStatusClass, getReviewStatusLabel, getReviewStatusTooltip } from '../utils/feature-helpers.js'
+import { getRecommendationClass, getRecommendationLabel, getRecommendationTooltip, getScoreClass, getTotalScoreClass, getReviewStatusClass, getReviewStatusLabel, getReviewStatusTooltip, getMeaningfulDesignReviewStatus } from '../utils/feature-helpers.js'
 import { useTestPlans } from '../composables/useTestPlans.js'
 import InfoBubble from './InfoBubble.vue'
 import MetaChipGroup from './MetaChipGroup.vue'
@@ -32,6 +32,8 @@ function selectDimension(dim) {
 }
 
 const currentData = computed(() => featureDetail.value?.latest || props.feature)
+
+const meaningfulReviewStatus = computed(() => getMeaningfulDesignReviewStatus(props.feature))
 
 watch(
   () => props.feature?.key,
@@ -141,16 +143,17 @@ const history = computed(() => featureDetail.value?.history || [])
             <div class="grid grid-cols-3 gap-4 mb-6 text-sm">
               <div>
                 <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">Review Status</p>
-                <span class="inline-flex items-center">
+                <span v-if="meaningfulReviewStatus" class="inline-flex items-center">
                   <span
                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
-                    :class="getReviewStatusClass(feature.humanReviewStatus)"
+                    :class="getReviewStatusClass(meaningfulReviewStatus)"
                   >
-                    <svg v-if="feature.humanReviewStatus === 'needs-review'" class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                    {{ getReviewStatusLabel(feature.humanReviewStatus) }}
+                    <svg v-if="meaningfulReviewStatus === 'needs-review'" class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    {{ getReviewStatusLabel(meaningfulReviewStatus) }}
                   </span>
-                  <InfoBubble :text="getReviewStatusTooltip(feature.humanReviewStatus)" />
+                  <InfoBubble :text="getReviewStatusTooltip(meaningfulReviewStatus)" />
                 </span>
+                <span v-else class="text-gray-400 dark:text-gray-500">—</span>
               </div>
               <div>
                 <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">Priority</p>
@@ -171,7 +174,7 @@ const history = computed(() => featureDetail.value?.history || [])
             </div>
 
             <!-- Approval info -->
-            <div v-if="feature.humanReviewStatus === 'approved' && (feature.approvedBy || featureDetail?.latest?.approvedBy)" class="mb-6 px-3 py-2.5 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+            <div v-if="meaningfulReviewStatus === 'approved' && (feature.approvedBy || featureDetail?.latest?.approvedBy)" class="mb-6 px-3 py-2.5 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
               <div class="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
                 <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 <span>
@@ -185,7 +188,7 @@ const history = computed(() => featureDetail.value?.history || [])
 
             <!-- Links -->
             <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mb-4">
-              <div v-if="feature.designStatus === 'no-design'" class="mb-3 px-3 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <div v-if="feature.designPrStatus == null" class="mb-3 px-3 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                 <div class="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
                   <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <span>No design document. This feature has a PRD only.</span>
@@ -220,9 +223,9 @@ const history = computed(() => featureDetail.value?.history || [])
               <div class="flex items-start gap-6 mb-3">
                 <div>
                   <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">Score</p>
-                  <p v-if="feature.designStatus === 'no-design'" class="font-bold text-gray-400 dark:text-gray-500">—</p>
-                  <p v-else class="font-bold" :class="getTotalScoreClass(feature.scores?.total || 0)">
-                    {{ feature.scores?.total || 0 }}/8
+                  <p v-if="feature.scores?.total == null" class="font-bold text-gray-400 dark:text-gray-500">—</p>
+                  <p v-else class="font-bold" :class="getTotalScoreClass(feature.scores.total)">
+                    {{ feature.scores.total }}/8
                   </p>
                 </div>
                 <div>
@@ -252,8 +255,9 @@ const history = computed(() => featureDetail.value?.history || [])
                 >
                   <p class="text-xs text-gray-500 dark:text-gray-400 capitalize mb-1">{{ dim }}</p>
                   <div class="flex items-center justify-between">
-                    <span class="text-lg font-bold" :class="getScoreClass(feature.scores?.[dim])">
-                      {{ feature.scores?.[dim] ?? 0 }}/2
+                    <span v-if="feature.scores?.[dim] == null" class="text-lg font-bold text-gray-400 dark:text-gray-500">—</span>
+                    <span v-else class="text-lg font-bold" :class="getScoreClass(feature.scores[dim])">
+                      {{ feature.scores[dim] }}/2
                     </span>
                     <div class="flex items-center gap-1">
                       <span

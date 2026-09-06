@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import FeatureListItem from './FeatureListItem.vue'
 import {
   AI_INVOLVEMENT_FILTER_OPTIONS, REVIEW_STATUS_FILTER_OPTIONS,
-  SORT_FILTER_OPTIONS, getArtifactFilterOptions
+  SORT_FILTER_OPTIONS, getArtifactFilterOptions, getMeaningfulDesignReviewStatus
 } from '../utils/feature-helpers.js'
 import {
   FIX_VERSION_FILTER_ALL, FIX_VERSION_FILTER_UNASSIGNED,
@@ -96,9 +96,11 @@ const sortedAndFilteredFeatures = computed(() => {
     items = items.filter(f => f.sourceRfe && (f.aiInvolvement || 'none') === props.aiInvolvementFilter)
   }
 
-  // AI verdict filter (the AI review's recommendation)
+  // AI verdict filter (the AI review's recommendation). "Not Reviewed" means
+  // a Design artifact exists (designPrStatus != null) but has no recommendation
+  // yet; features with no artifact at all belong in "Missing", not here.
   if (props.recommendationFilter === 'not-reviewed') {
-    items = items.filter(f => f.recommendation == null && f.designStatus !== 'no-design')
+    items = items.filter(f => f.recommendation == null && f.designPrStatus != null)
   } else if (props.recommendationFilter !== 'all') {
     items = items.filter(f => f.recommendation === props.recommendationFilter)
   }
@@ -108,9 +110,11 @@ const sortedAndFilteredFeatures = computed(() => {
     items = items.filter(f => f.priority === props.priorityFilter)
   }
 
-  // Review status filter
+  // Review status filter. Uses the same meaningful-status rule as the badge
+  // (see getMeaningfulDesignReviewStatus) so an unscored default 'awaiting-review'
+  // doesn't surface under "Awaiting Sign-off".
   if (props.humanReviewFilter !== 'all') {
-    items = items.filter(f => f.humanReviewStatus === props.humanReviewFilter)
+    items = items.filter(f => getMeaningfulDesignReviewStatus(f) === props.humanReviewFilter)
   }
 
   // Component filter
@@ -118,11 +122,12 @@ const sortedAndFilteredFeatures = computed(() => {
     items = items.filter(f => (f.components || []).includes(props.componentFilter))
   }
 
-  // Artifact filter (whether the design doc exists at all)
+  // Artifact filter (whether the design doc exists at all, per designPrStatus —
+  // not designStatus, which is AI review processing state, not artifact existence)
   if (props.artifactFilter === 'has') {
-    items = items.filter(f => f.designStatus !== 'no-design')
+    items = items.filter(f => f.designPrStatus != null)
   } else if (props.artifactFilter === 'missing') {
-    items = items.filter(f => f.designStatus === 'no-design')
+    items = items.filter(f => f.designPrStatus == null)
   }
 
   // Fix version filter

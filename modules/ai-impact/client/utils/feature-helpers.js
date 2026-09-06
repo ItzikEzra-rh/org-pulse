@@ -65,6 +65,18 @@ export function getReviewStatusTooltip(status) {
   }
 }
 
+// Design-tab review state, gated on artifact existence. 'awaiting-review' is
+// also humanReviewStatus's unset default, so it only counts once an AI score
+// exists to actually be awaited on; explicit 'approved'/'needs-review' labels
+// are meaningful regardless of scoring. Returns null when neither applies.
+export function getMeaningfulDesignReviewStatus(feature) {
+  if (feature.designPrStatus == null) return null
+  const status = feature.humanReviewStatus
+  if (status === 'approved' || status === 'needs-review') return status
+  if (status === 'awaiting-review' && feature.scores?.total != null) return status
+  return null
+}
+
 // PRD-side review-status tooltip. PRD sign-off is derived from PR state
 // (getPrdSignOffStatus), so it only ever yields 'approved' or 'awaiting-review'.
 export function getPrdReviewStatusTooltip(status) {
@@ -99,20 +111,17 @@ export function getTotalScoreClass(total) {
 }
 
 // The "no design doc" state — the Design-tab mirror of PRD's "Missing PRD".
-// (The legacy 'pending' state was dropped: it duplicated the review pill's
-// "Awaiting Sign-off" and had no PRD equivalent.)
-export function getDesignStatusClass(designStatus) {
-  switch (designStatus) {
-    case 'no-design': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'
-    default: return ''
-  }
+// Driven by designPrStatus (artifact existence), not designStatus, which is
+// AI Design Review processing state and says nothing about whether a Design
+// artifact exists (see useForYou.js classifyFeature).
+export function getDesignStatusClass(designPrStatus) {
+  if (designPrStatus == null) return 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'
+  return ''
 }
 
-export function getDesignStatusLabel(designStatus) {
-  switch (designStatus) {
-    case 'no-design': return 'Missing Design'
-    default: return null
-  }
+export function getDesignStatusLabel(designPrStatus) {
+  if (designPrStatus == null) return 'Missing Design'
+  return null
 }
 
 // Same merge-based sign-off rule as Design Review, applied to the PRD PR status.

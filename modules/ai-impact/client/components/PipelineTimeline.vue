@@ -133,11 +133,14 @@ function getFeaturePhaseSignal(phaseId) {
     case 'design-review': {
       const aiLabels = (feature.labels || []).filter(l => l.startsWith('strat-creator-'))
       const aiUsed = aiLabels.some(l => l === 'strat-creator-auto-created' || l === 'strat-creator-auto-refined')
+      const detail = feature.scores?.total != null
+        ? (feature.recommendation ? `${feature.recommendation} — ${feature.scores.total}/8` : `${feature.scores.total}/8`)
+        : (feature.designPrStatus != null ? '—' : 'No design yet')
       return {
         completed: false,
         current: true,
         aiUsed,
-        detail: `${feature.recommendation} — ${feature.scores?.total || 0}/8`
+        detail
       }
     }
     default:

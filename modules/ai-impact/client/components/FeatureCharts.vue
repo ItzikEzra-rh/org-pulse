@@ -23,11 +23,11 @@ const props = defineProps({
 const featureList = computed(() => Object.values(props.features))
 
 // Both charts visualise design scores, so they consider only features that
-// actually have a score. Features with no design review (designStatus
-// 'no-design') or an unscored/pending design carry no scores.total and would
-// otherwise pile into a false "0" (fail) bucket now that every feature is listed.
+// actually have a score. Features with no Design artifact, or an
+// unscored/pending Design, carry no scores.total and would otherwise pile
+// into a false "0" (fail) bucket now that every feature is listed.
 const scoredFeatures = computed(() =>
-  featureList.value.filter(f => f.designStatus !== 'no-design' && f.scores?.total != null)
+  featureList.value.filter(f => f.scores?.total != null)
 )
 
 const expanded = ref(true)
