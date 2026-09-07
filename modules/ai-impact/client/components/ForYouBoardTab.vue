@@ -1,4 +1,5 @@
 <script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import ForYouMultiSelect from './ForYouMultiSelect.vue'
 
 defineProps({
@@ -49,6 +50,47 @@ const priorityColors = {
 
 const guideBase = '#/ai-impact/ai-factory-guide?from=sotu&section='
 
+// Max-height only (not min), measured from the cards area so the header isn't double-counted.
+const MIN_COLUMN_HEIGHT = 320
+// Reserves room for the horizontal scrollbar below the cards area.
+const BOTTOM_MARGIN = 40
+
+const filtersRef = ref(null)
+const firstCardsAreaEl = ref(null)
+const columnMaxHeight = ref(MIN_COLUMN_HEIGHT)
+let resizeObserver = null
+
+function setFirstCardsAreaEl(el) {
+  firstCardsAreaEl.value = el
+  if (el) updateColumnMaxHeight()
+}
+
+function updateColumnMaxHeight() {
+  const el = firstCardsAreaEl.value
+  if (!el) return
+  const top = el.getBoundingClientRect().top
+  const available = window.innerHeight - top - BOTTOM_MARGIN
+  columnMaxHeight.value = Math.max(MIN_COLUMN_HEIGHT, Math.round(available))
+}
+
+onMounted(() => {
+  updateColumnMaxHeight()
+  window.addEventListener('resize', updateColumnMaxHeight)
+  // Filter row wrap (e.g. sidebar toggle) shifts the cards area without a window resize event.
+  if (typeof ResizeObserver !== 'undefined' && filtersRef.value) {
+    resizeObserver = new ResizeObserver(updateColumnMaxHeight)
+    resizeObserver.observe(filtersRef.value)
+  }
+  // Widget reorder/resize (LandingPage.vue) can move the board without resizing it or its filters.
+  window.addEventListener('sotu-layout-changed', updateColumnMaxHeight)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateColumnMaxHeight)
+  window.removeEventListener('sotu-layout-changed', updateColumnMaxHeight)
+  resizeObserver?.disconnect()
+})
+
 const columnGuidance = {
   'missing-prd': {
     text: 'No PRD Enhancement Proposal PR exists yet for this feature.',
@@ -84,7 +126,7 @@ const columnGuidance = {
 <template>
   <div class="space-y-4">
     <!-- Filters -->
-    <div class="flex items-center gap-3">
+    <div ref="filtersRef" class="flex flex-wrap items-center gap-3">
       <ForYouMultiSelect
         :modelValue="stageFilter"
         :options="stageOptions"
@@ -155,7 +197,11 @@ const columnGuidance = {
           </div>
 
           <!-- Cards -->
-          <div class="p-2 space-y-2 flex-1 overflow-y-auto max-h-[60vh]">
+          <div
+            class="p-2 space-y-2 flex-1 overflow-y-auto"
+            :ref="colIdx === 0 ? setFirstCardsAreaEl : undefined"
+            :style="{ maxHeight: columnMaxHeight + 'px' }"
+          >
             <div
               v-for="item in col.items"
               :key="item.key"

@@ -30,7 +30,7 @@
       <!-- Widget grid -->
       <div
         ref="gridRef"
-        class="sotu-grid max-w-[90rem] mx-auto"
+        class="sotu-grid"
       >
         <SotuWidget
           v-for="item in resolvedLayout"
@@ -332,6 +332,8 @@ function handleToggleWidget(widgetId, defaultSize) {
 }
 
 // SortableJS integration
+const SORT_ANIMATION_MS = 150
+
 function initSortable() {
   if (!gridRef.value) return
   if (sortableInstance) {
@@ -339,7 +341,7 @@ function initSortable() {
     sortableInstance = null
   }
   sortableInstance = Sortable.create(gridRef.value, {
-    animation: 150,
+    animation: SORT_ANIMATION_MS,
     handle: '.drag-handle',
     ghostClass: 'opacity-30',
     onEnd(evt) {
@@ -351,7 +353,12 @@ function initSortable() {
 }
 
 watch(resolvedLayout, () => {
-  nextTick(() => initSortable())
+  nextTick(() => {
+    initSortable()
+    // Notify position-dependent widgets (ResizeObserver won't catch a pure position change)
+    // once Sortable's reorder animation settles.
+    setTimeout(() => window.dispatchEvent(new Event('sotu-layout-changed')), SORT_ANIMATION_MS)
+  })
 })
 
 onMounted(() => {
