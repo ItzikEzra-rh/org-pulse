@@ -91,10 +91,8 @@ const enrichedSelectedRFE = computed(() => {
   }
 })
 
-// Score Distribution / Criteria Performance must reflect the selected period
-// only, not the AI-involvement quick filter or search box — so this is keyed
-// off windowedRFEs rather than listRFEs.
-const filteredAssessments = computed(() => {
+// Excludes the AI-involvement filter and search box so period-scoped consumers agree with windowedRFEs.
+const windowedAssessments = computed(() => {
   const rfeKeys = new Set(windowedRFEs.value.map(r => r.key))
   const result = {}
   for (const [key, assessment] of Object.entries(assessments.value)) {
@@ -179,12 +177,13 @@ watch([() => moduleNav.params.value, rfeData], ([params]) => {
       :breakdown="breakdown"
       :filteredRFEs="listRFEs"
       :windowedRFEs="windowedRFEs"
+      :windowedAssessments="windowedAssessments"
       :timeWindow="timeWindow"
       :filter="filter"
       :searchQuery="searchQuery"
       :chartExpanded="chartExpanded"
       :assessments="assessments"
-      :filteredAssessments="filteredAssessments"
+      :filteredAssessments="windowedAssessments"
       :sortBy="sortBy"
       :passFailFilter="passFailFilter"
       :priorityFilter="priorityFilter"

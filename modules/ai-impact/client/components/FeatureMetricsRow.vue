@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { getMeaningfulDesignReviewStatus } from '../utils/feature-helpers.js'
+import InfoBubble from './InfoBubble.vue'
 
 const props = defineProps({
   features: { type: Object, default: () => ({}) },
@@ -9,25 +10,31 @@ const props = defineProps({
 
 const featureList = computed(() => Object.values(props.features))
 
-const totalFeatures = computed(() => featureList.value.length)
+// Existing Designs only — a Feature with no design doc yet isn't part of any
+// Design-side population (Total, Created with AI, Approval Rate).
+const existingDesigns = computed(() => featureList.value.filter(f => f.designPrStatus != null))
 
-// Avg Score / Approval Rate aggregate AI scores, so their population is
-// features with an actual score. humanReviewStatus (below) is set from Jira
-// sign-off labels independently of scoring, so it needs its own population.
-const scoredFeatures = computed(() => featureList.value.filter(f => f.scores?.total != null))
+const totalDesigns = computed(() => existingDesigns.value.length)
+
+// null (not 0) with no existing-Design population, so the template renders
+// "—" instead of a misleading 0%.
+const createdWithAIRate = computed(() => {
+  if (existingDesigns.value.length === 0) return null
+  const created = existingDesigns.value.filter(f => f.aiInvolvement === 'created' || f.aiInvolvement === 'both').length
+  return Math.round((created / existingDesigns.value.length) * 100)
+})
+
+// Approval Rate aggregates AI scores, so its population is existing Designs
+// with an actual score. humanReviewStatus (below) is set from Jira sign-off
+// labels independently of scoring, so it needs its own population.
+const scoredFeatures = computed(() => existingDesigns.value.filter(f => f.scores?.total != null))
 
 // null (not 0) when there is no scored population, so the template can
-// render "—" instead of a misleading 0%/0 that looks like a real result.
+// render "—" instead of a misleading 0% that looks like a real result.
 const approvalRate = computed(() => {
   if (scoredFeatures.value.length === 0) return null
   const approved = scoredFeatures.value.filter(f => f.recommendation === 'approve').length
   return Math.round((approved / scoredFeatures.value.length) * 100)
-})
-
-const avgScore = computed(() => {
-  if (scoredFeatures.value.length === 0) return null
-  const sum = scoredFeatures.value.reduce((acc, f) => acc + (f.scores?.total || 0), 0)
-  return (sum / scoredFeatures.value.length).toFixed(1)
 })
 
 // Needs Action / Signed Off use the same meaningful-review rule as the list
@@ -49,31 +56,45 @@ const signedOffCount = computed(() => {
   <div class="p-6 border-b border-gray-200 dark:border-gray-700">
     <div class="grid gap-6 grid-cols-2 lg:grid-cols-5">
       <div class="space-y-1">
-        <p class="text-sm text-gray-500 dark:text-gray-400">Total Features</p>
-        <span class="text-3xl font-bold dark:text-gray-100">{{ totalFeatures }}</span>
+        <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+          Total Designs
+          <InfoBubble trigger="hover" text="Designs that exist in the selected period." />
+        </p>
+        <span class="text-3xl font-bold dark:text-gray-100">{{ totalDesigns }}</span>
         <p v-if="allTimeTotal !== null" class="text-xs text-gray-400 dark:text-gray-500">{{ allTimeTotal }} all time</p>
       </div>
 
       <div class="space-y-1">
-        <p class="text-sm text-gray-500 dark:text-gray-400">Approval Rate</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+          Created with AI
+          <InfoBubble trigger="hover" text="Percentage of existing Designs created with AI." />
+        </p>
+        <span class="text-3xl font-bold dark:text-gray-100">{{ createdWithAIRate === null ? '—' : `${createdWithAIRate}%` }}</span>
+      </div>
+
+      <div class="space-y-1">
+        <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+          Approval Rate
+          <InfoBubble trigger="hover" text="Percentage of AI-assessed Designs that received an Approve recommendation." />
+        </p>
         <span class="text-3xl font-bold dark:text-gray-100">{{ approvalRate === null ? '—' : `${approvalRate}%` }}</span>
       </div>
 
       <div class="space-y-1">
-        <p class="text-sm text-gray-500 dark:text-gray-400">Avg Score</p>
-        <span class="text-3xl font-bold dark:text-gray-100">{{ avgScore === null ? '—' : avgScore }}</span>
-        <p class="text-xs text-gray-400 dark:text-gray-500">out of 8</p>
-      </div>
-
-      <div class="space-y-1">
-        <p class="text-sm text-gray-500 dark:text-gray-400">Needs Action</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+          Needs Action
+          <InfoBubble trigger="hover" text="AI-assessed Designs flagged for action or awaiting human sign-off." />
+        </p>
         <span class="text-3xl font-bold" :class="needsActionCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'dark:text-gray-100'">
           {{ needsActionCount }}
         </span>
       </div>
 
       <div class="space-y-1">
-        <p class="text-sm text-gray-500 dark:text-gray-400">Signed Off</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+          Signed Off
+          <InfoBubble trigger="hover" text="Designs explicitly approved by a human reviewer." />
+        </p>
         <span class="text-3xl font-bold" :class="signedOffCount > 0 ? 'text-green-600 dark:text-green-400' : 'dark:text-gray-100'">
           {{ signedOffCount }}
         </span>

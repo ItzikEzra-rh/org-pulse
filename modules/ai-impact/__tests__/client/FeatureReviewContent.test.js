@@ -65,7 +65,8 @@ describe('FeatureReviewContent', () => {
         humanReviewStatus: 'approved',
         scores: { feasibility: 2, testability: 2, scope: 2, architecture: 2, total: 8 },
         reviewers: { feasibility: 'approve', testability: 'approve', scope: 'approve', architecture: 'approve' },
-        reviewedAt: '2026-04-19T12:00:00Z'
+        reviewedAt: '2026-04-19T12:00:00Z',
+        designPrStatus: 'Merged'
       }
     };
     const wrapper = mount(FeatureReviewContent, {
@@ -83,7 +84,8 @@ describe('FeatureReviewContent', () => {
       recommendation: 'approve',
       humanReviewStatus: 'approved',
       scores: { total: 8 },
-      designStatus: 'reviewed'
+      designStatus: 'reviewed',
+      designPrStatus: 'Merged'
     };
     const outOfWindow = {
       key: 'RHAISTRAT-2',
@@ -91,7 +93,8 @@ describe('FeatureReviewContent', () => {
       recommendation: 'revise',
       humanReviewStatus: 'needs-review',
       scores: { total: 2 },
-      designStatus: 'reviewed'
+      designStatus: 'reviewed',
+      designPrStatus: 'Merged'
     };
     const features = { 'RHAISTRAT-1': inWindow, 'RHAISTRAT-2': outOfWindow };
     const windowedFeatures = { 'RHAISTRAT-1': inWindow };

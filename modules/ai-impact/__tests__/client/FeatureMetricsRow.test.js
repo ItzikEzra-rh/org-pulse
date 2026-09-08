@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import FeatureMetricsRow from '../../client/components/FeatureMetricsRow.vue';
+import InfoBubble from '../../client/components/InfoBubble.vue';
 
 function makeFeature(overrides = {}) {
   return {
@@ -11,6 +12,7 @@ function makeFeature(overrides = {}) {
     recommendation: 'approve',
     scores: { total: 6 },
     designPrStatus: 'Merged',
+    aiInvolvement: null,
     components: [],
     ...overrides
   };
@@ -19,7 +21,7 @@ function makeFeature(overrides = {}) {
 // Grab a metric tile's value by its label text.
 function tileValue(wrapper, label) {
   const tile = wrapper.findAll('.space-y-1').find(d => d.find('p').text() === label);
-  return tile.find('span').text();
+  return tile.find('.text-3xl').text();
 }
 
 describe('FeatureMetricsRow: features with no Design artifact', () => {
@@ -30,9 +32,9 @@ describe('FeatureMetricsRow: features with no Design artifact', () => {
     'OSAC-4': makeFeature({ key: 'OSAC-4', designPrStatus: null, humanReviewStatus: 'awaiting-review', recommendation: null, scores: null })
   };
 
-  it('Total Features counts every feature, including ones with no Design artifact', () => {
+  it('Total Designs excludes features with no Design artifact', () => {
     const wrapper = mount(FeatureMetricsRow, { props: { features } });
-    expect(tileValue(wrapper, 'Total Features')).toBe('4');
+    expect(tileValue(wrapper, 'Total Designs')).toBe('2'); // only OSAC-1, OSAC-2 have a Design
   });
 
   it('Needs Action excludes features with no Design artifact', () => {
@@ -45,35 +47,68 @@ describe('FeatureMetricsRow: features with no Design artifact', () => {
     expect(tileValue(wrapper, 'Signed Off')).toBe('1'); // only OSAC-1
   });
 
-  it('Avg Score is computed over scored features only', () => {
-    const wrapper = mount(FeatureMetricsRow, { props: { features } });
-    expect(tileValue(wrapper, 'Avg Score')).toBe('6.0'); // (8 + 4) / 2
-  });
-
-  it('Approval Rate is computed over scored features only', () => {
+  it('Approval Rate is computed over scored, existing Designs only', () => {
     const wrapper = mount(FeatureMetricsRow, { props: { features } });
     expect(tileValue(wrapper, 'Approval Rate')).toBe('50%'); // 1 approve out of 2 scored
   });
 });
 
+describe('FeatureMetricsRow: Created with AI metric', () => {
+  it('is the percentage of existing Designs created with AI', () => {
+    const features = {
+      A: makeFeature({ key: 'A', aiInvolvement: 'created' }),
+      B: makeFeature({ key: 'B', aiInvolvement: 'both' }),
+      C: makeFeature({ key: 'C', aiInvolvement: 'revised' }),
+      D: makeFeature({ key: 'D', aiInvolvement: 'none' })
+    };
+    const wrapper = mount(FeatureMetricsRow, { props: { features } });
+    expect(tileValue(wrapper, 'Created with AI')).toBe('50%'); // A, B out of 4
+  });
+
+  it('excludes features with no Design artifact from the denominator', () => {
+    const features = {
+      A: makeFeature({ key: 'A', aiInvolvement: 'created' }),
+      B: makeFeature({ key: 'B', designPrStatus: null, aiInvolvement: 'created' })
+    };
+    const wrapper = mount(FeatureMetricsRow, { props: { features } });
+    expect(tileValue(wrapper, 'Created with AI')).toBe('100%'); // only A is an existing Design
+  });
+
+  it('shows — when there is no existing-Design population', () => {
+    const features = {
+      A: makeFeature({ key: 'A', designPrStatus: null })
+    };
+    const wrapper = mount(FeatureMetricsRow, { props: { features } });
+    expect(tileValue(wrapper, 'Created with AI')).toBe('—');
+  });
+
+  it('shows a genuine 0% when existing Designs have no AI provenance', () => {
+    const features = {
+      A: makeFeature({ key: 'A', aiInvolvement: 'none' }),
+      B: makeFeature({ key: 'B', aiInvolvement: null })
+    };
+    const wrapper = mount(FeatureMetricsRow, { props: { features } });
+    expect(tileValue(wrapper, 'Created with AI')).toBe('0%');
+  });
+});
+
 describe('FeatureMetricsRow: unscored Design artifact', () => {
-  it('excludes an existing-but-unscored artifact from Avg Score and Approval Rate', () => {
+  it('excludes an existing-but-unscored artifact from Approval Rate', () => {
     const features = {
       A: makeFeature({ key: 'A', humanReviewStatus: 'approved', recommendation: 'approve', scores: { total: 8 } }),
       B: makeFeature({ key: 'B', humanReviewStatus: 'approved', recommendation: null, scores: null })
     };
     const wrapper = mount(FeatureMetricsRow, { props: { features } });
-    expect(tileValue(wrapper, 'Avg Score')).toBe('8.0');
     expect(tileValue(wrapper, 'Approval Rate')).toBe('100%');
   });
 
-  it('still counts every feature in Total Features', () => {
+  it('still counts every existing Design in Total Designs', () => {
     const features = {
       A: makeFeature({ key: 'A', scores: { total: 8 } }),
       B: makeFeature({ key: 'B', scores: null })
     };
     const wrapper = mount(FeatureMetricsRow, { props: { features } });
-    expect(tileValue(wrapper, 'Total Features')).toBe('2');
+    expect(tileValue(wrapper, 'Total Designs')).toBe('2');
   });
 });
 
@@ -118,21 +153,20 @@ describe('FeatureMetricsRow allTimeTotal subtext', () => {
     expect(wrapper.text()).not.toContain('all time');
   });
 
-  it('shows the all-time subtext under Total Features when provided', () => {
+  it('shows the all-time subtext under Total Designs when provided', () => {
     const wrapper = mount(FeatureMetricsRow, { props: { features, allTimeTotal: 251 } });
     expect(wrapper.text()).toContain('251 all time');
   });
 });
 
 describe('FeatureMetricsRow empty scored population vs genuine zero', () => {
-  it('shows "—" for Approval Rate and Avg Score when there are no scored features', () => {
+  it('shows "—" for Approval Rate when there are no scored features', () => {
     const features = {
       'OSAC-1': makeFeature({ key: 'OSAC-1', recommendation: null, scores: null }),
       'OSAC-2': makeFeature({ key: 'OSAC-2', recommendation: null, scores: null })
     };
     const wrapper = mount(FeatureMetricsRow, { props: { features } });
     expect(tileValue(wrapper, 'Approval Rate')).toBe('—');
-    expect(tileValue(wrapper, 'Avg Score')).toBe('—');
   });
 
   it('shows a genuine 0% Approval Rate when scored features exist but none are approved', () => {
@@ -143,13 +177,31 @@ describe('FeatureMetricsRow empty scored population vs genuine zero', () => {
     const wrapper = mount(FeatureMetricsRow, { props: { features } });
     expect(tileValue(wrapper, 'Approval Rate')).toBe('0%');
   });
+});
 
-  it('shows a genuine 0 Avg Score when scored features exist but all scored zero', () => {
-    const features = {
-      'OSAC-1': makeFeature({ key: 'OSAC-1', scores: { total: 0 } }),
-      'OSAC-2': makeFeature({ key: 'OSAC-2', scores: { total: 0 } })
-    };
-    const wrapper = mount(FeatureMetricsRow, { props: { features } });
-    expect(tileValue(wrapper, 'Avg Score')).toBe('0.0');
+describe('FeatureMetricsRow no longer renders removed tiles', () => {
+  it('does not render Avg Score', () => {
+    const wrapper = mount(FeatureMetricsRow, { props: { features: { A: makeFeature() } } });
+    expect(wrapper.text()).not.toContain('Avg Score');
+  });
+});
+
+describe('FeatureMetricsRow KPI InfoBubbles', () => {
+  const EXPECTED_TEXT = {
+    'Total Designs': 'Designs that exist in the selected period.',
+    'Created with AI': 'Percentage of existing Designs created with AI.',
+    'Approval Rate': 'Percentage of AI-assessed Designs that received an Approve recommendation.',
+    'Needs Action': 'AI-assessed Designs flagged for action or awaiting human sign-off.',
+    'Signed Off': 'Designs explicitly approved by a human reviewer.'
+  };
+
+  it.each(Object.entries(EXPECTED_TEXT))('%s has a hover-triggered InfoBubble with the expected copy', (label, text) => {
+    const wrapper = mount(FeatureMetricsRow, { props: { features: { A: makeFeature() } } });
+    const tile = wrapper.findAll('.space-y-1').find(d => d.find('p').text() === label);
+    const bubble = tile.findComponent(InfoBubble);
+
+    expect(bubble.exists()).toBe(true);
+    expect(bubble.props('trigger')).toBe('hover');
+    expect(bubble.props('text')).toBe(text);
   });
 });

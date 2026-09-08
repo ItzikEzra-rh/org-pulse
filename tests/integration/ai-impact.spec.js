@@ -559,12 +559,12 @@ test.describe('AI Impact Views @ai-impact', () => {
             'OSAC-RECENT': {
               key: 'OSAC-RECENT', title: 'Recently created design feature', priority: 'Major',
               humanReviewStatus: 'awaiting-review', recommendation: 'approve', designStatus: 'reviewed',
-              components: [], fixVersions: [], created: recentCreated
+              designPrStatus: 'Merged', components: [], fixVersions: [], created: recentCreated
             },
             'OSAC-OLDER': {
               key: 'OSAC-OLDER', title: 'Older design feature outside the month window', priority: 'Major',
               humanReviewStatus: 'awaiting-review', recommendation: 'approve', designStatus: 'reviewed',
-              components: [], fixVersions: [], created: olderCreated
+              designPrStatus: 'Merged', components: [], fixVersions: [], created: olderCreated
             }
           }
         })
@@ -575,7 +575,7 @@ test.describe('AI Impact Views @ai-impact', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
-    const totalFeaturesCard = page.locator('div.space-y-1').filter({ hasText: 'Total Features' });
+    const totalFeaturesCard = page.locator('div.space-y-1').filter({ hasText: 'Total Designs' });
     const totalFeaturesValue = totalFeaturesCard.locator('span.text-3xl');
 
     // Default period is "This Month": only the recent feature falls in the window.

@@ -45,7 +45,7 @@ const emit = defineEmits([
   'retry'
 ])
 
-const allTimeTotal = computed(() => Object.keys(props.features).length)
+const allTimeTotal = computed(() => Object.values(props.features).filter(f => f.designPrStatus != null).length)
 </script>
 
 <template>

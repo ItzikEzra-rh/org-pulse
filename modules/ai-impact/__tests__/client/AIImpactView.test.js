@@ -38,14 +38,10 @@ describe('MetricsRow', () => {
     }
     const wrapper = mount(MetricsRow, { props: { metrics, pipelineFriction } })
     expect(wrapper.text()).toContain('77%')
-    expect(wrapper.text()).toContain('14')
-    expect(wrapper.text()).toContain('11 prev period')
     expect(wrapper.text()).toContain('20')
-    expect(wrapper.text()).toContain('growing')
+    expect(wrapper.text()).toContain('62 all time')
     expect(wrapper.text()).toContain('33% require attention')
     expect(wrapper.text()).toContain('+3pp')
-    expect(wrapper.text()).toContain('25% feasibility blocked')
-    expect(wrapper.text()).toContain('-2pp')
   })
 
   it('renders nothing when metrics is null', () => {

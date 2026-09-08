@@ -43,6 +43,7 @@ function makeFeature(overrides = {}) {
     priority: 'Major',
     humanReviewStatus: 'awaiting-review',
     recommendation: 'approve',
+    designPrStatus: 'Merged',
     components: [],
     fixVersions: ['rhoai-3.5'],
     created: new Date().toISOString(),
@@ -150,8 +151,8 @@ describe('FeatureReviewView', () => {
     const wrapper = mountView();
     await nextTick();
 
-    const totalTile = wrapper.findAll('.space-y-1').find(d => d.find('p').text() === 'Total Features');
-    expect(totalTile.find('span').text()).toBe('1');
+    const totalTile = wrapper.findAll('.space-y-1').find(d => d.find('p').text() === 'Total Designs');
+    expect(totalTile.find('.text-3xl').text()).toBe('1');
     expect(wrapper.text()).toContain('2 all time');
 
     // The feature list/table itself remains unfiltered by the time window.
@@ -177,8 +178,8 @@ describe('FeatureReviewView', () => {
     // The view's @update:timeWindow handler writes back into the shared featureTimeWindow ref.
     await nextTick();
 
-    const totalTile = wrapper.findAll('.space-y-1').find(d => d.find('p').text() === 'Total Features');
-    expect(totalTile.find('span').text()).toBe('2');
+    const totalTile = wrapper.findAll('.space-y-1').find(d => d.find('p').text() === 'Total Designs');
+    expect(totalTile.find('.text-3xl').text()).toBe('2');
   });
 
   it('scopes Score Insights (FeatureCharts) to featureTimeWindow, not the full features store', async () => {
