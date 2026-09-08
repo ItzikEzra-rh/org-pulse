@@ -33,6 +33,7 @@ vi.mock('@shared/client/composables/useModuleLink.js', () => ({
 import { mount } from '@vue/test-utils';
 import { ref, nextTick } from 'vue';
 import FeatureReviewView from '../../client/views/FeatureReviewView.vue';
+import FeatureCharts from '../../client/components/FeatureCharts.vue';
 
 function makeFeature(overrides = {}) {
   return {
@@ -178,5 +179,21 @@ describe('FeatureReviewView', () => {
 
     const totalTile = wrapper.findAll('.space-y-1').find(d => d.find('p').text() === 'Total Features');
     expect(totalTile.find('span').text()).toBe('2');
+  });
+
+  it('scopes Score Insights (FeatureCharts) to featureTimeWindow, not the full features store', async () => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    features.value = {
+      'RHAISTRAT-1': makeFeature({ key: 'RHAISTRAT-1', title: 'Recent feature', created: new Date(now - 2 * dayMs).toISOString(), scores: { total: 8 } }),
+      'RHAISTRAT-2': makeFeature({ key: 'RHAISTRAT-2', title: 'Old feature', created: new Date(now - 200 * dayMs).toISOString(), scores: { total: 2 } })
+    };
+    featureTimeWindow.value = 'week';
+
+    const wrapper = mountView();
+    await nextTick();
+
+    const chartsFeatures = wrapper.findComponent(FeatureCharts).props('features');
+    expect(Object.keys(chartsFeatures)).toEqual(['RHAISTRAT-1']);
   });
 });

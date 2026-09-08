@@ -25,6 +25,11 @@ describe('FeatureList component filter', () => {
     'RHAISTRAT-3': makeFeature({ key: 'RHAISTRAT-3', title: 'No component feature', components: [] })
   };
 
+  it('discloses that the list is all-time and the Period selector only scopes the analytics', () => {
+    const wrapper = mount(FeatureList, { props: { features } });
+    expect(wrapper.text()).toContain('This list is all-time');
+  });
+
   it('defaults to All Components and shows every feature', () => {
     const wrapper = mount(FeatureList, { props: { features } });
     const selects = wrapper.findAll('select');

@@ -67,8 +67,8 @@ const isEmpty = computed(() => !props.rfeData?.fetchedAt)
           @change="emit('update:timeWindow', $event.target.value)"
           class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-300"
         >
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
+          <option value="week">Last 7 Days</option>
+          <option value="month">Last 30 Days</option>
           <option value="3months">Last 3 Months</option>
         </select>
       </div>

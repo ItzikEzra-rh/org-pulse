@@ -239,7 +239,7 @@ module.exports = function registerFeatureRoutes(router, context) {
    * @openapi
    * /modules/ai-impact/features/trend:
    *   get:
-   *     summary: Weekly AI-involvement trend and breakdown for Design Review features
+   *     summary: Period-aligned AI-involvement trend and breakdown for Design Review features
    *     tags: [ai-impact]
    *     parameters:
    *       - in: query
@@ -248,10 +248,10 @@ module.exports = function registerFeatureRoutes(router, context) {
    *           type: string
    *           enum: [week, month, 3months]
    *           default: month
-   *         description: Time window for the breakdown's cutoff date
+   *         description: Time window for the trend horizon and breakdown's cutoff date
    *     responses:
    *       200:
-   *         description: Weekly trend points and an AI-involvement breakdown, matching the /rfe-data trend shape
+   *         description: Trend points (daily for week/month, weekly for 3months) and an AI-involvement breakdown, matching the /rfe-data trend shape
    */
   router.get('/features/trend', requireScope('ai-impact:read'), function(req, res) {
     // Normalize to a supported window, matching the sibling /rfe-data route

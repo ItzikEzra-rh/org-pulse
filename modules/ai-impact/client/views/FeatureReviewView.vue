@@ -42,8 +42,9 @@ const timeWindowCutoff = computed(() => {
 const isInTimeWindow = feature => new Date(feature.created) >= timeWindowCutoff.value
 
 // Time-window scoped only, mirroring PRD Review's windowedRFEs, so the
-// summary KPI row reflects the selected period. The feature list/table
-// below intentionally keeps using the full, unfiltered `features` store.
+// summary KPI row and Score Insights charts reflect the selected period.
+// The feature list/table below intentionally keeps using the full,
+// unfiltered `features` store.
 const windowedFeatures = computed(() => {
   const result = {}
   for (const [key, feature] of Object.entries(features.value)) {

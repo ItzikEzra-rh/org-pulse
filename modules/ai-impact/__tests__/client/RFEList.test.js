@@ -22,6 +22,11 @@ describe('RFEList component filter', () => {
     makeRFE({ key: 'RHAIRFE-3', summary: 'No component', components: [] })
   ];
 
+  it('discloses that the list is all-time and the Period selector only scopes the analytics', () => {
+    const wrapper = mount(RFEList, { props: { rfes } });
+    expect(wrapper.text()).toContain('This list is all-time');
+  });
+
   it('defaults to All Components and shows every RFE', () => {
     const wrapper = mount(RFEList, { props: { rfes } });
     const selects = wrapper.findAll('select');

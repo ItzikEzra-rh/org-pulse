@@ -255,29 +255,97 @@ describe('computeMetrics', () => {
 });
 
 describe('buildTrendData', () => {
-  it('returns correct number of weeks for each window', () => {
-    expect(buildTrendData([], 'week')).toHaveLength(4);
-    expect(buildTrendData([], 'month')).toHaveLength(8);
+  it('returns correct number of buckets for each window (daily for week/month, weekly w/ partial oldest bucket for 3months)', () => {
+    expect(buildTrendData([], 'week')).toHaveLength(7);
+    expect(buildTrendData([], 'month')).toHaveLength(30);
+    // 90 days / 7-day buckets = 12 full weeks + a 6-day partial = 13
     expect(buildTrendData([], '3months')).toHaveLength(13);
   });
 
-  it('buckets issues by week using created date', () => {
+  it('never expands the week window beyond 7 days, using daily buckets', () => {
+    const issues = [
+      makeIssue(2, 'created'), // inside the 7-day window
+      makeIssue(9, 'created'), // just outside a week, would leak in under weekly buckets
+    ];
+
+    const points = buildTrendData(issues, 'week');
+    const totalAcrossBuckets = points.reduce((sum, p) => sum + p.total, 0);
+
+    expect(points).toHaveLength(7);
+    expect(totalAcrossBuckets).toBe(1); // only the 2-days-ago issue is in range
+  });
+
+  it('never expands the month window beyond 30 days (no ~56-day horizon)', () => {
+    const issues = [
+      makeIssue(25, 'created'), // inside the 30-day window
+      makeIssue(40, 'created'), // would have leaked in under the old 8x7=56-day horizon
+    ];
+
+    const points = buildTrendData(issues, 'month');
+    const totalAcrossBuckets = points.reduce((sum, p) => sum + p.total, 0);
+
+    expect(totalAcrossBuckets).toBe(1);
+  });
+
+  it('never expands the 3-month window beyond 90 days', () => {
+    const issues = [
+      makeIssue(85, 'created'), // inside the 90-day window
+      makeIssue(95, 'created'), // outside it
+    ];
+
+    const points = buildTrendData(issues, '3months');
+    const totalAcrossBuckets = points.reduce((sum, p) => sum + p.total, 0);
+
+    expect(totalAcrossBuckets).toBe(1);
+  });
+
+  it('exposes createdWithAI as the tooltip numerator alongside total/createdPct', () => {
     const issues = [
       makeIssue(1, 'created'),
+      makeIssue(1, 'both'),
+      makeIssue(1, 'none'),
+    ];
+
+    const points = buildTrendData(issues, 'week');
+    const point = points.find(p => p.total === 3);
+
+    expect(point.createdWithAI).toBe(2);
+    expect(point.createdPct).toBe(67);
+  });
+
+  it('buckets issues by day using created date', () => {
+    // Half a day off the bucket boundary to avoid flaking on ms drift against buildTrendData's own Date.now().
+    const recent = new Date(Date.now() - 0.5 * 24 * 60 * 60 * 1000).toISOString();
+    const issues = [
+      { ...makeIssue(0, 'created'), created: recent },
       makeIssue(2, 'both'),
       makeIssue(10, 'none'),
     ];
 
     const points = buildTrendData(issues, 'month');
 
-    // Last point should include the recent issues
     const lastPoint = points[points.length - 1];
     expect(lastPoint.total).toBeGreaterThan(0);
     expect(lastPoint.date).toBeTruthy();
   });
 
-  it('computes per-week created percentages correctly', () => {
-    // All issues in the same recent week
+  it('computes per-bucket created percentages correctly', () => {
+    const issues = [
+      makeIssue(1, 'created'),
+      makeIssue(2, 'created'),
+      makeIssue(3, 'none'),
+      makeIssue(3, 'none'),
+    ];
+
+    const points = buildTrendData(issues, '3months');
+
+    const withData = points.find(p => p.total === 4);
+    if (withData) {
+      expect(withData.createdPct).toBe(50);
+    }
+  });
+
+  it('buckets the week window daily, not into a single 7-day bucket', () => {
     const issues = [
       makeIssue(1, 'created'),
       makeIssue(2, 'created'),
@@ -287,11 +355,9 @@ describe('buildTrendData', () => {
 
     const points = buildTrendData(issues, 'week');
 
-    // Find the point that has these issues
-    const withData = points.find(p => p.total === 4);
-    if (withData) {
-      expect(withData.createdPct).toBe(50);
-    }
+    // Spread across daily buckets, so no single point holds all 4
+    expect(points.every(p => p.total <= 2)).toBe(true);
+    expect(points.reduce((sum, p) => sum + p.total, 0)).toBe(4);
   });
 
   it('returns 0 for weeks with no issues', () => {
@@ -304,11 +370,9 @@ describe('buildTrendData', () => {
   });
 
   it('buckets revised count by revisedLabelDate', () => {
-    // Issue created 60 days ago, label added 3 days ago → revised count in recent week
-    const labelDate = new Date();
-    labelDate.setDate(labelDate.getDate() - 3);
+    // Created 60 days ago (outside the 30-day 'created' window); labelDate is an hour ago, safely inside the most recent daily bucket.
     const issues = [
-      makeIssue(60, 'revised', { revisedLabelDate: labelDate.toISOString() }),
+      makeIssue(60, 'revised', { revisedLabelDate: new Date(Date.now() - 60 * 60 * 1000).toISOString() }),
     ];
 
     const points = buildTrendData(issues, 'month');
@@ -361,7 +425,7 @@ describe('computeAllMetrics', () => {
     expect(result).toHaveProperty('trendData');
     expect(result).toHaveProperty('breakdown');
     expect(result).toHaveProperty('pipelineFriction');
-    expect(result.trendData).toHaveLength(8);
+    expect(result.trendData).toHaveLength(30);
     expect(result.pipelineFriction).toHaveProperty('needsAttentionPct');
     expect(result.pipelineFriction).toHaveProperty('feasibilityBlockedPct');
   });
@@ -384,7 +448,22 @@ describe('computeAllMetrics', () => {
     for (const point of result.trendData) {
       expect(point.total).toBe(0);
       expect(point.createdPct).toBeNull();
+      expect(point.createdWithAI).toBeNull();
     }
+  });
+
+  it('reports createdWithAI as the eligible numerator, matching createdPct/total', () => {
+    const issues = [
+      makeIssue(2, 'created'),
+      makeIssue(2, 'both'),
+      makeIssue(2, 'none'),
+    ];
+    const result = computeAllMetrics(issues, 'week', { trendThresholdPp: 2 });
+
+    const point = result.trendData.find(p => p.total > 0);
+    expect(point.total).toBe(3);
+    expect(point.createdWithAI).toBe(2);
+    expect(point.createdPct).toBe(67);
   });
 
   it('computes trend createdPct from eligible PRDs only, ignoring "No PR" rows in the same week', () => {
@@ -400,11 +479,14 @@ describe('computeAllMetrics', () => {
   });
 
   it('keeps revisedCount on the full population while Created-with-AI total/createdPct stay eligible-only', () => {
-    const recentLabel = new Date();
-    recentLabel.setDate(recentLabel.getDate() - 1);
+    // Same fixed instant (half a day off an exact daily-bucket boundary, to
+    // avoid flaking on the ms of test-execution drift between this Date.now()
+    // and buildTrendData's own) so created-total and revisedCount are
+    // guaranteed to land in the same daily bucket under the 'week' window.
+    const sameInstant = new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000).toISOString();
     const issues = [
-      makeIssue(2, 'created'),
-      { ...makeIssue(2, 'revised', { revisedLabelDate: recentLabel.toISOString() }), status: 'No PR' },
+      { ...makeIssue(2, 'created'), created: sameInstant },
+      { ...makeIssue(2, 'revised', { revisedLabelDate: sameInstant }), created: sameInstant, status: 'No PR' },
     ];
 
     const result = computeAllMetrics(issues, 'week', { trendThresholdPp: 2 });
@@ -418,12 +500,12 @@ describe('computeAllMetrics', () => {
   it('agrees on the eligible PRD population across windowTotal, the current trend point, and breakdown', () => {
     const issues = [
       makeIssue(2, 'created'),
-      makeIssue(3, 'none'),
+      makeIssue(2, 'none'),
       { ...makeIssue(2, 'created'), status: 'No PR' },
     ];
 
     const result = computeAllMetrics(issues, 'week', { trendThresholdPp: 2 });
-    const currentPoint = result.trendData[result.trendData.length - 1];
+    const currentPoint = result.trendData.find(p => p.total > 0);
     const breakdownTotal = result.breakdown.reduce((sum, b) => sum + b.value, 0);
 
     expect(result.metrics.windowTotal).toBe(2);

@@ -97,6 +97,7 @@ function computeAllMetrics(issues, timeWindow, config) {
   const trendData = fullTrend.map((point, i) => ({
     ...point,
     total: eligibleTrend[i].total,
+    createdWithAI: eligibleTrend[i].total === 0 ? null : eligibleTrend[i].createdWithAI,
     createdPct: eligibleTrend[i].total === 0 ? null : eligibleTrend[i].createdPct
   }));
 
@@ -162,40 +163,47 @@ function computeMetrics(issues, timeWindow, config) {
   };
 }
 
+// Horizon matches the KPI cutoff and never expands past it; the oldest bucket may be partial.
 function buildTrendData(issues, timeWindow) {
-  const weekCounts = timeWindow === 'week' ? 4 : timeWindow === 'month' ? 8 : 13;
   const now = new Date();
+  const { cutoff: horizonStart } = getTimeWindowDates(now, timeWindow);
+  const bucketDays = timeWindow === '3months' ? 7 : 1;
+
   const points = [];
-
-  for (let w = weekCounts - 1; w >= 0; w--) {
-    const weekEnd = new Date(now.getTime() - w * 7 * 24 * 60 * 60 * 1000);
-    const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-    // Created %: bucket by issue creation date
-    const weekIssues = issues.filter(i => {
-      const d = new Date(i.created);
-      return d >= weekStart && d < weekEnd;
-    });
-    const total = weekIssues.length;
-    const createdWithAI = weekIssues.filter(i =>
-      i.aiInvolvement === 'created' || i.aiInvolvement === 'both').length;
-
-    // Revised count: bucket by revisedLabelDate (when the revision happened)
-    const revisedCount = issues.filter(i => {
-      if (i.aiInvolvement !== 'revised' && i.aiInvolvement !== 'both') return false;
-      const d = new Date(i.revisedLabelDate || i.created);
-      return d >= weekStart && d < weekEnd;
-    }).length;
-
-    points.push({
-      date: weekEnd.toISOString().slice(0, 10),
-      createdPct: total > 0 ? Math.round((createdWithAI / total) * 100) : 0,
-      revisedCount,
-      total
-    });
+  let bucketEnd = now;
+  while (bucketEnd > horizonStart) {
+    const idealStart = new Date(bucketEnd.getTime() - bucketDays * 24 * 60 * 60 * 1000);
+    const bucketStart = idealStart < horizonStart ? horizonStart : idealStart;
+    points.push(buildTrendPoint(issues, bucketStart, bucketEnd));
+    bucketEnd = bucketStart;
   }
+  return points.reverse();
+}
 
-  return points;
+function buildTrendPoint(issues, bucketStart, bucketEnd) {
+  // Created %: bucket by issue creation date
+  const bucketIssues = issues.filter(i => {
+    const d = new Date(i.created);
+    return d >= bucketStart && d < bucketEnd;
+  });
+  const total = bucketIssues.length;
+  const createdWithAI = bucketIssues.filter(i =>
+    i.aiInvolvement === 'created' || i.aiInvolvement === 'both').length;
+
+  // Revised count: bucket by revisedLabelDate (when the revision happened)
+  const revisedCount = issues.filter(i => {
+    if (i.aiInvolvement !== 'revised' && i.aiInvolvement !== 'both') return false;
+    const d = new Date(i.revisedLabelDate || i.created);
+    return d >= bucketStart && d < bucketEnd;
+  }).length;
+
+  return {
+    date: bucketEnd.toISOString().slice(0, 10),
+    createdPct: total > 0 ? Math.round((createdWithAI / total) * 100) : 0,
+    createdWithAI,
+    revisedCount,
+    total
+  };
 }
 
 function buildBreakdownData(issues) {

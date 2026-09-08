@@ -55,10 +55,6 @@ const listRFEs = computed(() => {
   })
 })
 
-const timeFilteredRFEs = computed(() => {
-  return listRFEs.value.filter(isInTimeWindow)
-})
-
 // Time-window scoped only, independent of the AI-involvement filter and search box,
 // so it stays consistent with the other window-scoped metrics tiles.
 const windowedRFEs = computed(() => {
@@ -95,8 +91,11 @@ const enrichedSelectedRFE = computed(() => {
   }
 })
 
+// Score Distribution / Criteria Performance must reflect the selected period
+// only, not the AI-involvement quick filter or search box — so this is keyed
+// off windowedRFEs rather than listRFEs.
 const filteredAssessments = computed(() => {
-  const rfeKeys = new Set(timeFilteredRFEs.value.map(r => r.key))
+  const rfeKeys = new Set(windowedRFEs.value.map(r => r.key))
   const result = {}
   for (const [key, assessment] of Object.entries(assessments.value)) {
     if (rfeKeys.has(key)) {

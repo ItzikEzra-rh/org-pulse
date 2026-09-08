@@ -222,7 +222,7 @@ describe('GET /features/trend', () => {
       { name: 'AI Created', value: 1 },
       { name: 'No AI', value: 0 }
     ]));
-    const point = payload.trendData[payload.trendData.length - 1];
+    const point = payload.trendData.find(p => p.total > 0);
     expect(point.total).toBe(1);
     expect(point.createdPct).toBe(100);
   });
@@ -244,13 +244,14 @@ describe('GET /features/trend', () => {
     const { res } = await callHandler(routes, 'GET', '/features/trend');
     const payload = res.json.mock.calls[0][0];
 
-    const point = payload.trendData[payload.trendData.length - 1];
+    const point = payload.trendData.find(p => p.total > 0);
     expect(point.total).toBe(1);
     expect(point.createdPct).toBe(100);
   });
 
   it('computes per-week numerator/denominator across multiple cohorts, including an empty week', async () => {
-    // 'week' timeWindow buckets the last 4 weeks; D's week is a no-artifact decoy.
+    // '3months' timeWindow buckets the last 90 days into 13 weekly buckets (oldest partial);
+    // D lands in the second-most-recent bucket as a no-artifact decoy.
     const data = {
       lastSyncedAt: 'x',
       totalFeatures: 4,
@@ -258,7 +259,7 @@ describe('GET /features/trend', () => {
         A: { latest: { key: 'A', aiInvolvement: 'created', created: daysAgo(1), designPrStatus: 'Merged' }, history: [] },
         B: { latest: { key: 'B', aiInvolvement: 'both', created: daysAgo(2), designPrStatus: 'Open' }, history: [] },
         C: { latest: { key: 'C', aiInvolvement: 'revised', created: daysAgo(3), designPrStatus: 'Merged' }, history: [] },
-        D: { latest: { key: 'D', aiInvolvement: 'none', created: daysAgo(25), designPrStatus: null }, history: [] }
+        D: { latest: { key: 'D', aiInvolvement: 'none', created: daysAgo(10), designPrStatus: null }, history: [] }
       }
     };
     const { router, routes } = createRouter();
@@ -266,16 +267,16 @@ describe('GET /features/trend', () => {
 
     const key = 'GET /features/trend';
     const reqRes = { json: vi.fn(), status: vi.fn().mockReturnThis() };
-    await routes[key][routes[key].length - 1]({ body: {}, params: {}, query: { timeWindow: 'week' } }, reqRes);
+    await routes[key][routes[key].length - 1]({ body: {}, params: {}, query: { timeWindow: '3months' } }, reqRes);
     const payload = reqRes.json.mock.calls[0][0];
 
-    expect(payload.trendData).toHaveLength(4);
+    expect(payload.trendData).toHaveLength(13);
     const mostRecent = payload.trendData[payload.trendData.length - 1];
     // A + B are AI-created/both = numerator 2; A, B, C have an artifact = denominator 3; D never counts.
     expect(mostRecent.total).toBe(3);
     expect(mostRecent.createdPct).toBe(Math.round((2 / 3) * 100));
 
-    // Empty cohort: no adoption denominator, so createdPct is a chart gap (null), not 0%.
+    // D's week: no adoption denominator (its only feature has no artifact), so createdPct is a chart gap (null), not 0%.
     const emptyWeek = payload.trendData[payload.trendData.length - 2];
     expect(emptyWeek.total).toBe(0);
     expect(emptyWeek.createdPct).toBeNull();

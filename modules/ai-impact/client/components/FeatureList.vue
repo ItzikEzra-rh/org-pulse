@@ -171,6 +171,7 @@ const sortedAndFilteredFeatures = computed(() => {
       Design List
       <span class="text-sm font-normal text-gray-500 dark:text-gray-400">({{ sortedAndFilteredFeatures.length }} of {{ featureList.length }} total)</span>
     </h3>
+    <p class="text-xs text-gray-400 dark:text-gray-500 mb-3">This list is all-time. The Period selector above scopes the analytics only.</p>
 
     <!-- Filters -->
     <div class="flex flex-wrap gap-3 mb-4">

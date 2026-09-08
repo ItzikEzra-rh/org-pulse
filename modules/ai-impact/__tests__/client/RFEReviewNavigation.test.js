@@ -57,7 +57,11 @@ vi.mock('../../client/composables/useAIImpact.js', () => ({
 
 vi.mock('../../client/composables/useAssessments.js', () => ({
   useAssessments: () => ({
-    assessments: ref({}),
+    assessments: ref({
+      'RHAIRFE-1': { total: 8 },
+      'RHAIRFE-2': { total: 4 },
+      'OSAC-63': { total: 2 }
+    }),
     loadAssessments: vi.fn(),
     loadAssessmentDetail: vi.fn()
   })
@@ -237,5 +241,40 @@ describe('RFEReviewView navigation', () => {
 
     // ...but windowedRFEs must stay unaffected, since it only tracks the time window
     expect(phaseContent.props('windowedRFEs').map(r => r.key)).toEqual(windowedKeysBefore);
+  });
+
+  it('scopes filteredAssessments (Score Distribution / Criteria Performance) to the period, unaffected by search or the AI-involvement filter', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-25T00:00:00.000Z'));
+
+    const wrapper = mountView();
+    let phaseContent = wrapper.findComponent(PhaseContentStub);
+
+    phaseContent.vm.$emit('update:timeWindow', '3months');
+    await nextTick();
+    phaseContent = wrapper.findComponent(PhaseContentStub);
+
+    // Only OSAC-63 (created 2026-06-01) falls inside the 90-day window from 2026-08-25.
+    expect(Object.keys(phaseContent.props('filteredAssessments'))).toEqual(['OSAC-63']);
+
+    // Neither the AI-involvement quick filter nor the search box should narrow it further.
+    phaseContent.vm.$emit('update:filter', 'none');
+    phaseContent.vm.$emit('update:searchQuery', 'RFE with feature');
+    await nextTick();
+    phaseContent = wrapper.findComponent(PhaseContentStub);
+
+    expect(Object.keys(phaseContent.props('filteredAssessments'))).toEqual(['OSAC-63']);
+  });
+
+  it('leaves the all-time PRD list (filteredRFEs) unaffected when the Period selector changes', async () => {
+    const wrapper = mountView();
+    let phaseContent = wrapper.findComponent(PhaseContentStub);
+    const beforeKeys = phaseContent.props('filteredRFEs').map(r => r.key).sort();
+
+    phaseContent.vm.$emit('update:timeWindow', 'week');
+    await nextTick();
+    phaseContent = wrapper.findComponent(PhaseContentStub);
+
+    expect(phaseContent.props('filteredRFEs').map(r => r.key).sort()).toEqual(beforeKeys);
   });
 });

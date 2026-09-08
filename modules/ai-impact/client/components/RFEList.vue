@@ -163,6 +163,7 @@ function handleSelectRFE(rfe) {
       PRD List
       <span class="text-sm font-normal text-gray-500 dark:text-gray-400">({{ sortedAndFilteredRFEs.length }} of {{ rfes.length }} total)</span>
     </h3>
+    <p class="text-xs text-gray-400 dark:text-gray-500 mb-3">This list is all-time. The Period selector above scopes the analytics only.</p>
     <div class="flex flex-wrap gap-2 mb-4">
       <div class="relative w-full max-w-[280px]">
         <svg class="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
