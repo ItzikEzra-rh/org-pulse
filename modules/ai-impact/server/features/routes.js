@@ -265,20 +265,28 @@ module.exports = function registerFeatureRoutes(router, context) {
     // { created, aiInvolvement, revisedLabelDate }. Features have no distinct
     // revision-label date, so the AI review timestamp stands in for "when the
     // review happened".
-    const trendInput = Object.values(projection.features).map(function(f) {
-      return { created: f.created, aiInvolvement: f.aiInvolvement || 'none', revisedLabelDate: f.reviewedAt, sourceRfe: f.sourceRfe };
-    });
+    //
+    // Design artifact existence is designPrStatus != null, not designStatus
+    // (which is AI Design Review processing state, not artifact existence).
+    // Features with no artifact can't have AI involvement, so they must not
+    // dilute the denominator.
+    const trendInput = Object.values(projection.features)
+      .filter(function(f) { return f.designPrStatus != null; })
+      .map(function(f) {
+        return { created: f.created, aiInvolvement: f.aiInvolvement || 'none', revisedLabelDate: f.reviewedAt };
+      });
 
     const { cutoff } = getTimeWindowDates(new Date(), timeWindow);
     const windowInput = trendInput.filter(function(i) { return i.created && new Date(i.created) >= cutoff; });
-    // Features with no design PR yet (sourceRfe null) can't have AI
-    // involvement one way or the other — exclude them from the breakdown,
-    // mirroring the 'No PR' exclusion on the PRD side.
-    const breakdownInput = windowInput.filter(function(i) { return i.sourceRfe; });
+
+    // Empty Design cohorts are no-data; keep this route-local so PRD semantics stay unchanged.
+    const trendData = buildTrendData(trendInput, timeWindow).map(function(point) {
+      return point.total === 0 ? { ...point, createdPct: null } : point;
+    });
 
     res.json({
-      trendData: buildTrendData(trendInput, timeWindow),
-      breakdown: buildBreakdownData(breakdownInput)
+      trendData,
+      breakdown: buildBreakdownData(windowInput)
     });
   });
 
