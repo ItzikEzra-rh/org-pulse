@@ -1,7 +1,8 @@
 <template>
   <div
-    @click="$emit('click')"
-    class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md hover:border-primary-300 dark:hover:border-primary-600 transition-all"
+    @click="clickable && $emit('click')"
+    class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 transition-all"
+    :class="clickable ? 'cursor-pointer hover:shadow-md hover:border-primary-300 dark:hover:border-primary-600' : ''"
     data-testid="allocation-team-card"
   >
     <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate mb-3" :title="teamName">
@@ -48,7 +49,8 @@ const props = defineProps({
   boardCount: { type: Number, default: 0 },
   percentages: { type: Object, default: () => ({}) },
   buckets: { type: Object, default: () => ({}) },
-  metricMode: { type: String, default: 'points' }
+  metricMode: { type: String, default: 'points' },
+  clickable: { type: Boolean, default: true }
 })
 
 defineEmits(['click'])

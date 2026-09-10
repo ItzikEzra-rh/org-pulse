@@ -84,6 +84,19 @@ describe('AllocationTeamCard', () => {
     expect(wrapper.emitted('click')).toHaveLength(1)
   })
 
+  it('looks and behaves clickable by default', () => {
+    const wrapper = mount(AllocationTeamCard, { props: defaultProps })
+    expect(wrapper.find('[data-testid="allocation-team-card"]').classes()).toContain('cursor-pointer')
+  })
+
+  it('does not emit click or show pointer affordance when clickable is false', async () => {
+    const wrapper = mount(AllocationTeamCard, { props: { ...defaultProps, clickable: false } })
+    const card = wrapper.find('[data-testid="allocation-team-card"]')
+    expect(card.classes()).not.toContain('cursor-pointer')
+    await card.trigger('click')
+    expect(wrapper.emitted('click')).toBeUndefined()
+  })
+
   it('renders with empty/zero data without errors', () => {
     const wrapper = mount(AllocationTeamCard, {
       props: { teamName: 'Empty Team' }

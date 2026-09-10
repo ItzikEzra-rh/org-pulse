@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, inject } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useOrgRoster } from '../composables/useOrgRoster'
 import { useAllocationStrategy } from '../composables/useAllocationStrategy'
 import { getOrgAllocationSummary, getGlobalAllocationSummary } from '../services/allocation-api'
@@ -8,7 +8,6 @@ import AllocationBar from '../components/allocation/AllocationBar.vue'
 import AllocationTeamCard from '../components/allocation/AllocationTeamCard.vue'
 import MetricToggle from '../components/allocation/MetricToggle.vue'
 
-const nav = inject('moduleNav')
 const { orgs, loadOrgs } = useOrgRoster()
 const { categories } = useAllocationStrategy()
 
@@ -37,12 +36,8 @@ function selectOrg(org) {
   selectedOrg.value = org
 }
 
-function openTeam(team) {
-  const orgKey = team.orgKey || summary.value?.orgKey || selectedOrg.value
-  if (orgKey) {
-    nav.navigateTo('team-detail', { teamKey: `${orgKey}::${team.teamName}`, tab: 'allocation' })
-  }
-}
+// Deep-linking into the Allocation tab is disabled while it's temporarily hidden
+// in Team View (see HIDDEN_TAB_IDS in TeamRosterView.vue).
 
 const hasData = computed(() => {
   if (!summary.value) return false
@@ -162,7 +157,7 @@ onMounted(() => {
           :percentages="team.percentages || {}"
           :buckets="teamBuckets(team)"
           :metricMode="metricMode"
-          @click="openTeam(team)"
+          :clickable="false"
         />
       </div>
     </template>

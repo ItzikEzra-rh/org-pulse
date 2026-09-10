@@ -61,6 +61,8 @@ vi.mock('../../../client/services/allocation-api', () => ({
 }))
 
 describe('AllocationReport', () => {
+  const mockNavigateTo = vi.fn()
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -70,7 +72,7 @@ describe('AllocationReport', () => {
       global: {
         provide: {
           moduleNav: {
-            navigateTo: vi.fn(),
+            navigateTo: mockNavigateTo,
             goBack: vi.fn(),
             params: readonly(ref({})),
             moduleSlug: readonly(ref('team-tracker')),
@@ -78,7 +80,7 @@ describe('AllocationReport', () => {
         },
         stubs: {
           AllocationBar: { template: '<div data-testid="allocation-bar">Bar</div>', props: ['buckets', 'totalPoints', 'totalCount', 'metricMode'] },
-          AllocationTeamCard: { template: '<div data-testid="allocation-team-card" @click="$emit(\'click\')">{{ teamName }}</div>', props: ['teamName', 'totalPoints', 'totalCount', 'boardCount', 'percentages', 'buckets', 'metricMode'], emits: ['click'] },
+          AllocationTeamCard: { template: '<div data-testid="allocation-team-card" @click="$emit(\'click\')">{{ teamName }}</div>', props: ['teamName', 'totalPoints', 'totalCount', 'boardCount', 'percentages', 'buckets', 'metricMode', 'clickable'], emits: ['click'] },
           MetricToggle: { template: '<div data-testid="metric-toggle">Toggle</div>', props: ['modelValue'], emits: ['update:modelValue'] },
           OrgSelector: { template: '<div data-testid="org-selector">Orgs</div>', props: ['orgs', 'modelValue'], emits: ['select'] },
         }
@@ -125,5 +127,13 @@ describe('AllocationReport', () => {
     const wrapper = createWrapper()
     await flushPromises()
     expect(wrapper.find('[data-testid="org-selector"]').exists()).toBe(true)
+  })
+
+  it('does not navigate to Team View when a team card is clicked', async () => {
+    const wrapper = createWrapper()
+    await flushPromises()
+    const card = wrapper.find('[data-testid="allocation-team-card"]')
+    await card.trigger('click')
+    expect(mockNavigateTo).not.toHaveBeenCalled()
   })
 })

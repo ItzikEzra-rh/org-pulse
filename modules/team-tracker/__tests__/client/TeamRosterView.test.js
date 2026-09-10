@@ -135,12 +135,12 @@ vi.mock('chart.js', () => ({
   CategoryScale: {}, LinearScale: {}, PointElement: {}, LineElement: {}, Filler: {}, Title: {}
 }))
 
-function mountView(teamKey = 'AAET::Model Serving') {
+function mountView(teamKey = 'AAET::Model Serving', extraParams = {}) {
   return mount(TeamRosterView, {
     global: {
       provide: {
         moduleNav: {
-          params: ref({ teamKey }),
+          params: ref({ teamKey, ...extraParams }),
           goBack: vi.fn(),
           navigateTo: vi.fn(),
           updateParams: vi.fn()
@@ -184,21 +184,24 @@ describe('TeamRosterView', () => {
     expect(wrapper.text()).toContain('5 open PRDs')
   })
 
-  it('renders all 3 tabs', async () => {
+  it('renders the visible tabs', async () => {
     const wrapper = mountView()
     await flushPromises()
     const tabButtons = wrapper.findAll('nav button')
     const tabLabels = tabButtons.map(b => b.text())
     expect(tabLabels).toContain('Overview')
     expect(tabLabels).toContain('Delivery')
-    expect(tabLabels).toContain('PRD Backlog')
   })
 
-  it('always shows all 5 tabs', async () => {
+  // PRD Backlog, Allocation, and Autofix are temporarily hidden (HIDDEN_TAB_IDS in TeamRosterView.vue).
+  it('does not render the temporarily hidden tabs', async () => {
     const wrapper = mountView()
     await flushPromises()
     const tabLabels = wrapper.findAll('nav button').map(b => b.text())
-    expect(tabLabels).toHaveLength(5)
+    expect(tabLabels).not.toContain('PRD Backlog')
+    expect(tabLabels).not.toContain('Allocation')
+    expect(tabLabels).not.toContain('Autofix')
+    expect(tabLabels).toHaveLength(2)
   })
 
   it('switches tabs when tab buttons are clicked', async () => {
@@ -211,6 +214,16 @@ describe('TeamRosterView', () => {
 
     // Overview content should be visible
     expect(wrapper.text()).toContain('Team Members')
+  })
+
+  it('falls back to Overview when a hidden tab is requested via a stale URL param', async () => {
+    const wrapper = mountView('AAET::Model Serving', { tab: 'backlog' })
+    await flushPromises()
+
+    // Overview content renders instead of leaving the view empty
+    expect(wrapper.text()).toContain('Team Members')
+    const activeLabel = wrapper.findAll('nav button').find(b => b.classes().some(c => c.includes('primary')))
+    expect(activeLabel.text()).toBe('Overview')
   })
 
   it('degrades gracefully when loadTeamDetail fails', async () => {
@@ -227,11 +240,6 @@ describe('TeamRosterView', () => {
     // Enriched details not shown
     expect(wrapper.text()).not.toContain('PM:')
     expect(wrapper.text()).not.toContain('Eng Lead:')
-
-    // RFE Backlog tab shows fallback
-    const backlogTab = wrapper.findAll('nav button').find(b => b.text() === 'PRD Backlog')
-    await backlogTab.trigger('click')
-    expect(wrapper.text()).toContain('not yet available')
   })
 
   it('renders board links in header', async () => {

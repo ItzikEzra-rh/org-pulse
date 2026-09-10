@@ -665,6 +665,9 @@ const teamHasAllocationBoards = computed(() => {
   return boards.some(b => b.boardId != null)
 })
 
+// Temporarily hidden from the tab bar; implementation and panels stay in place for restoration.
+const HIDDEN_TAB_IDS = ['backlog', 'allocation', 'autofix']
+
 const visibleTabs = computed(() => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: TAB_ICONS.overview },
@@ -675,10 +678,12 @@ const visibleTabs = computed(() => {
     tabs.push({ id: 'allocation', label: 'Allocation', icon: TAB_ICONS.allocation })
   }
   tabs.push({ id: 'autofix', label: 'Autofix', icon: TAB_ICONS.autofix })
-  return tabs
+  return tabs.filter(tab => !HIDDEN_TAB_IDS.includes(tab.id))
 })
 
-const VALID_TABS = ['overview', 'delivery', 'backlog', 'allocation', 'autofix']
+const VALID_TABS = ['overview', 'delivery', 'backlog', 'allocation', 'autofix'].filter(
+  id => !HIDDEN_TAB_IDS.includes(id)
+)
 let updatingFromUrl = false
 
 watch(activeTab, (tab) => {
