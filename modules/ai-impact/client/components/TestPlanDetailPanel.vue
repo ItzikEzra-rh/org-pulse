@@ -4,7 +4,8 @@ import PipelineTimeline from './PipelineTimeline.vue'
 import FeedbackText from './FeedbackText.vue'
 import GapAnalysisText from './GapAnalysisText.vue'
 import InfoBubble from './InfoBubble.vue'
-import { getVerdictBgClass, getVerdictLabel, getCriterionLabel, getCriterionScoreClass, getCriterionScoreBgClass, getCriterionScoreLabel, getScoreColorClass, CRITERIA } from '../utils/test-plan-helpers.js'
+import MetaChipGroup from './MetaChipGroup.vue'
+import { getVerdictBgClass, getVerdictLabel, getCriterionLabel, getCriterionScoreClass, getCriterionScoreBgClass, getCriterionScoreLabel, getScoreColorClass, getTestPlanReviewStatusLabel, getTestPlanReviewStatusTooltip, CRITERIA } from '../utils/test-plan-helpers.js'
 import { getReviewStatusClass } from '../utils/feature-helpers.js'
 
 const props = defineProps({
@@ -24,7 +25,7 @@ const expandedCriteria = ref({})
 let previousActiveElement = null
 
 watch(
-  () => props.plan?.sourceKey,
+  () => props.plan?.key,
   async (key) => {
     planDetail.value = null
     expandedCriteria.value = {}
@@ -84,12 +85,6 @@ function toggleCriterion(criterion) {
   expandedCriteria.value = { ...expandedCriteria.value, [criterion]: !expandedCriteria.value[criterion] }
 }
 
-function getReviewStatusLabel(status) {
-  if (status === 'approved') return 'Approved'
-  if (status === 'needs-review') return 'Needs Review'
-  return 'Awaiting Sign-off'
-}
-
 const history = computed(() => planDetail.value?.history || [])
 const currentPlan = computed(() => planDetail.value?.latest || props.plan)
 const allHistoryEntries = computed(() => {
@@ -115,6 +110,8 @@ const allHistoryEntries = computed(() => {
           <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div class="flex items-center gap-3 min-w-0">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Test Plan Details</h2>
+              <a v-if="jiraHost" :href="`${jiraHost}/browse/${plan.key}`" target="_blank" rel="noopener noreferrer" class="font-mono text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0">{{ plan.key }}</a>
+              <span v-else class="font-mono text-xs text-gray-500 dark:text-gray-400 shrink-0">{{ plan.key }}</span>
             </div>
             <button
               @click="emit('close')"
@@ -132,7 +129,7 @@ const allHistoryEntries = computed(() => {
             <h3 class="font-medium text-gray-900 dark:text-gray-200 mb-4">{{ plan.feature || plan.featureName || plan.title }}</h3>
 
             <!-- Metadata grid (matches Feature Details layout) -->
-            <div class="grid grid-cols-3 gap-4 mb-2 text-sm">
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 text-sm">
               <div>
                 <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">AI Recommendation</p>
                 <span class="inline-flex items-center">
@@ -153,10 +150,22 @@ const allHistoryEntries = computed(() => {
                     :class="getReviewStatusClass(currentPlan?.humanReviewStatus)"
                   >
                     <svg v-if="currentPlan?.humanReviewStatus === 'needs-review'" class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                    {{ getReviewStatusLabel(currentPlan?.humanReviewStatus) }}
+                    {{ getTestPlanReviewStatusLabel(currentPlan?.humanReviewStatus) }}
                   </span>
-                  <InfoBubble :text="currentPlan?.humanReviewStatus === 'approved' ? 'A human engineer has signed off on this test plan' : currentPlan?.humanReviewStatus === 'needs-review' ? 'The rubric flagged issues — review needed' : 'Awaiting human sign-off via test-plan-human-sign-off label'" />
+                  <InfoBubble :text="getTestPlanReviewStatusTooltip(currentPlan?.humanReviewStatus)" />
                 </span>
+              </div>
+              <div>
+                <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">Reviewed</p>
+                <p class="text-gray-800 dark:text-gray-200">{{ currentPlan?.reviewedAt ? new Date(currentPlan.reviewedAt).toLocaleDateString() : 'Not available' }}</p>
+              </div>
+              <div>
+                <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">Priority</p>
+                <p class="text-gray-800 dark:text-gray-200">{{ currentPlan?.jiraPriority || 'Not set' }}</p>
+              </div>
+              <div>
+                <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">Test Cases</p>
+                <p class="text-gray-800 dark:text-gray-200">{{ currentPlan?.testCaseCount ?? 'Not available' }}</p>
               </div>
               <div>
                 <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">Score</p>
@@ -164,6 +173,10 @@ const allHistoryEntries = computed(() => {
                   {{ plan.score || 0 }}/10
                 </p>
               </div>
+            </div>
+
+            <div v-if="currentPlan?.components?.length" class="grid grid-cols-3 gap-4 mb-6 text-sm">
+              <div><MetaChipGroup label="Component" :values="currentPlan.components" /></div>
             </div>
 
             <!-- Approval info -->

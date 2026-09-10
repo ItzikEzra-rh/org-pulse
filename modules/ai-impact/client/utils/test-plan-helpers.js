@@ -25,6 +25,26 @@ export function getVerdictLabel(verdict) {
   }
 }
 
+export function normalizeTestPlanReviewStatus(status) {
+  return status || 'awaiting-review'
+}
+
+export function getTestPlanReviewStatusLabel(status) {
+  switch (normalizeTestPlanReviewStatus(status)) {
+    case 'approved': return 'Approved'
+    case 'needs-review': return 'Flagged'
+    default: return 'Awaiting Sign-off'
+  }
+}
+
+export function getTestPlanReviewStatusTooltip(status) {
+  switch (normalizeTestPlanReviewStatus(status)) {
+    case 'approved': return 'A human engineer has reviewed and signed off on this test plan.'
+    case 'needs-review': return 'The test plan pipeline flagged issues that need human review.'
+    default: return 'This test plan is awaiting human review and sign-off.'
+  }
+}
+
 export function getCriterionLabel(criterion) {
   if (!criterion) return ''
   return criterion

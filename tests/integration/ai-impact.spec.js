@@ -597,6 +597,39 @@ test.describe('AI Impact Views @ai-impact', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('Test Plan Review renders the live-shaped three-plan workflow', async ({ page }) => {
+    await page.route('**/api/modules/ai-impact/test-plans', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          lastSyncedAt: '2026-09-10T08:00:00Z',
+          totalTestPlans: 3,
+          testPlans: {
+            'TP-3459': { key: 'TP-3459', sourceKey: 'OSAC-3459', feature: 'Ready plan', score: 9, verdict: 'Ready', humanReviewStatus: 'approved', jiraPriority: 'Major', testCaseCount: 15, components: ['API'], reviewedAt: '2026-09-08T08:00:00Z' },
+            'TP-3702': { key: 'TP-3702', sourceKey: 'OSAC-3702', feature: 'Six point rework plan', score: 6, verdict: 'Rework', humanReviewStatus: 'awaiting-review', jiraPriority: 'Critical', testCaseCount: 24, components: ['UI'], reviewedAt: '2026-09-09T08:00:00Z' },
+            'TP-4291': { key: 'TP-4291', sourceKey: 'OSAC-4291', feature: 'Five point rework plan', score: 5, verdict: 'Rework', testCaseCount: 17, components: [], reviewedAt: '2026-09-10T08:00:00Z' }
+          }
+        })
+      });
+    });
+
+    await page.goto('/#/ai-impact/test-plan-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByRole('heading', { name: 'Test Plan Review', exact: true })).toBeVisible();
+    await expect(page.getByText('3 of 3 total')).toBeVisible();
+    const sixPointCard = page.locator('.cursor-pointer').filter({ hasText: 'Six point rework plan' });
+    await expect(sixPointCard).toContainText('Rework');
+    await expect(sixPointCard).toContainText('6/10');
+
+    const reviewFilter = page.locator('select').filter({ has: page.locator('option', { hasText: 'All Review Status' }) });
+    await reviewFilter.selectOption('approved');
+    await expect(page.getByText('Ready plan')).toBeVisible();
+    await expect(page.getByText('Six point rework plan')).not.toBeVisible();
+  });
+
   test('should load Jira AutoFix view', async ({ page }) => {
     await testView(page, 'autofix', 'AutoFix');
   });

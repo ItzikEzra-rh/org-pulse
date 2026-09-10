@@ -12,7 +12,11 @@ const moduleNav = inject('moduleNav')
 const selectedPlan = ref(null)
 const searchQuery = ref('')
 const verdictFilter = ref('all')
+const humanReviewFilter = ref('all')
+const priorityFilter = ref('all')
+const componentFilter = ref('all')
 const sortBy = ref('default')
+const chartExpanded = ref(true)
 
 const { testPlans, testPlanMeta, testPlanLoading, testPlanError, loadTestPlans, loadTestPlanDetail } = useTestPlans()
 
@@ -52,6 +56,9 @@ watch(() => moduleNav.params.value, (params) => {
     if (plan && selectedPlan.value?.key !== plan.key) {
       searchQuery.value = ''
       verdictFilter.value = 'all'
+      humanReviewFilter.value = 'all'
+      priorityFilter.value = 'all'
+      componentFilter.value = 'all'
       sortBy.value = 'default'
       selectedPlan.value = plan
     }
@@ -79,11 +86,19 @@ watch(() => Object.keys(testPlans.value).length, () => {
       :testPlanMeta="testPlanMeta"
       :searchQuery="searchQuery"
       :verdictFilter="verdictFilter"
+      :humanReviewFilter="humanReviewFilter"
+      :priorityFilter="priorityFilter"
+      :componentFilter="componentFilter"
       :sortBy="sortBy"
+      :chartExpanded="chartExpanded"
       :selectedPlan="selectedPlan"
       @update:searchQuery="searchQuery = $event"
       @update:verdictFilter="verdictFilter = $event"
+      @update:humanReviewFilter="humanReviewFilter = $event"
+      @update:priorityFilter="priorityFilter = $event"
+      @update:componentFilter="componentFilter = $event"
       @update:sortBy="sortBy = $event"
+      @update:chartExpanded="chartExpanded = $event"
       @selectPlan="handleSelectPlan"
       @retry="handleRetry"
     />

@@ -1,6 +1,7 @@
 <script setup>
 import LoadingOverlay from '@shared/client/components/LoadingOverlay.vue'
 import TestPlanMetricsRow from './TestPlanMetricsRow.vue'
+import TestPlanTrendCharts from './TestPlanTrendCharts.vue'
 import TestPlanCharts from './TestPlanCharts.vue'
 import TestPlanList from './TestPlanList.vue'
 
@@ -11,14 +12,22 @@ defineProps({
   testPlanMeta: { type: Object, default: () => ({}) },
   searchQuery: { type: String, default: '' },
   verdictFilter: { type: String, default: 'all' },
+  humanReviewFilter: { type: String, default: 'all' },
+  priorityFilter: { type: String, default: 'all' },
+  componentFilter: { type: String, default: 'all' },
   sortBy: { type: String, default: 'default' },
+  chartExpanded: { type: Boolean, default: true },
   selectedPlan: { type: Object, default: null }
 })
 
 const emit = defineEmits([
   'update:searchQuery',
   'update:verdictFilter',
+  'update:humanReviewFilter',
+  'update:priorityFilter',
+  'update:componentFilter',
   'update:sortBy',
+  'update:chartExpanded',
   'selectPlan',
   'retry'
 ])
@@ -26,6 +35,15 @@ const emit = defineEmits([
 
 <template>
   <main class="flex-1 flex flex-col overflow-auto">
+    <header class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-3 shrink-0 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-semibold dark:text-gray-100">Test Plan Review</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">AI test-plan quality and human review tracking</p>
+      </div>
+      <p v-if="testPlanMeta.lastSyncedAt" class="text-sm text-gray-500 dark:text-gray-400">
+        Last synced {{ new Date(testPlanMeta.lastSyncedAt).toLocaleString() }}
+      </p>
+    </header>
     <!-- Loading -->
     <LoadingOverlay v-if="loading" message="Loading test plan reviews..." />
 
@@ -58,15 +76,26 @@ const emit = defineEmits([
     <!-- Data loaded -->
     <template v-else>
       <TestPlanMetricsRow :testPlans="testPlans" />
-      <TestPlanCharts :testPlans="testPlans" />
+      <TestPlanTrendCharts :testPlans="testPlans" />
+      <TestPlanCharts
+        :testPlans="testPlans"
+        :expanded="chartExpanded"
+        @toggle="emit('update:chartExpanded', !chartExpanded)"
+      />
       <TestPlanList
         :testPlans="testPlans"
         :selectedPlan="selectedPlan"
         :searchQuery="searchQuery"
         :verdictFilter="verdictFilter"
+        :humanReviewFilter="humanReviewFilter"
+        :priorityFilter="priorityFilter"
+        :componentFilter="componentFilter"
         :sortBy="sortBy"
         @update:searchQuery="emit('update:searchQuery', $event)"
         @update:verdictFilter="emit('update:verdictFilter', $event)"
+        @update:humanReviewFilter="emit('update:humanReviewFilter', $event)"
+        @update:priorityFilter="emit('update:priorityFilter', $event)"
+        @update:componentFilter="emit('update:componentFilter', $event)"
         @update:sortBy="emit('update:sortBy', $event)"
         @selectPlan="emit('selectPlan', $event)"
       />
