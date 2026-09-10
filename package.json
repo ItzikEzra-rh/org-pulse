@@ -57,7 +57,7 @@
     "@playwright/test": "1.60.0",
     "@tailwindcss/typography": "^0.5.20",
     "@vitejs/plugin-vue": "^6.0.8",
-    "@vue/test-utils": "^2.4.11",
+    "@vue/test-utils": "^2.5.0",
     "autoprefixer": "^10.5.5",
     "concurrently": "^9.2.4",
     "dotenv": "^17.4.2",
