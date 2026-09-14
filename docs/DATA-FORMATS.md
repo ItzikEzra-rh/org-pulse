@@ -980,6 +980,12 @@ Derived summary index of all features in the unified feature store. Rebuilt auto
       "issueCount": 30,
       "blockerCount": 1,
       "health": "GREEN",
+      "executionIssueCount": 22,
+      "doneExecutionIssueCount": 15,
+      "executionState": "in-progress",
+      "executionCoverage": "available",
+      "executionCoverageReason": null,
+      "preparationReadiness": "ready",
       "lastUpdated": "2026-06-01T00:00:00Z",
       "targetVersions": ["3.5"],
       "pm": "Product Manager",
@@ -1000,6 +1006,20 @@ Derived summary index of all features in the unified feature store. Rebuilt auto
 - `pm` is flattened to a string from the detail object shape
 - `team` and `components` are Jira-sourced fields surfaced in the index for filtering
 - Metrics fields (`completionPct`, `epicCount`, etc.) are derived from the detail `metrics` object
+- `executionIssueCount`, `doneExecutionIssueCount`, `executionState`, `executionCoverage`,
+  `executionCoverageReason`, and `preparationReadiness` are pipeline-owned and copied verbatim from
+  the same-named fields under the detail `metrics` object (see below); `executionIssueCount`/
+  `doneExecutionIssueCount`/`executionState`/`executionCoverageReason` preserve `null` distinctly
+  from `0`/`false`/an empty value. A feature file predating this contract (missing these keys under
+  `metrics`) renders as unavailable: `executionIssueCount`, `doneExecutionIssueCount`,
+  `executionState`, and `executionCoverageReason` default to `null`, `executionCoverage` defaults
+  to `"insufficient-data"`, and `preparationReadiness` defaults to `"unknown"` — never a fabricated
+  `"empty"` or a legacy-progress fallback
+- `executionCoverageReason` explains a non-`"available"` `executionCoverage`: one of `"no-epics"`,
+  `"preparation-only"`, `"epics-without-issue-detail"`, `"data-unavailable"`, or `null` when
+  `executionCoverage` is `"available"`. Consumers must render a missing or unrecognized value the
+  same as `"data-unavailable"` (a generic "Execution data unavailable" caption) — never infer a
+  reason from `epicCount`/`issueCount`.
 
 ## Releases — Execution Feature Detail (`data/releases/execution/features/{KEY}.json`)
 
@@ -1052,7 +1072,12 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
       "issueCount": 12,
       "blockerCount": 1,
       "pct": 40,
-      "progress": 40
+      "progress": 40,
+      "executionIssueCount": 9,
+      "doneExecutionIssueCount": 4,
+      "issues": [
+        { "key": "OSAC-457", "summary": "Wire up autoscaler webhook", "statusCategory": "Done", "isPreparation": false }
+      ]
     }
   ],
   "architect": "Architect Name",
@@ -1064,7 +1089,13 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
     "totalIssues": 30,
     "completionPct": 75,
     "blockerCount": 1,
-    "health": "GREEN"
+    "health": "GREEN",
+    "executionIssueCount": 22,
+    "doneExecutionIssueCount": 15,
+    "executionState": "in-progress",
+    "executionCoverage": "available",
+    "executionCoverageReason": null,
+    "preparationReadiness": "ready"
   },
   "topology": { "repos": [] },
 
@@ -1080,8 +1111,35 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
 - `statusNotes` (pipeline) and `statusSummary` (Jira) are different fields with different formats
 - Jira-owned fields are authoritative when present; pipeline-owned fields (`metrics`, `topology`) are preserved across Jira syncs
 - `aiReview` is optional; only present for features that have been scored by the AI review pipeline
+- `metrics.executionIssueCount`, `metrics.doneExecutionIssueCount`, `metrics.executionState`,
+  `metrics.executionCoverage`, `metrics.executionCoverageReason`, and `metrics.preparationReadiness`
+  are additive, pipeline-owned execution/preparation fields (org-pulse-data project
+  config/normalization owns their semantics; org-pulse consumes them read-only and must not
+  recompute or reclassify). `executionState` is one of `no-tracked-work` / `not-started` /
+  `in-progress` / `complete`, or `null` when `executionCoverage` is `insufficient-data`.
+  `executionCoverage` is one of `available` / `empty` / `insufficient-data`.
+  `executionCoverageReason` is one of `no-epics` / `preparation-only` / `epics-without-issue-detail`
+  / `data-unavailable`, or `null` when `executionCoverage` is `available`. `preparationReadiness` is
+  one of `ready` / `pending` / `unknown` / `not-applicable`. `executionIssueCount`/
+  `doneExecutionIssueCount` are non-negative integers or `null`; `null` means not computable and
+  must be kept distinct from a measured `0`. These fields are separate from — and never derived
+  from — `completionPct`/`health`/`colorStatus`/`ownerStatusColor`, which remain in the payload for
+  compatibility but are not rendered in Feature List. See `metrics`/`epicMetrics` above for the
+  pre-existing SP-weighted legacy rollup these do not replace.
 
 **Epic provenance (`fixVersionSource`, `componentSource`):** each is one of `direct`, `via-parent-feature`, or `unknown`. Consumers must render `via-parent-feature` values with a visible inherited-source indicator — never as if they were the epic's own — and render `unknown` as an explicit unknown state rather than leaving it blank. `parentFeatureKey`, `issueCount`, `blockerCount`, and `pct`/`progress` (`progress` is an alias of `pct`) make each epic object self-contained for consumers, without a separate lookup into `metrics.epicMetrics[]`.
+
+**Per-Epic execution counts and per-issue preparation flag:** each epic also carries
+`executionIssueCount`/`doneExecutionIssueCount` — the same Feature-level fields reused at Epic
+scope, following the same null/zero convention: both `null` when that epic has zero collected
+issues (`issueCount === 0`, not computable — the same condition as Feature-level
+`insufficient-data`), both `0` when its collected issues are all recognized preparation (a verified
+empty execution scope for that epic), and real counts otherwise. They are independent of the
+legacy, preparation-inclusive `issueCount`/`pct`/`progress` on the same epic. Each issue in
+`epics[].issues[]` carries `isPreparation` (boolean, never `null`) marking whether that issue
+matched the project's configured preparation-title rule; `false` by default when no rule is
+configured. Consumers must read both directly rather than reconstructing them from issue
+title/label/type.
 
 **Optional — AI Review (`aiReview`):**
 
@@ -1875,3 +1933,4 @@ The `fixtures/` directory provides read-only demo data used when `DEMO_MODE=true
 1. **Fixtures must match production JSON structure.** When the backend changes how it writes a data file, update the corresponding fixture to use the same shape.
 2. **Test mocks should match production format.** Unit test mock data (e.g., in `__tests__/`) should use the production JSON structure as the primary format. Add separate backward-compatibility tests if old formats need to be supported.
 3. **Verify against real data.** If you're unsure of a data file's format, check the actual files in `data/` (symlinked from the main worktree) rather than trusting fixtures alone.
+4. **Generate pipeline-derived fields from the producer, not by hand.** The `executionIssueCount`/`doneExecutionIssueCount`/`executionState`/`executionCoverage`/`executionCoverageReason`/`preparationReadiness` values on a representative subset of `fixtures/releases/execution/` features (e.g. `TEST1-1131`, `TEST1-1045`, `TEST1-284`, `TEST1-15`, `TEST1-157`, `TEST1-576`) were produced by calling org-pulse-data's `compute_metrics`/`compute_preparation_readiness` with controlled epic/issue inputs, one per execution/coverage/readiness state. The same six fixtures' `epics[].issues[].isPreparation` and per-epic `executionIssueCount`/`doneExecutionIssueCount` were produced by calling `is_preparation_issue()` against each fixture's own issue titles. The remaining fixtures intentionally omit these fields to keep covering the pre-contract/missing-metrics case.

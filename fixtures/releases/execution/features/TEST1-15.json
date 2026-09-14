@@ -35,7 +35,13 @@
     "unassignedCount": 0,
     "blockerCount": 0,
     "health": "YELLOW",
-    "epicMetrics": []
+    "epicMetrics": [],
+    "executionIssueCount": 0,
+    "doneExecutionIssueCount": 0,
+    "executionState": "no-tracked-work",
+    "executionCoverage": "empty",
+    "preparationReadiness": "not-applicable",
+    "executionCoverageReason": "no-epics"
   },
   "topology": {
     "repos": []

@@ -262,7 +262,7 @@ async function enrichFeatures(keys, jiraRequestFn, fetchAllJqlResultsFn) {
   }
 
   // Fetch epics in parallel batches
-  const epicMap = await fetchEpicsForFeatures(keys, jiraRequestFn, fetchAllJqlResultsFn);
+  const { epicMap, failedKeys } = await fetchEpicsForFeatures(keys, jiraRequestFn, fetchAllJqlResultsFn);
 
   // Attach epics to enriched results
   for (const [key, epics] of epicMap) {
@@ -272,9 +272,11 @@ async function enrichFeatures(keys, jiraRequestFn, fetchAllJqlResultsFn) {
     }
   }
 
-  // Ensure epics array exists for all enriched features
-  for (const [, enriched] of result) {
-    if (!enriched.epics) {
+  // Ensure epics array exists for all enriched features — except keys whose epic
+  // discovery batch failed, where an empty array would be mistaken for a verified
+  // "no linked Epics" snapshot instead of an unknown one.
+  for (const [key, enriched] of result) {
+    if (!enriched.epics && !failedKeys.has(key)) {
       enriched.epics = [];
     }
   }
@@ -346,12 +348,14 @@ async function fetchSignOffDetails(keys, storage, jiraRequestFn, fetchAllJqlResu
  * @param {string[]} featureKeys - Feature issue keys
  * @param {Function} jiraRequestFn
  * @param {Function} fetchAllJqlResultsFn
- * @returns {Promise<Map<string, Array<{ key: string, summary: string, status: string }>>>}
+ * @returns {Promise<{ epicMap: Map<string, Array<{ key: string, summary: string, status: string }>>, failedKeys: Set<string> }>}
+ *   failedKeys marks keys whose batch failed — their absence from epicMap is unverified, not a confirmed empty snapshot.
  */
 async function fetchEpicsForFeatures(featureKeys, jiraRequestFn, fetchAllJqlResultsFn) {
-  if (!featureKeys || featureKeys.length === 0) return new Map();
+  if (!featureKeys || featureKeys.length === 0) return { epicMap: new Map(), failedKeys: new Set() };
 
   const epicMap = new Map();
+  const failedKeys = new Set();
   const batches = batch(featureKeys, BATCH_SIZE);
 
   for (let bi = 0; bi < batches.length; bi++) {
@@ -389,10 +393,11 @@ async function fetchEpicsForFeatures(featureKeys, jiraRequestFn, fetchAllJqlResu
         '[jira-enrich] Epic discovery batch ' + (bi + 1) + '/' + batches.length + ' failed:',
         err.message
       );
+      for (let i = 0; i < batchKeys.length; i++) failedKeys.add(batchKeys[i]);
     }
   }
 
-  return epicMap;
+  return { epicMap, failedKeys };
 }
 
 /**

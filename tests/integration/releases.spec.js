@@ -188,6 +188,200 @@ test.describe('Releases Views @releases', () => {
 });
 
 /**
+ * Feature List (Execution Overview)
+ *
+ * Board (default) and List presentation over the unified feature store's
+ * execution/preparation contract. Demo fixture keys used below:
+ *   TEST1-1131 (available, in-progress), TEST1-1045 (available, complete),
+ *   TEST1-284 (available, not-started), TEST1-15 (empty, no issues at all),
+ *   TEST1-157 (empty, preparation-only), TEST1-576 (epics with no issues —
+ *   unavailable), TEST1-1085 (predates the contract — missing metrics
+ *   entirely, also unavailable). See docs/DATA-FORMATS.md Fixture Rules.
+ */
+test.describe('Releases Feature List @releases', () => {
+  test.beforeEach(async ({ page }) => {
+    setupErrorTracking(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    logCapturedErrors(page, testInfo);
+  });
+
+  async function openFeatureList(page) {
+    await page.goto('/#/releases/execute');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+  }
+
+  test('loads from the demo fixture path and defaults to Board view with three columns plus a coverage total', async ({ page }) => {
+    await openFeatureList(page);
+
+    await expect(page.locator('h1', { hasText: 'Feature Execution Overview' })).toBeVisible();
+    for (const title of ['Not Started', 'In Progress', 'Observed Work Done']) {
+      await expect(page.locator('h3', { hasText: title })).toBeVisible();
+    }
+    await expect(page.locator('h3', { hasText: 'No Tracked Work' })).toHaveCount(0);
+    await expect(page.locator('h3', { hasText: 'Execution Data Unavailable' })).toHaveCount(0);
+
+    await expect(page.getByText('Features:')).toBeVisible();
+    await expect(page.getByText('With progress data:')).toBeVisible();
+    const coverageButton = page.getByRole('button', { name: /Without progress data/ });
+    await expect(coverageButton).toBeVisible();
+
+    // Old-payload feature is part of the coverage total rather than dropped;
+    // hidden until expanded. Searched by key to land on the panel's first page.
+    await page.getByLabel('Search').fill('TEST1-1085');
+    const oldPayloadTrigger = page.getByRole('button', { name: 'Open details for TEST1-1085', exact: true });
+    await expect(oldPayloadTrigger).toHaveCount(0);
+    await coverageButton.click();
+    await expect(oldPayloadTrigger).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('shows distinct available/empty/unavailable progress presentation on Board and coverage cards', async ({ page }) => {
+    await openFeatureList(page);
+    const search = page.getByLabel('Search');
+
+    // Each case is searched by key so it lands on the first page rather than
+    // assuming board/column order (paginated at 6/page).
+    await search.fill('TEST1-1131');
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-1131', exact: true })).toBeVisible();
+    await expect(page.getByText('7/10')).toBeVisible();
+    await expect(page.getByText('70%')).toBeVisible();
+
+    await search.fill('TEST1-1045');
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-1045', exact: true })).toBeVisible();
+    await expect(page.getByText('9/9')).toBeVisible();
+    await expect(page.getByText('100%')).toBeVisible();
+
+    // The remaining cases have no measurable execution progress; their truthful
+    // reason (from the producer's executionCoverageReason) only shows once the
+    // coverage panel is expanded.
+    const coverageButton = page.getByRole('button', { name: /Without progress data/ });
+
+    // "TEST1-15" also matches 6 "TEST1-15x" siblings (7 total); both targets
+    // below (indices 0 and 4) land within the first page of 6, regardless.
+    await search.fill('TEST1-15');
+    await coverageButton.click();
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-15', exact: true })).toBeVisible();
+    await expect(page.getByText('No linked epics found')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-157', exact: true })).toBeVisible();
+    await expect(page.getByText('Only preparation issues found')).toBeVisible();
+
+    await search.fill('TEST1-576');
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-576', exact: true })).toBeVisible();
+    await expect(page.getByText('Issue details missing')).toBeVisible();
+
+    await search.fill('TEST1-1085');
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-1085', exact: true })).toBeVisible();
+    await expect(page.getByText('Execution data unavailable')).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('switches to List view exposing the same population with Execution State and Progress columns', async ({ page }) => {
+    await openFeatureList(page);
+
+    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await page.waitForTimeout(500);
+
+    const headers = await page.locator('table thead th').allTextContents();
+    expect(headers).toEqual([
+      'Key', 'Summary', 'Jira Status', 'Execution State', 'Progress',
+      'Preparation', 'Epics', 'Total issues', 'Attention', 'Components', 'Version'
+    ]);
+
+    const availableRow = page.locator('table tbody tr', { hasText: 'TEST1-284' });
+    await expect(availableRow).toContainText('Not Started');
+    await expect(availableRow).toContainText('0/3');
+    await expect(availableRow).toContainText('0%');
+
+    const oldPayloadRow = page.locator('table tbody tr', { hasText: 'TEST1-1085' });
+    await expect(oldPayloadRow).toContainText('Execution Data Unavailable');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Execution State filter narrows Board/List to a single lane', async ({ page }) => {
+    await openFeatureList(page);
+
+    await page.getByRole('button', { name: 'All Execution States' }).click();
+    await page.locator('label', { hasText: 'Complete' }).locator('input[type="checkbox"]').check();
+    await page.waitForTimeout(500);
+
+    // All three columns remain visible (a stable board layout); only Complete has items.
+    await expect(page.locator('h3')).toHaveCount(3);
+    await expect(page.locator('h3', { hasText: 'Observed Work Done' })).toBeVisible();
+    await expect(page.getByText('TEST1-1045')).toBeVisible();
+    await expect(page.getByText('TEST1-1131')).toHaveCount(0);
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Blockers-only attention filter narrows Board results', async ({ page }) => {
+    await openFeatureList(page);
+
+    // TEST1-1131 (in-progress) carries a blocker in the fixture; unrelated features don't.
+    await page.locator('label', { hasText: 'Blockers only' }).locator('input[type="checkbox"]').check();
+    await page.waitForTimeout(500);
+
+    await expect(page.getByText('TEST1-1131')).toBeVisible();
+    await expect(page.getByText(/TEST1-15\b/)).toHaveCount(0);
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('clicking a card opens the execution drawer without navigating away, and Escape closes it', async ({ page }) => {
+    await openFeatureList(page);
+
+    await page.getByRole('button', { name: 'Open details for TEST1-1131' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('TEST1-1131');
+    await expect(page).toHaveURL(/#\/releases\/execute/);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('backdrop click closes the drawer and restores focus to the triggering card', async ({ page }) => {
+    await openFeatureList(page);
+
+    const trigger = page.getByRole('button', { name: 'Open details for TEST1-1131' });
+    await trigger.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    // Backdrop is the fixed, aria-hidden overlay rendered behind the dialog.
+    await page.locator('[aria-hidden="true"].fixed.inset-0').click({ position: { x: 5, y: 5 } });
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Tab wraps focus within the open drawer', async ({ page }) => {
+    await openFeatureList(page);
+
+    await page.getByRole('button', { name: 'Open details for TEST1-1131' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    // Focus opens inside the dialog (the first focusable element); Shift+Tab from
+    // there must wrap to the last focusable element, never escape to the Board behind it.
+    const isFocusInDialog = () => dialog.evaluate(el => el.contains(document.activeElement));
+    expect(await isFocusInDialog()).toBe(true);
+    await page.keyboard.press('Shift+Tab');
+    expect(await isFocusInDialog()).toBe(true);
+
+    expect(page.errors).toHaveLength(0);
+  });
+});
+
+/**
  * Release Plan
  *
  * Forward-looking version plan (OSAC-4396/OSAC-4399/OSAC-4394), served as a

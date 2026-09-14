@@ -1,18 +1,48 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
-defineProps({
-  text: { type: String, required: true }
+const props = defineProps({
+  text: { type: String, required: true },
+  // Opt-in: unrelated consumers (e.g. AIReviewSection) keep click/touch/keyboard-only.
+  hoverable: { type: Boolean, default: false }
 })
 
 const TOOLTIP_W = 256 // w-64
 const GAP = 8
+const HOVER_CLOSE_DELAY = 150
 
 const open = ref(false)
 const el = ref(null)
 const tooltipStyle = ref({})
 const vPos = ref('above')
 const arrowLeft = ref('50%')
+let hoverCloseTimer = null
+
+function computePosition() {
+  if (!el.value) return
+  const rect = el.value.getBoundingClientRect()
+  const centerX = rect.left + rect.width / 2
+
+  // Vertical: prefer above, fall back to below
+  const above = rect.top > 100
+  vPos.value = above ? 'above' : 'below'
+
+  // Horizontal: center on icon, but clamp to viewport
+  let left = centerX - TOOLTIP_W / 2
+  left = Math.max(GAP, Math.min(left, window.innerWidth - TOOLTIP_W - GAP))
+
+  // Arrow tracks the icon center relative to the tooltip left edge
+  arrowLeft.value = Math.max(12, Math.min(centerX - left, TOOLTIP_W - 12)) + 'px'
+
+  tooltipStyle.value = {
+    position: 'fixed',
+    left: left + 'px',
+    top: above ? (rect.top - GAP) + 'px' : (rect.bottom + GAP) + 'px',
+    transform: above ? 'translateY(-100%)' : 'none',
+    width: TOOLTIP_W + 'px',
+    zIndex: 9999
+  }
+}
 
 function toggle(e) {
   e.stopPropagation()
@@ -20,31 +50,29 @@ function toggle(e) {
     open.value = false
     return
   }
-  if (el.value) {
-    const rect = el.value.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
-
-    // Vertical: prefer above, fall back to below
-    const above = rect.top > 100
-    vPos.value = above ? 'above' : 'below'
-
-    // Horizontal: center on icon, but clamp to viewport
-    let left = centerX - TOOLTIP_W / 2
-    left = Math.max(GAP, Math.min(left, window.innerWidth - TOOLTIP_W - GAP))
-
-    // Arrow tracks the icon center relative to the tooltip left edge
-    arrowLeft.value = Math.max(12, Math.min(centerX - left, TOOLTIP_W - 12)) + 'px'
-
-    tooltipStyle.value = {
-      position: 'fixed',
-      left: left + 'px',
-      top: above ? (rect.top - GAP) + 'px' : (rect.bottom + GAP) + 'px',
-      transform: above ? 'translateY(-100%)' : 'none',
-      width: TOOLTIP_W + 'px',
-      zIndex: 9999
-    }
-  }
+  computePosition()
   open.value = true
+}
+
+function cancelHoverClose() {
+  if (hoverCloseTimer) {
+    clearTimeout(hoverCloseTimer)
+    hoverCloseTimer = null
+  }
+}
+
+function handleMouseEnter() {
+  if (!props.hoverable) return
+  cancelHoverClose()
+  if (!open.value) computePosition()
+  open.value = true
+}
+
+// Delayed so moving the pointer from the icon onto the tooltip content doesn't close it.
+function handleMouseLeave() {
+  if (!props.hoverable) return
+  cancelHoverClose()
+  hoverCloseTimer = setTimeout(() => { open.value = false }, HOVER_CLOSE_DELAY)
 }
 
 function onClickOutside(e) {
@@ -54,13 +82,17 @@ function onClickOutside(e) {
 }
 
 onMounted(() => document.addEventListener('click', onClickOutside))
-onBeforeUnmount(() => document.removeEventListener('click', onClickOutside))
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onClickOutside)
+  cancelHoverClose()
+})
 </script>
 
 <template>
-  <span class="inline-flex" ref="el">
+  <span class="inline-flex" ref="el" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
     <button
       @click="toggle"
+      @keydown.escape.stop="open = false"
       class="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
       aria-label="More info"
     >
@@ -74,6 +106,8 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside))
           v-if="open"
           :style="tooltipStyle"
           class="px-3 py-2 text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg"
+          @mouseenter="handleMouseEnter"
+          @mouseleave="handleMouseLeave"
         >
           <!-- Arrow above tooltip (tooltip is below icon) -->
           <div v-if="vPos === 'below'" class="absolute bottom-full mb-px" :style="{ left: arrowLeft, transform: 'translateX(-50%)' }">

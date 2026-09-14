@@ -69,6 +69,64 @@ describe('syncAllFeatures', () => {
     const result = await syncAllFeatures(storage, vi.fn(), vi.fn())
     expect(result.status).toBe('skipped')
   })
+
+  it('drops a stored Epic no longer in the Jira snapshot on periodic sync', async () => {
+    const storage = makeStorage({
+      'releases/execution/features/X-1.json': {
+        key: 'X-1', summary: 'Old', status: 'New',
+        epics: [
+          { key: 'EP-A', summary: 'S', status: 'New', executionIssueCount: 2 },
+          { key: 'EP-B', summary: 'Unlinked', status: 'New', executionIssueCount: 0 }
+        ]
+      }
+    })
+
+    const mockJiraRequest = vi.fn()
+    const mockFetchAll = vi.fn()
+    mockFetchAll.mockResolvedValueOnce([{
+      key: 'X-1',
+      fields: {
+        summary: 'Old', status: { name: 'New', statusCategory: { name: 'To Do' } },
+        assignee: null, fixVersions: [], components: [], labels: [],
+        priority: { name: 'Normal' }, issuelinks: [], created: null, updated: null,
+        parent: null,
+        customfield_10001: null, customfield_10851: null, customfield_10814: null,
+        customfield_10712: null, customfield_10665: null, customfield_10023: null,
+        customfield_10469: null, customfield_10862: null, customfield_10836: null,
+        customfield_10838: null, customfield_10637: null, customfield_10864: null
+      },
+      renderedFields: {}
+    }])
+    // Epic discovery only re-confirms EP-A as still linked
+    mockFetchAll.mockResolvedValueOnce([{
+      key: 'EP-A',
+      fields: { summary: 'S', status: { name: 'New' }, parent: { key: 'X-1' }, customfield_10014: null }
+    }])
+
+    await syncAllFeatures(storage, mockJiraRequest, mockFetchAll)
+
+    const feature = storage._files['releases/execution/features/X-1.json']
+    expect(feature.epics.map(e => e.key)).toEqual(['EP-A'])
+  })
+
+  it('preserves stored Epics when Jira enrichment fails for a feature', async () => {
+    const storage = makeStorage({
+      'releases/execution/features/X-1.json': {
+        key: 'X-1', summary: 'Old', status: 'New',
+        epics: [{ key: 'EP-A', summary: 'S', status: 'New', executionIssueCount: 2 }]
+      }
+    })
+
+    const mockJiraRequest = vi.fn()
+    const mockFetchAll = vi.fn()
+    mockFetchAll.mockRejectedValueOnce(new Error('Jira timeout')) // main enrichment fails
+    mockFetchAll.mockResolvedValueOnce([]) // epics
+
+    await syncAllFeatures(storage, mockJiraRequest, mockFetchAll)
+
+    const feature = storage._files['releases/execution/features/X-1.json']
+    expect(feature.epics).toEqual([{ key: 'EP-A', summary: 'S', status: 'New', executionIssueCount: 2 }])
+  })
 })
 
 describe('discoverFromJira', () => {

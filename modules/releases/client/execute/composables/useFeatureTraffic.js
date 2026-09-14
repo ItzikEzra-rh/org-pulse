@@ -42,17 +42,35 @@ export function useFeatureDetail() {
   const loading = ref(false)
   const error = ref(null)
 
+  // Successful loads only — an error must not poison a retry with cached failure.
+  const cache = new Map()
+  let latestRequestId = 0
+
   async function loadFeature(key) {
-    loading.value = true
+    const requestId = ++latestRequestId
     error.value = null
+
+    if (cache.has(key)) {
+      feature.value = cache.get(key)
+      loading.value = false
+      return
+    }
+
+    // Clear immediately so an in-flight fetch for a new key never displays
+    // the previously selected feature's detail while loading.
+    feature.value = null
+    loading.value = true
 
     try {
       const data = await apiRequest(`/modules/releases/execution/features/${key}`)
+      if (requestId !== latestRequestId) return
+      cache.set(key, data)
       feature.value = data
     } catch (err) {
+      if (requestId !== latestRequestId) return
       error.value = err.message
     } finally {
-      loading.value = false
+      if (requestId === latestRequestId) loading.value = false
     }
   }
 

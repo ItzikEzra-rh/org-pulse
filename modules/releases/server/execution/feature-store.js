@@ -10,13 +10,15 @@ const DATA_PREFIX = 'releases/execution';
 
 let storeWriteInProgress = false;
 
-// Jira-owned fields — Jira always wins, preserve existing if jiraData is null
+// Jira-owned fields — Jira always wins, preserve existing if jiraData is null.
+// 'epics' is deliberately excluded: it is merged per-Epic in mergeEpics() below,
+// not wholesale-owned by either source.
 const JIRA_FIELDS = [
   'status', 'statusCategory', 'colorStatus', 'ownerStatusColor',
   'statusSummary', 'assignee', 'pm', 'labels', 'fixVersions',
   'targetVersions', 'components', 'priority', 'team', 'releaseType',
   'docsRequired', 'targetEnd', 'riceScore', 'riceStatus', 'isBlocked',
-  'linkedRfeKey', 'issueLinks', 'epics'
+  'linkedRfeKey', 'issueLinks'
 ];
 
 // Pipeline-owned fields — pipeline always wins
@@ -31,6 +33,64 @@ const PIPELINE_INDEX_FIELDS = [
 
 // AI-review-owned fields — preserved across pipeline/Jira merges
 const AI_REVIEW_FIELDS = ['aiReview'];
+
+function epicKeySet(epics) {
+  return new Set((epics || []).map(function(e) { return e.key; }));
+}
+
+// Key-set equality, ignoring order and per-Epic summary/status changes.
+function epicMembershipChanged(before, after) {
+  const beforeKeys = epicKeySet(before);
+  const afterKeys = epicKeySet(after);
+  if (beforeKeys.size !== afterKeys.size) return true;
+  for (const key of beforeKeys) {
+    if (!afterKeys.has(key)) return true;
+  }
+  return false;
+}
+
+// Same shape rebuildIndex() falls back to for a missing/legacy payload.
+// Returns a new object — never mutates the input metrics.
+function invalidateExecutionProgress(metrics) {
+  return Object.assign({}, metrics, {
+    executionIssueCount: null,
+    doneExecutionIssueCount: null,
+    executionState: null,
+    executionCoverage: 'insufficient-data',
+    executionCoverageReason: null
+  });
+}
+
+/**
+ * Merge producer-owned Epics against Jira's current Epic membership snapshot.
+ * A successful jiraEpics snapshot is authoritative for *membership* — an Epic
+ * absent from it is no longer linked and is dropped (an empty array drops all).
+ * For a key present in both, producer-owned fields (issues[], execution counts,
+ * provenance) are preserved and only Jira-owned summary/status is refreshed.
+ * A key Jira discovered that the producer doesn't know about yet is added sparse.
+ *
+ * @param {object[]|undefined} baseEpics - Producer-owned Epics (richer shape)
+ * @param {object[]} jiraEpics - Jira's current Epic snapshot (key/summary/status only)
+ * @returns {object[]}
+ */
+function mergeEpics(baseEpics, jiraEpics) {
+  const jiraByKey = new Map(jiraEpics.map(function(e) { return [e.key, e]; }));
+  const baseByKey = new Map((baseEpics || []).map(function(e) { return [e.key, e]; }));
+
+  const merged = [];
+  for (let i = 0; i < (baseEpics || []).length; i++) {
+    const epic = baseEpics[i];
+    const jiraEpic = jiraByKey.get(epic.key);
+    if (!jiraEpic) continue; // no longer in Jira's snapshot — drop
+    merged.push(Object.assign({}, epic, { summary: jiraEpic.summary, status: jiraEpic.status }));
+  }
+
+  for (let i = 0; i < jiraEpics.length; i++) {
+    if (!baseByKey.has(jiraEpics[i].key)) merged.push(jiraEpics[i]);
+  }
+
+  return merged;
+}
 
 /**
  * Merge data from existing store, pipeline ingest, and Jira enrichment.
@@ -79,6 +139,20 @@ function mergeFeatureData(existing, pipelineData, jiraData) {
     }
   }
   // If jiraData is null (enrichment failed/skipped), preserve existing Jira fields
+
+  // Epics: this cycle's pipeline Epics if present, else whatever was already stored.
+  const epicsBase = pipeline.epics !== undefined ? pipeline.epics : base.epics;
+  if (jiraData && jira.epics !== undefined) {
+    merged.epics = mergeEpics(epicsBase, jira.epics);
+
+    // epicsBase is the Epic set merged.metrics was computed over; if Jira's
+    // membership diverges from it, that aggregate is stale.
+    if (merged.metrics && epicMembershipChanged(epicsBase, merged.epics)) {
+      merged.metrics = invalidateExecutionProgress(merged.metrics);
+    }
+  } else if (epicsBase !== undefined) {
+    merged.epics = epicsBase;
+  }
 
   // created: Jira is source of truth (issue creation date)
   if (jira.created) {
@@ -199,6 +273,23 @@ async function rebuildIndex(storage) {
       issueCount: feature.metrics ? (feature.metrics.totalIssues || 0) : 0,
       blockerCount: feature.metrics ? (feature.metrics.blockerCount || 0) : 0,
       health: feature.metrics ? (feature.metrics.health || null) : null,
+      // Execution/preparation fields (pipeline-owned, nested under detail metrics).
+      // Missing on an older/incompatible payload renders as unavailable — never
+      // fabricate "empty" — while an explicit null or 0 from the producer passes through as-is.
+      executionIssueCount: feature.metrics && feature.metrics.executionIssueCount !== undefined
+        ? feature.metrics.executionIssueCount : null,
+      doneExecutionIssueCount: feature.metrics && feature.metrics.doneExecutionIssueCount !== undefined
+        ? feature.metrics.doneExecutionIssueCount : null,
+      executionState: feature.metrics && feature.metrics.executionState !== undefined
+        ? feature.metrics.executionState : null,
+      executionCoverage: feature.metrics && feature.metrics.executionCoverage !== undefined
+        ? feature.metrics.executionCoverage : 'insufficient-data',
+      preparationReadiness: feature.metrics && feature.metrics.preparationReadiness !== undefined
+        ? feature.metrics.preparationReadiness : 'unknown',
+      // Explains a non-'available' executionCoverage; missing on an older
+      // payload renders as unavailable in the UI, never a guessed reason.
+      executionCoverageReason: feature.metrics && feature.metrics.executionCoverageReason !== undefined
+        ? feature.metrics.executionCoverageReason : null,
       // Timestamps
       lastUpdated: feature.updated || null,
       // Pipeline-index-only fields
@@ -236,6 +327,7 @@ async function rebuildIndex(storage) {
 
 module.exports = {
   mergeFeatureData,
+  mergeEpics,
   writeFeatures,
   rebuildIndex,
   DATA_PREFIX,

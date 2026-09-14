@@ -26,7 +26,13 @@
       "architect": null,
       "parentKey": null,
       "colorStatus": "Green",
-      "ownerStatusColor": "Green"
+      "ownerStatusColor": "Green",
+      "executionIssueCount": 0,
+      "doneExecutionIssueCount": 0,
+      "executionState": "no-tracked-work",
+      "executionCoverage": "empty",
+      "preparationReadiness": "not-applicable",
+      "executionCoverageReason": "no-epics"
     },
     {
       "key": "TEST1-39",
@@ -1043,7 +1049,13 @@
       "architect": null,
       "parentKey": null,
       "colorStatus": "Yellow",
-      "ownerStatusColor": "Yellow"
+      "ownerStatusColor": "Yellow",
+      "executionIssueCount": 0,
+      "doneExecutionIssueCount": 0,
+      "executionState": "no-tracked-work",
+      "executionCoverage": "empty",
+      "preparationReadiness": "not-applicable",
+      "executionCoverageReason": "preparation-only"
     },
     {
       "key": "TEST1-158",
@@ -1929,7 +1941,13 @@
       "architect": null,
       "parentKey": null,
       "colorStatus": "Green",
-      "ownerStatusColor": "Green"
+      "ownerStatusColor": "Green",
+      "executionIssueCount": 3,
+      "doneExecutionIssueCount": 0,
+      "executionState": "not-started",
+      "executionCoverage": "available",
+      "preparationReadiness": "unknown",
+      "executionCoverageReason": null
     },
     {
       "key": "TEST1-289",
@@ -3660,7 +3678,13 @@
       "architect": null,
       "parentKey": null,
       "colorStatus": null,
-      "ownerStatusColor": null
+      "ownerStatusColor": null,
+      "executionIssueCount": null,
+      "doneExecutionIssueCount": null,
+      "executionState": null,
+      "executionCoverage": "insufficient-data",
+      "preparationReadiness": "not-applicable",
+      "executionCoverageReason": "epics-without-issue-detail"
     },
     {
       "key": "TEST1-577",
@@ -5995,7 +6019,13 @@
       "architect": null,
       "parentKey": null,
       "colorStatus": "Green",
-      "ownerStatusColor": "Green"
+      "ownerStatusColor": "Green",
+      "executionIssueCount": 9,
+      "doneExecutionIssueCount": 9,
+      "executionState": "complete",
+      "executionCoverage": "available",
+      "preparationReadiness": "ready",
+      "executionCoverageReason": null
     },
     {
       "key": "TEST1-1047",
@@ -6718,7 +6748,13 @@
       "architect": null,
       "parentKey": null,
       "colorStatus": null,
-      "ownerStatusColor": null
+      "ownerStatusColor": null,
+      "executionIssueCount": 10,
+      "doneExecutionIssueCount": 7,
+      "executionState": "in-progress",
+      "executionCoverage": "available",
+      "preparationReadiness": "pending",
+      "executionCoverageReason": null
     },
     {
       "key": "TEST1-1132",
@@ -7171,7 +7207,9 @@
       "statusCategory": "To Do",
       "priority": "Major",
       "assignee": "Arik Hadas",
-      "fixVersions": ["2.20"],
+      "fixVersions": [
+        "2.20"
+      ],
       "labels": [
         "3.4-candidate",
         "GPU-as-a-Service",
@@ -7191,7 +7229,13 @@
       "ownerStatusColor": "Yellow",
       "aiReview": {
         "recommendation": "approve",
-        "scores": { "feasibility": 2, "testability": 1, "scope": 2, "architecture": 2, "total": 7 },
+        "scores": {
+          "feasibility": 2,
+          "testability": 1,
+          "scope": 2,
+          "architecture": 2,
+          "total": 7
+        },
         "humanReviewStatus": "approved",
         "needsAttention": false,
         "reviewedAt": "2026-04-19T01:30:35Z",
@@ -7234,8 +7278,12 @@
       "statusCategory": "To Do",
       "priority": "Major",
       "assignee": "Priya Nair",
-      "fixVersions": ["2.21"],
-      "labels": ["3.5-candidate"],
+      "fixVersions": [
+        "2.21"
+      ],
+      "labels": [
+        "3.5-candidate"
+      ],
       "completionPct": 0,
       "epicCount": 0,
       "issueCount": 0,
@@ -7268,8 +7316,12 @@
       "statusCategory": "To Do",
       "priority": "Major",
       "assignee": "Priya Nair",
-      "fixVersions": ["2.21"],
-      "labels": ["3.5-candidate"],
+      "fixVersions": [
+        "2.21"
+      ],
+      "labels": [
+        "3.5-candidate"
+      ],
       "completionPct": 0,
       "epicCount": 0,
       "issueCount": 0,
@@ -7302,7 +7354,9 @@
       "statusCategory": "To Do",
       "priority": "Critical",
       "assignee": "Jen Albertson",
-      "fixVersions": ["2.21"],
+      "fixVersions": [
+        "2.21"
+      ],
       "labels": [
         "3.5-candidate",
         "llm-d",
@@ -7322,7 +7376,13 @@
       "ownerStatusColor": null,
       "aiReview": {
         "recommendation": "approve",
-        "scores": { "feasibility": 2, "testability": 2, "scope": 1, "architecture": 2, "total": 7 },
+        "scores": {
+          "feasibility": 2,
+          "testability": 2,
+          "scope": 1,
+          "architecture": 2,
+          "total": 7
+        },
         "humanReviewStatus": "awaiting-review",
         "needsAttention": false,
         "reviewedAt": "2026-04-19T01:30:35Z",
@@ -7367,8 +7427,12 @@
       "statusCategory": "To Do",
       "priority": "Major",
       "assignee": "Merit Kelley",
-      "fixVersions": ["2.21"],
-      "labels": ["3.5-candidate"],
+      "fixVersions": [
+        "2.21"
+      ],
+      "labels": [
+        "3.5-candidate"
+      ],
       "completionPct": 0,
       "epicCount": 0,
       "issueCount": 0,
@@ -7383,7 +7447,13 @@
       "ownerStatusColor": "Yellow",
       "aiReview": {
         "recommendation": "revise",
-        "scores": { "feasibility": 1, "testability": 1, "scope": 1, "architecture": 1, "total": 4 },
+        "scores": {
+          "feasibility": 1,
+          "testability": 1,
+          "scope": 1,
+          "architecture": 1,
+          "total": 4
+        },
         "humanReviewStatus": "needs-review",
         "needsAttention": true,
         "reviewedAt": "2026-04-19T01:30:35Z",
@@ -7418,7 +7488,13 @@
       "ownerStatusColor": "Yellow",
       "aiReview": {
         "recommendation": "reject",
-        "scores": { "feasibility": 0, "testability": 1, "scope": 0, "architecture": 1, "total": 2 },
+        "scores": {
+          "feasibility": 0,
+          "testability": 1,
+          "scope": 0,
+          "architecture": 1,
+          "total": 2
+        },
         "humanReviewStatus": "needs-review",
         "needsAttention": true,
         "reviewedAt": "2026-04-19T01:30:35Z",
@@ -7464,8 +7540,12 @@
       "statusCategory": "To Do",
       "priority": "Major",
       "assignee": "Kerry Reed",
-      "fixVersions": ["2.21"],
-      "labels": ["3.5-candidate"],
+      "fixVersions": [
+        "2.21"
+      ],
+      "labels": [
+        "3.5-candidate"
+      ],
       "completionPct": 0,
       "epicCount": 0,
       "issueCount": 0,
@@ -7480,7 +7560,13 @@
       "ownerStatusColor": "Yellow",
       "aiReview": {
         "recommendation": "approve",
-        "scores": { "feasibility": 2, "testability": 2, "scope": 2, "architecture": 2, "total": 8 },
+        "scores": {
+          "feasibility": 2,
+          "testability": 2,
+          "scope": 2,
+          "architecture": 2,
+          "total": 8
+        },
         "humanReviewStatus": "awaiting-review",
         "needsAttention": false,
         "reviewedAt": "2026-04-19T01:30:35Z",

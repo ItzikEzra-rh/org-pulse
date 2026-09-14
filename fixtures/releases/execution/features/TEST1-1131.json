@@ -104,7 +104,8 @@
           "storyPoints": 8,
           "created": "2026-01-19T08:07:16.387+0000",
           "updated": "2026-03-09T09:18:12.446+0000",
-          "resolutionDate": "2026-03-09T09:18:12.401+0000"
+          "resolutionDate": "2026-03-09T09:18:12.401+0000",
+          "isPreparation": false
         },
         {
           "key": "RHOAIENG-52164",
@@ -122,7 +123,8 @@
           "storyPoints": 5,
           "created": "2026-03-06T12:26:28.826+0000",
           "updated": "2026-04-08T08:30:17.626+0000",
-          "resolutionDate": "2026-04-08T08:17:16.947+0000"
+          "resolutionDate": "2026-04-08T08:17:16.947+0000",
+          "isPreparation": false
         },
         {
           "key": "RHOAIENG-52166",
@@ -140,7 +142,8 @@
           "storyPoints": 5,
           "created": "2026-03-06T13:23:53.111+0000",
           "updated": "2026-04-08T08:30:13.068+0000",
-          "resolutionDate": "2026-04-08T08:17:22.895+0000"
+          "resolutionDate": "2026-04-08T08:17:22.895+0000",
+          "isPreparation": false
         },
         {
           "key": "RHOAIENG-52167",
@@ -158,7 +161,8 @@
           "storyPoints": 5,
           "created": "2026-03-06T13:26:28.069+0000",
           "updated": "2026-04-08T08:30:08.247+0000",
-          "resolutionDate": "2026-04-08T08:17:28.519+0000"
+          "resolutionDate": "2026-04-08T08:17:28.519+0000",
+          "isPreparation": false
         },
         {
           "key": "RHOAIENG-57101",
@@ -174,9 +178,12 @@
           "storyPoints": 5,
           "created": "2026-04-08T08:16:17.021+0000",
           "updated": "2026-04-08T08:30:23.323+0000",
-          "resolutionDate": "2026-04-08T08:17:10.457+0000"
+          "resolutionDate": "2026-04-08T08:17:10.457+0000",
+          "isPreparation": false
         }
-      ]
+      ],
+      "executionIssueCount": 5,
+      "doneExecutionIssueCount": 5
     },
     {
       "key": "TEST2-52454",
@@ -210,7 +217,8 @@
           "storyPoints": 3,
           "created": "2026-03-10T11:26:47.533+0000",
           "updated": "2026-03-26T20:22:37.975+0000",
-          "resolutionDate": null
+          "resolutionDate": null,
+          "isPreparation": false
         },
         {
           "key": "RHOAIENG-52456",
@@ -228,9 +236,12 @@
           "storyPoints": 5,
           "created": "2026-03-10T11:27:28.587+0000",
           "updated": "2026-03-24T19:37:06.035+0000",
-          "resolutionDate": null
+          "resolutionDate": null,
+          "isPreparation": false
         }
-      ]
+      ],
+      "executionIssueCount": 2,
+      "doneExecutionIssueCount": 0
     },
     {
       "key": "TEST2-52472",
@@ -264,7 +275,8 @@
           "storyPoints": 2,
           "created": "2026-04-01T05:37:16.566+0000",
           "updated": "2026-04-02T13:15:06.349+0000",
-          "resolutionDate": "2026-04-02T13:15:06.329+0000"
+          "resolutionDate": "2026-04-02T13:15:06.329+0000",
+          "isPreparation": false
         },
         {
           "key": "RHOAIENG-56206",
@@ -282,9 +294,12 @@
           "storyPoints": 3,
           "created": "2026-04-01T06:16:27.499+0000",
           "updated": "2026-04-01T06:23:41.538+0000",
-          "resolutionDate": null
+          "resolutionDate": null,
+          "isPreparation": false
         }
-      ]
+      ],
+      "executionIssueCount": 2,
+      "doneExecutionIssueCount": 1
     },
     {
       "key": "TEST2-55765",
@@ -322,9 +337,12 @@
           "storyPoints": 5,
           "created": "2026-03-27T18:35:08.832+0000",
           "updated": "2026-04-09T08:18:40.862+0000",
-          "resolutionDate": "2026-04-09T08:18:40.823+0000"
+          "resolutionDate": "2026-04-09T08:18:40.823+0000",
+          "isPreparation": false
         }
-      ]
+      ],
+      "executionIssueCount": 1,
+      "doneExecutionIssueCount": 1
     }
   ],
   "metrics": {
@@ -401,7 +419,13 @@
         "storyPointsDone": 5,
         "health": "GREEN"
       }
-    ]
+    ],
+    "executionIssueCount": 10,
+    "doneExecutionIssueCount": 7,
+    "executionState": "in-progress",
+    "executionCoverage": "available",
+    "preparationReadiness": "pending",
+    "executionCoverageReason": null
   },
   "topology": {
     "repos": [

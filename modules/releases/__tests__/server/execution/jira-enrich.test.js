@@ -260,6 +260,21 @@ describe('enrichFeatures', () => {
     expect(result.size).toBe(0)
   })
 
+  it('leaves epics unset (not an empty array) when the epic-discovery batch fails', async () => {
+    const mockJiraRequest = vi.fn()
+    const mockFetchAll = vi.fn()
+
+    // Main enrichment succeeds
+    mockFetchAll.mockResolvedValueOnce([
+      makeJiraIssue('RHAISTRAT-1')
+    ])
+    // Epic discovery fails
+    mockFetchAll.mockRejectedValueOnce(new Error('Jira timeout'))
+
+    const result = await enrichFeatures(['RHAISTRAT-1'], mockJiraRequest, mockFetchAll)
+    expect(result.get('RHAISTRAT-1').epics).toBeUndefined()
+  })
+
   it('attaches epics from discovery', async () => {
     const mockJiraRequest = vi.fn()
     const mockFetchAll = vi.fn()
