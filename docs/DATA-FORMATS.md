@@ -1856,6 +1856,69 @@ Disconnected readiness reports tracking repository readiness scores for disconne
 
 ---
 
+## System Health — OSAC CI Daily Digest (`data/ci-digest-data.json`)
+
+Root-level (not module-namespaced) — delivered directly to the shared data-volume root by `org-pulse-data`'s `fetch-ci-digest.py`, which pulls the newest `ci-digest-data` workflow artifact from `osac-project/osac-test-infra`'s `ci-daily-digest.yml` workflow. `org-pulse` is a read-only consumer served via `GET /api/modules/system-health/ci-digest` — a pure `readFromStorage` passthrough, same pattern as the Releases module's release-plan routes. `digest` is the producer's payload, stored unmodified.
+
+```json
+{
+  "source": {
+    "repo": "osac-project/osac-test-infra",
+    "workflow": "ci-daily-digest.yml",
+    "runId": 34495310704,
+    "runUrl": "https://github.com/osac-project/osac-test-infra/actions/runs/34495310704",
+    "runConclusion": "success",
+    "artifactId": 10159505017,
+    "artifactCreatedAt": "2026-09-10T15:23:35Z"
+  },
+  "fetchedAt": "2026-09-10T15:24:02Z",
+  "digest": {
+    "periodic_24h": { "success": 42, "failure": 2, "success_rate": 0.9545 },
+    "periodic_72h": { "success": 103, "failure": 22, "success_rate": 0.824 },
+    "infra_24h": { "infra_total": 0, "test_total": 7, "unattributed_total": 0, "total_failures": 7, "infra_by_step": [] },
+    "infra_72h": { "infra_total": 44, "test_total": 49, "unattributed_total": 0, "total_failures": 93, "infra_by_step": [{ "step": "Teardown", "count": 10 }] },
+    "periodic_infra_24h": { "infra_total": 0, "test_total": 2, "unattributed_total": 0, "total_failures": 2, "infra_by_step": [] },
+    "periodic_infra_72h": { "infra_total": 0, "test_total": 22, "unattributed_total": 0, "total_failures": 22, "infra_by_step": [] },
+    "merge_time": {
+      "median_approval_to_merge_seconds": 16482, "median_approval_to_merge_display": "4h 34m 42s",
+      "avg_approval_to_merge_display": "29h 56m 14s", "approved_count": 40, "count": 121,
+      "median_queue_wait_seconds": 4309, "median_queue_wait_display": "1h 11m 49s",
+      "avg_queue_wait_display": "1h 7m 24s", "via_merge_queue_count": 59, "avg_retest_count": 10.5,
+      "by_repo": [{ "repo": "osac", "median_approval_to_merge_seconds": 18310, "median_approval_to_merge_display": "5h 5m 10s", "approved_count": 36, "count": 71, "median_queue_wait_seconds": 4309, "median_queue_wait_display": "1h 11m 49s", "via_merge_queue_count": 54 }]
+    },
+    "merge_time_24h": "... same shape as merge_time, over the last 24h ...",
+    "flake_rate": 0.0783,
+    "mttr": { "mttr_display": "1h 28m 12s", "num_recoveries": 159 },
+    "top_failing": { "workflow": "E2E CaaS Full Install", "failure": 12 },
+    "jobs_per_pr": {
+      "distinct_prs": 234, "total_jobs": 2718, "avg_jobs_per_pr": 11.62, "median_jobs_per_pr": 6.0,
+      "histogram": [{ "bucket": "1", "prs": 4, "success": 4, "cancelled": 0, "failure": 0 }],
+      "top_prs": [{ "repo": "osac", "pr": "#734", "jobs": 321 }],
+      "outcomes": [{ "outcome": "Success", "count": 2114 }, { "outcome": "Cancelled", "count": 373 }, { "outcome": "Failure", "count": 219 }]
+    },
+    "now": "2026-09-10 15:23 UTC"
+  }
+}
+```
+
+**`source` (provenance, added by the fetcher, not the producer):**
+- `runId` / `runUrl` / `runConclusion`: the GitHub Actions workflow run the artifact came from. **`runConclusion` may be `"failure"` even for a perfectly valid report** — e.g. a downstream Slack-post step failing after the report was already written and uploaded `if: always()`. Never use `runConclusion` as a proxy for report health; use `digest` field values (and the `now`/`fetchedAt` timestamps for freshness) instead.
+- `artifactId` / `artifactCreatedAt`: identify the specific workflow artifact consumed, for dedup on the next fetch.
+
+**`fetchedAt`** is when `org-pulse-data` ingested the artifact (ISO 8601). **`digest.now`** is when the producer generated the report, in its own display format (`"YYYY-MM-DD HH:MM UTC"`, not ISO) — this is the timestamp to show as "report generated at" and to base staleness on, since `fetchedAt` only proves ingestion happened, not that the report itself is recent. `org-pulse`'s CI Daily Digest view (`modules/system-health/client/views/CiDigestView.vue`) flags the report as stale once `digest.now` is more than 36 hours old (one missed daily run plus buffer).
+
+**Null semantics — `flake_rate` and `top_failing` are not interchangeable "no data" placeholders:**
+- `flake_rate: null` means there were **zero e2e successes at all** in the 7-day window (no denominator to compute a rate from) — genuinely unknown, not "0% flaky". A real 0% (some successes, none of them flaky) is reported as `0`, distinct from `null`.
+- `top_failing: null` means **no workflow had any failures** in the 24h window — a healthy signal, reported in the UI as `"None"`, never conflated with the "n/a"/"no data" wording used for `flake_rate: null` or a zero-run periodic window.
+- `mttr: null` means no e2e workflow recovered from a failure in the 7-day window (could be zero incidents, or zero recoveries yet) — rendered as "no recoveries yet".
+
+**Other shape notes:**
+- `periodic_24h.success_rate` / `periodic_72h.success_rate` should not be read directly when `success + failure === 0`: the producer returns `0` (not `null`) in that case, so consumers must compute `success + failure === 0 ? null : success_rate` themselves (mirrors `decisive_rate()` / `decisiveRate()` in the producer's own `post-ci-digest.py` and HTML template) rather than trusting a bare `0` as "0% success".
+- `merge_time.by_repo[]` / `merge_time_24h.by_repo[]` only include repos with at least one merged PR in that specific window — a repo present in the 7d list may be absent from the 24h list, and vice versa.
+- Reference implementation for content/section hierarchy: `monitoring/scripts/ci-digest-report-template.html` and `monitoring/scripts/post-ci-digest.py` in `osac-project/osac-test-infra`.
+
+---
+
 ## Catalyst Showcase Data — `data/catalyst-showcase/showcase-data.json`
 
 Synced from a Google Sheet via the catalyst-showcase module. Contains all showcase entries and strategy pillar definitions.

@@ -1,0 +1,435 @@
+{
+  "source": {
+    "repo": "osac-project/osac-test-infra",
+    "workflow": "ci-daily-digest.yml",
+    "runId": 34495310704,
+    "runUrl": "https://github.com/osac-project/osac-test-infra/actions/runs/34495310704",
+    "runConclusion": "success",
+    "artifactId": 10159505017,
+    "artifactCreatedAt": "2026-09-10T15:23:35Z"
+  },
+  "fetchedAt": "2026-09-10T15:24:02Z",
+  "digest": {
+    "periodic_24h": {
+      "success": 42,
+      "failure": 2,
+      "cancelled": 0,
+      "queued": 0,
+      "in_progress": 4,
+      "total": 48,
+      "failure_rate": 0.0455,
+      "success_rate": 0.9545,
+      "cache_oldest_at": "2026-08-17T22:05:24Z"
+    },
+    "periodic_72h": {
+      "success": 103,
+      "failure": 22,
+      "cancelled": 0,
+      "queued": 0,
+      "in_progress": 4,
+      "total": 129,
+      "failure_rate": 0.176,
+      "success_rate": 0.824,
+      "cache_oldest_at": "2026-08-17T22:05:24Z"
+    },
+    "infra_24h": {
+      "infra_by_step": [],
+      "infra_total": 0,
+      "test_total": 7,
+      "unattributed_total": 0,
+      "total_failures": 7
+    },
+    "infra_72h": {
+      "infra_by_step": [
+        {
+          "step": "Overlay tests from osac mono-repo",
+          "count": 10
+        },
+        {
+          "step": "Teardown",
+          "count": 10
+        },
+        {
+          "step": "Build and load component images",
+          "count": 3
+        },
+        {
+          "step": "Build test image",
+          "count": 1
+        }
+      ],
+      "infra_total": 44,
+      "test_total": 49,
+      "unattributed_total": 0,
+      "total_failures": 93
+    },
+    "periodic_infra_24h": {
+      "infra_by_step": [],
+      "infra_total": 0,
+      "test_total": 2,
+      "unattributed_total": 0,
+      "total_failures": 2
+    },
+    "periodic_infra_72h": {
+      "infra_by_step": [],
+      "infra_total": 0,
+      "test_total": 22,
+      "unattributed_total": 0,
+      "total_failures": 22
+    },
+    "merge_time": {
+      "avg_open_to_merge_seconds": 124975,
+      "avg_open_to_merge_display": "34h 42m 55s",
+      "median_open_to_merge_seconds": 19044,
+      "median_open_to_merge_display": "5h 17m 24s",
+      "avg_approval_to_merge_seconds": 107774,
+      "avg_approval_to_merge_display": "29h 56m 14s",
+      "median_approval_to_merge_seconds": 16482,
+      "median_approval_to_merge_display": "4h 34m 42s",
+      "avg_approval_to_queue_seconds": 110050,
+      "avg_approval_to_queue_display": "30h 34m 10s",
+      "median_approval_to_queue_seconds": 13568,
+      "median_approval_to_queue_display": "3h 46m 8s",
+      "avg_queue_wait_seconds": 4044,
+      "avg_queue_wait_display": "1h 7m 24s",
+      "median_queue_wait_seconds": 4309,
+      "median_queue_wait_display": "1h 11m 49s",
+      "via_merge_queue_count": 59,
+      "approved_count": 40,
+      "avg_retest_count": 10.5,
+      "count": 121,
+      "by_repo": [
+        {
+          "repo": "osac",
+          "avg_open_to_merge_seconds": 176278,
+          "avg_open_to_merge_display": "48h 57m 58s",
+          "median_open_to_merge_seconds": 74322,
+          "median_open_to_merge_display": "20h 38m 42s",
+          "avg_approval_to_merge_seconds": 118274,
+          "avg_approval_to_merge_display": "32h 51m 14s",
+          "median_approval_to_merge_seconds": 18310,
+          "median_approval_to_merge_display": "5h 5m 10s",
+          "avg_approval_to_queue_seconds": 122288,
+          "avg_approval_to_queue_display": "33h 58m 8s",
+          "median_approval_to_queue_seconds": 13928,
+          "median_approval_to_queue_display": "3h 52m 8s",
+          "avg_queue_wait_seconds": 4002,
+          "avg_queue_wait_display": "1h 6m 42s",
+          "median_queue_wait_seconds": 4309,
+          "median_queue_wait_display": "1h 11m 49s",
+          "via_merge_queue_count": 54,
+          "approved_count": 36,
+          "avg_retest_count": 11.4,
+          "count": 71
+        },
+        {
+          "repo": "osac-test-infra",
+          "avg_open_to_merge_seconds": 52125,
+          "avg_open_to_merge_display": "14h 28m 45s",
+          "median_open_to_merge_seconds": 2420,
+          "median_open_to_merge_display": "40m 20s",
+          "avg_approval_to_merge_seconds": 13276,
+          "avg_approval_to_merge_display": "3h 41m 16s",
+          "median_approval_to_merge_seconds": 9048,
+          "median_approval_to_merge_display": "2h 30m 48s",
+          "avg_approval_to_queue_seconds": 9090,
+          "avg_approval_to_queue_display": "2h 31m 30s",
+          "median_approval_to_queue_seconds": 4766,
+          "median_approval_to_queue_display": "1h 19m 26s",
+          "avg_queue_wait_seconds": 4497,
+          "avg_queue_wait_display": "1h 14m 57s",
+          "median_queue_wait_seconds": 4286,
+          "median_queue_wait_display": "1h 11m 26s",
+          "via_merge_queue_count": 5,
+          "approved_count": 4,
+          "avg_retest_count": 9.2,
+          "count": 50
+        }
+      ],
+      "approval_outliers": [
+        {
+          "repo": "osac",
+          "number": 669,
+          "title": "OSAC-1896: Add integration tests for external IdP login flow",
+          "approval_to_merge_seconds": 764072,
+          "approval_to_merge_display": "212h 14m 32s"
+        },
+        {
+          "repo": "osac",
+          "number": 404,
+          "title": "OSAC-3577, OSAC-3578, OSAC-3579: Complete label-based host selection implementation",
+          "approval_to_merge_seconds": 693356,
+          "approval_to_merge_display": "192h 35m 56s"
+        },
+        {
+          "repo": "osac",
+          "number": 684,
+          "title": "OSAC-4677: per-service enablement via global.services.* Helm values",
+          "approval_to_merge_seconds": 540125,
+          "approval_to_merge_display": "150h 2m 5s"
+        },
+        {
+          "repo": "osac",
+          "number": 736,
+          "title": " OSAC-4727: Store ComputeInstance and BareMetalInstance user data as secrets",
+          "approval_to_merge_seconds": 517765,
+          "approval_to_merge_display": "143h 49m 25s"
+        },
+        {
+          "repo": "osac",
+          "number": 575,
+          "title": "OSAC-3458: ssh key or userdata must be set while creating a BMI",
+          "approval_to_merge_seconds": 202333,
+          "approval_to_merge_display": "56h 12m 13s"
+        }
+      ]
+    },
+    "merge_time_24h": {
+      "avg_open_to_merge_seconds": 160364,
+      "avg_open_to_merge_display": "44h 32m 44s",
+      "median_open_to_merge_seconds": 36293,
+      "median_open_to_merge_display": "10h 4m 53s",
+      "avg_approval_to_merge_seconds": 170515,
+      "avg_approval_to_merge_display": "47h 21m 55s",
+      "median_approval_to_merge_seconds": 49092,
+      "median_approval_to_merge_display": "13h 38m 12s",
+      "avg_approval_to_queue_seconds": 166450,
+      "avg_approval_to_queue_display": "46h 14m 10s",
+      "median_approval_to_queue_seconds": 43905,
+      "median_approval_to_queue_display": "12h 11m 45s",
+      "avg_queue_wait_seconds": 4165,
+      "avg_queue_wait_display": "1h 9m 25s",
+      "median_queue_wait_seconds": 4719,
+      "median_queue_wait_display": "1h 18m 39s",
+      "via_merge_queue_count": 16,
+      "approved_count": 10,
+      "avg_retest_count": 13.1,
+      "count": 22,
+      "by_repo": [
+        {
+          "repo": "osac",
+          "avg_open_to_merge_seconds": 200603,
+          "avg_open_to_merge_display": "55h 43m 23s",
+          "median_open_to_merge_seconds": 98766,
+          "median_open_to_merge_display": "27h 26m 6s",
+          "avg_approval_to_merge_seconds": 210881,
+          "avg_approval_to_merge_display": "58h 34m 41s",
+          "median_approval_to_merge_seconds": 93798,
+          "median_approval_to_merge_display": "26h 3m 18s",
+          "avg_approval_to_queue_seconds": 206871,
+          "avg_approval_to_queue_display": "57h 27m 51s",
+          "median_approval_to_queue_seconds": 88501,
+          "median_approval_to_queue_display": "24h 35m 1s",
+          "avg_queue_wait_seconds": 4025,
+          "avg_queue_wait_display": "1h 7m 5s",
+          "median_queue_wait_seconds": 4770,
+          "median_queue_wait_display": "1h 19m 30s",
+          "via_merge_queue_count": 13,
+          "approved_count": 8,
+          "avg_retest_count": 12.6,
+          "count": 14
+        },
+        {
+          "repo": "osac-test-infra",
+          "avg_open_to_merge_seconds": 89944,
+          "avg_open_to_merge_display": "24h 59m 4s",
+          "median_open_to_merge_seconds": 8048,
+          "median_open_to_merge_display": "2h 14m 8s",
+          "avg_approval_to_merge_seconds": 9048,
+          "avg_approval_to_merge_display": "2h 30m 48s",
+          "median_approval_to_merge_seconds": 9048,
+          "median_approval_to_merge_display": "2h 30m 48s",
+          "avg_approval_to_queue_seconds": 4766,
+          "avg_approval_to_queue_display": "1h 19m 26s",
+          "median_approval_to_queue_seconds": 4766,
+          "median_approval_to_queue_display": "1h 19m 26s",
+          "avg_queue_wait_seconds": 4768,
+          "avg_queue_wait_display": "1h 19m 28s",
+          "median_queue_wait_seconds": 4286,
+          "median_queue_wait_display": "1h 11m 26s",
+          "via_merge_queue_count": 3,
+          "approved_count": 2,
+          "avg_retest_count": 14.0,
+          "count": 8
+        }
+      ],
+      "approval_outliers": [
+        {
+          "repo": "osac",
+          "number": 669,
+          "title": "OSAC-1896: Add integration tests for external IdP login flow",
+          "approval_to_merge_seconds": 764072,
+          "approval_to_merge_display": "212h 14m 32s"
+        },
+        {
+          "repo": "osac",
+          "number": 736,
+          "title": " OSAC-4727: Store ComputeInstance and BareMetalInstance user data as secrets",
+          "approval_to_merge_seconds": 517765,
+          "approval_to_merge_display": "143h 49m 25s"
+        },
+        {
+          "repo": "osac",
+          "number": 766,
+          "title": "OSAC-4918: Configure Codex status line",
+          "approval_to_merge_seconds": 172939,
+          "approval_to_merge_display": "48h 2m 19s"
+        }
+      ]
+    },
+    "flake_rate": 0.0783,
+    "mttr": {
+      "mttr_seconds": 5293,
+      "mttr_display": "1h 28m 12s",
+      "num_recoveries": 159
+    },
+    "top_failing": {
+      "workflow": "E2E CaaS Full Install",
+      "success": 162,
+      "failure": 12,
+      "cancelled": 22,
+      "total": 197,
+      "action_required": 1,
+      "success_rate": 0.931
+    },
+    "jobs_per_pr": {
+      "total_jobs": 2718,
+      "distinct_prs": 234,
+      "avg_jobs_per_pr": 11.62,
+      "median_jobs_per_pr": 6.0,
+      "max_jobs_per_pr": 321,
+      "histogram": [
+        {
+          "bucket": "1",
+          "prs": 4,
+          "success": 4,
+          "cancelled": 0,
+          "failure": 0
+        },
+        {
+          "bucket": "2",
+          "prs": 1,
+          "success": 2,
+          "cancelled": 0,
+          "failure": 0
+        },
+        {
+          "bucket": "3",
+          "prs": 42,
+          "success": 106,
+          "cancelled": 6,
+          "failure": 14
+        },
+        {
+          "bucket": "4",
+          "prs": 55,
+          "success": 215,
+          "cancelled": 0,
+          "failure": 5
+        },
+        {
+          "bucket": "5",
+          "prs": 1,
+          "success": 5,
+          "cancelled": 0,
+          "failure": 0
+        },
+        {
+          "bucket": "6-10",
+          "prs": 61,
+          "success": 387,
+          "cancelled": 21,
+          "failure": 43
+        },
+        {
+          "bucket": "11-20",
+          "prs": 39,
+          "success": 431,
+          "cancelled": 67,
+          "failure": 47
+        },
+        {
+          "bucket": "21-50",
+          "prs": 26,
+          "success": 538,
+          "cancelled": 156,
+          "failure": 64
+        },
+        {
+          "bucket": "51+",
+          "prs": 5,
+          "success": 426,
+          "cancelled": 123,
+          "failure": 46
+        }
+      ],
+      "top_prs": [
+        {
+          "repo": "osac",
+          "pr": "#734",
+          "jobs": 321
+        },
+        {
+          "repo": "osac-test-infra",
+          "pr": "#426",
+          "jobs": 78
+        },
+        {
+          "repo": "osac",
+          "pr": "#736",
+          "jobs": 76
+        },
+        {
+          "repo": "osac-test-infra",
+          "pr": "#473",
+          "jobs": 69
+        },
+        {
+          "repo": "osac",
+          "pr": "#738",
+          "jobs": 51
+        },
+        {
+          "repo": "osac",
+          "pr": "#762",
+          "jobs": 50
+        },
+        {
+          "repo": "osac",
+          "pr": "#754",
+          "jobs": 48
+        },
+        {
+          "repo": "osac",
+          "pr": "#821",
+          "jobs": 40
+        },
+        {
+          "repo": "osac",
+          "pr": "#791",
+          "jobs": 39
+        },
+        {
+          "repo": "osac",
+          "pr": "#835",
+          "jobs": 36
+        }
+      ],
+      "outcomes": [
+        {
+          "outcome": "Success",
+          "count": 2114
+        },
+        {
+          "outcome": "Cancelled",
+          "count": 373
+        },
+        {
+          "outcome": "Failure",
+          "count": 219
+        }
+      ]
+    },
+    "now": "2026-09-10 15:23 UTC"
+  }
+}

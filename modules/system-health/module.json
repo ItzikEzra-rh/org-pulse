@@ -10,6 +10,7 @@
     "entry": "./client/index.js",
     "navItems": [
       { "id": "operational-metrics", "label": "Operational Metrics", "icon": "activity", "default": true },
+      { "id": "ci-digest", "label": "CI Daily Digest", "icon": "git-branch" },
       { "id": "component-maturity", "label": "Component maturity", "icon": "layers", "separatorBefore": true, "disabled": true }
     ],
     "hiddenRoutes": {

@@ -1,5 +1,6 @@
 const express = require('express');
 const registerDisconnectedRoutes = require('./disconnected/routes');
+const registerCiDigestRoutes = require('./ci-digest/routes');
 const scheduler = require('./disconnected/scheduler');
 
 module.exports = function registerRoutes(router, context) {
@@ -21,6 +22,8 @@ module.exports = function registerRoutes(router, context) {
     scheduler
   });
   router.use('/disconnected', disconnectedRouter);
+
+  registerCiDigestRoutes(router, { storage, requireAuth, requireScope });
 
   if (context.registerRefresh) {
     context.registerRefresh('disconnected-readiness', {

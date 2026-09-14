@@ -385,3 +385,200 @@ test.describe('System Health Disconnected Readiness @system-health', () => {
     expect(page.errors).toHaveLength(0);
   });
 });
+
+/**
+ * CI Daily Digest
+ *
+ * Verify the OSAC CI Daily Digest view: sidebar navigation, a successful
+ * report render, the no-report-yet state, and error/retry handling. All
+ * scenarios mock the ci-digest API response directly (deterministic data,
+ * no live GitHub dependency), following the same page.route conventions
+ * used by the AI Impact integration tests.
+ */
+test.describe('CI Daily Digest @system-health', () => {
+  test.beforeEach(async ({ page }) => {
+    setupErrorTracking(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    logCapturedErrors(page, testInfo);
+  });
+
+  function makeEnvelope() {
+    return {
+      source: {
+        repo: 'osac-project/osac-test-infra',
+        workflow: 'ci-daily-digest.yml',
+        runId: 1,
+        runUrl: 'https://github.com/osac-project/osac-test-infra/actions/runs/1',
+        runConclusion: 'success',
+        artifactId: 1,
+        artifactCreatedAt: '2026-09-10T15:23:35Z'
+      },
+      fetchedAt: '2026-09-10T15:24:02Z',
+      digest: {
+        now: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+        periodic_24h: { success: 18, failure: 2, success_rate: 0.9 },
+        periodic_72h: { success: 50, failure: 10, success_rate: 0.8333 },
+        infra_24h: { infra_total: 3, test_total: 5, unattributed_total: 0, total_failures: 8, infra_by_step: [] },
+        infra_72h: {
+          infra_total: 10, test_total: 12, unattributed_total: 2, total_failures: 24,
+          infra_by_step: [{ step: 'Provision cluster', count: 6 }]
+        },
+        periodic_infra_24h: { infra_total: 0, test_total: 1, unattributed_total: 0, total_failures: 1, infra_by_step: [] },
+        periodic_infra_72h: { infra_total: 0, test_total: 3, unattributed_total: 0, total_failures: 3, infra_by_step: [] },
+        merge_time: {
+          median_approval_to_merge_display: '3h 0m 0s', avg_approval_to_merge_display: '5h 0m 0s',
+          approved_count: 20, count: 30,
+          median_queue_wait_display: '45m 0s', avg_queue_wait_display: '50m 0s',
+          via_merge_queue_count: 12, avg_retest_count: 2.5,
+          by_repo: [
+            {
+              repo: 'digest-repo', median_approval_to_merge_seconds: 10800, median_approval_to_merge_display: '3h 0m 0s',
+              approved_count: 20, count: 30, median_queue_wait_seconds: 2700, median_queue_wait_display: '45m 0s',
+              via_merge_queue_count: 12
+            }
+          ]
+        },
+        merge_time_24h: {
+          median_approval_to_merge_display: '30m 0s', avg_approval_to_merge_display: '35m 0s',
+          approved_count: 5, count: 6,
+          median_queue_wait_display: '15m 0s', avg_queue_wait_display: '18m 0s',
+          via_merge_queue_count: 3, avg_retest_count: 1.2,
+          by_repo: [
+            {
+              repo: 'digest-repo', median_approval_to_merge_seconds: 1800, median_approval_to_merge_display: '30m 0s',
+              approved_count: 5, count: 6, median_queue_wait_seconds: 900, median_queue_wait_display: '15m 0s',
+              via_merge_queue_count: 3
+            }
+          ]
+        },
+        flake_rate: 0.05,
+        mttr: { mttr_display: '2h 10m 0s', num_recoveries: 42 },
+        top_failing: { workflow: 'E2E Widget Install', failure: 9 },
+        jobs_per_pr: {
+          distinct_prs: 50, total_jobs: 300, avg_jobs_per_pr: 6.0, median_jobs_per_pr: 5,
+          histogram: [{ bucket: '1', prs: 10, success: 10, cancelled: 0, failure: 0 }],
+          top_prs: [{ repo: 'digest-repo', pr: '#99', jobs: 40 }],
+          outcomes: [{ outcome: 'Success', count: 250 }, { outcome: 'Failure', count: 50 }]
+        }
+      }
+    };
+  }
+
+  test('is reachable via sidebar navigation', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const moduleHeader = page.locator('aside nav button').filter({ hasText: 'System Health' }).first();
+    await moduleHeader.click();
+    await page.waitForTimeout(500);
+
+    const viewLink = page.locator('aside nav button').filter({ hasText: 'CI Daily Digest' }).first();
+    await expect(viewLink).toBeVisible();
+    await viewLink.click();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(page.url()).toMatch(/system-health\/ci-digest/);
+
+    const mainContentVisible = await mainContentIsVisible(page);
+    expect(mainContentVisible).toBe(true);
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('renders headline tiles and section content from a successful API response', async ({ page }) => {
+    await page.route('**/api/modules/system-health/ci-digest', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(makeEnvelope()) });
+    });
+
+    await page.goto('/#/system-health/ci-digest');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    // Headline tiles
+    await expect(page.getByText('90.0%')).toBeVisible();
+    await expect(page.getByText('83.3%')).toBeVisible();
+    // These headline values are echoed again in the "Other stability signals" section below
+    await expect(page.getByText('5.0%').first()).toBeVisible();
+    await expect(page.getByText('2h 10m 0s').first()).toBeVisible();
+    await expect(page.getByText('42 recoveries')).toBeVisible();
+
+    // Infra failure donuts render real counts and the top infra step, not just a canvas
+    await expect(page.getByText('8 failures')).toBeVisible();
+    await expect(page.getByText('24 failures')).toBeVisible();
+    await expect(page.getByText(/Provision cluster \(6\)/)).toBeVisible();
+    await expect(page.getByText('Unattributed').first()).toBeVisible();
+
+    // Time to Merge / Time in Merge Queue descriptions reflect the mocked windows
+    await expect(page.getByText(/7d median 3h 0m 0s.*20\/30 with an approval/)).toBeVisible();
+    await expect(page.getByText(/7d median 45m 0s.*12\/30 via queue/)).toBeVisible();
+
+    // Top PRs table renders real row content
+    await expect(page.getByText('digest-repo')).toBeVisible();
+    await expect(page.getByRole('link', { name: '#99' })).toBeVisible();
+
+    // Other stability signals
+    await expect(page.getByText('E2E Widget Install (9 failures)')).toBeVisible();
+    await expect(page.getByText('2.5')).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('shows the no-report state when no digest has been delivered yet', async ({ page }) => {
+    await page.route('**/api/modules/system-health/ci-digest', async route => {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'No CI digest report available yet' })
+      });
+    });
+
+    await page.goto('/#/system-health/ci-digest');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByRole('heading', { name: 'No CI digest report available' })).toBeVisible();
+    await expect(page.getByText('Waiting for org-pulse-data to deliver the first OSAC CI daily digest report.')).toBeVisible();
+    await expect(page.getByText('Failed to load CI digest')).toHaveCount(0);
+
+    // The browser logs the mocked 404 resource load itself; only assert no uncaught app errors
+    expect(page.errors.filter(e => e.type === 'pageerror')).toHaveLength(0);
+  });
+
+  test('shows a generic error and recovers on manual retry', async ({ page }) => {
+    let callCount = 0;
+    await page.route('**/api/modules/system-health/ci-digest', async route => {
+      callCount += 1;
+      if (callCount === 1) {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'CI digest service unavailable' })
+        });
+      } else {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(makeEnvelope()) });
+      }
+    });
+
+    await page.goto('/#/system-health/ci-digest');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByRole('heading', { name: 'Failed to load CI digest' })).toBeVisible();
+    await expect(page.getByText('CI digest service unavailable')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByRole('heading', { name: 'Failed to load CI digest' })).toHaveCount(0);
+    await expect(page.getByText('90.0%')).toBeVisible();
+    expect(callCount).toBe(2);
+
+    // The browser logs the mocked 500 resource load itself; only assert no uncaught app errors
+    expect(page.errors.filter(e => e.type === 'pageerror')).toHaveLength(0);
+  });
+});
