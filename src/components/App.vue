@@ -122,7 +122,6 @@
         <!-- Landing Page -->
         <LandingPage
           v-if="activeModule === 'home'"
-          :modules="gitStaticModules"
           :built-in-manifests="builtInManifests"
           :is-admin="authIsAdmin"
           @navigate="handleSidebarNavigate"

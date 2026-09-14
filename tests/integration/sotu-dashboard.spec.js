@@ -3,20 +3,20 @@ const { DEFAULT_PAGE_WAIT_TIME } = require('./constants');
 const { setupErrorTracking, logCapturedErrors, pageHasContent, pageLoadComplete, mainContentIsVisible } = require('./helpers');
 
 /**
- * Integration tests for the SOTU Widget Dashboard
+ * Integration tests for the Org Pulse Home page
  *
  * These tests verify:
- * - Dashboard loads with default widgets on first visit
+ * - Hero and Explore Org Pulse navigation cards render above the widget dashboard
+ * - Home is a single continuous page (no tabs / Browse Modules toggle)
  * - Widget picker opens and lists available widgets
  * - Widgets render content from their respective modules
- * - Browse Modules toggle works
- * - Navigation from widgets works
+ * - Navigation from Explore Org Pulse cards works
  *
  * Tag: @sotu-dashboard
  * Usage: npx playwright test --grep @sotu-dashboard
  */
 
-test.describe('SOTU Widget Dashboard @sotu-dashboard', () => {
+test.describe('Org Pulse Home @sotu-dashboard', () => {
   test.beforeEach(async ({ page }) => {
     setupErrorTracking(page);
   });
@@ -25,21 +25,47 @@ test.describe('SOTU Widget Dashboard @sotu-dashboard', () => {
     logCapturedErrors(page, testInfo);
   });
 
-  test('should show Feature Planning Board widget by default on first visit', async ({ page }) => {
+  test('should show the Hero, Explore Org Pulse cards, and Your Overview on one page', async ({ page }) => {
     await page.goto('/', { waitUntil: 'networkidle' });
     await pageLoadComplete(page);
 
-    // Should show the dashboard header
-    await expect(page.locator('text=Your personalized overview')).toBeVisible({ timeout: DEFAULT_PAGE_WAIT_TIME });
+    // Hero
+    await expect(page.getByText('WHAT IS ORG PULSE?')).toBeVisible({ timeout: DEFAULT_PAGE_WAIT_TIME });
+    await expect(page.getByRole('heading', { name: 'Red Hat Ecosystem Engineering | Edge' })).toBeVisible();
+    await expect(page.getByText('Org Pulse brings together people, delivery, engineering, and AI signals to give Edge teams a shared view of what\'s happening and where attention is needed.')).toBeVisible();
 
-    // Feature Planning Board is a default widget, so it should already be present
-    await expect(page.locator('h3:has-text("Feature Planning Board")')).toBeVisible({ timeout: DEFAULT_PAGE_WAIT_TIME });
+    // Explore Org Pulse cards
+    await expect(page.getByText('EXPLORE ORG PULSE')).toBeVisible();
+    const exploreSection = page.locator('section', { has: page.getByText('EXPLORE ORG PULSE') });
+    await expect(exploreSection.getByRole('button', { name: /People & Teams/ })).toBeVisible();
+    await expect(exploreSection.getByRole('button', { name: /Releases/ })).toBeVisible();
+    await expect(exploreSection.getByRole('button', { name: /AI Impact/ })).toBeVisible();
+    await expect(exploreSection.getByRole('button', { name: /System Health/ })).toBeVisible();
 
-    // Should show Add Widgets button
+    // Your Overview + widget dashboard, on the same page as the Hero/cards above
+    await expect(page.getByText('YOUR OVERVIEW')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add Widgets' }).first()).toBeVisible();
+    await expect(page.locator('h3:has-text("Feature Planning Board")')).toBeVisible({ timeout: DEFAULT_PAGE_WAIT_TIME });
+  });
 
-    // Should show Browse Modules button
-    await expect(page.locator('text=Browse Modules')).toBeVisible();
+  test('should no longer have a Browse Modules / Back to Overview toggle', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+    await pageLoadComplete(page);
+
+    await expect(page.getByText('Browse Modules')).toHaveCount(0);
+    await expect(page.getByText('Back to Overview')).toHaveCount(0);
+  });
+
+  test('should navigate to a module when an enabled Explore Org Pulse card is clicked', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+    await pageLoadComplete(page);
+
+    const exploreSection = page.locator('section', { has: page.getByText('EXPLORE ORG PULSE') });
+    const peopleCard = exploreSection.getByRole('button', { name: /People & Teams/ });
+    await expect(peopleCard).toBeEnabled({ timeout: DEFAULT_PAGE_WAIT_TIME });
+    await peopleCard.click();
+
+    await expect(page).toHaveURL(/team-tracker/);
   });
 
   test('should open widget picker when Add Widgets is clicked', async ({ page }) => {
@@ -47,30 +73,10 @@ test.describe('SOTU Widget Dashboard @sotu-dashboard', () => {
     await pageLoadComplete(page);
 
     // Click Add Widgets
-    await page.locator('text=Add Widgets').first().click();
+    await page.getByRole('button', { name: 'Add Widgets' }).first().click();
 
     // Widget picker panel should appear
     await expect(page.locator('h2:has-text("Add Widgets")')).toBeVisible({ timeout: DEFAULT_PAGE_WAIT_TIME });
-  });
-
-  test('should toggle to Browse Modules grid', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'networkidle' });
-    await pageLoadComplete(page);
-
-    // Click Browse Modules
-    await page.locator('text=Browse Modules').first().click();
-
-    // Module grid should appear
-    await expect(page.locator('text=Built-in Modules')).toBeVisible({ timeout: DEFAULT_PAGE_WAIT_TIME });
-
-    // Back button should be visible
-    await expect(page.locator('text=Back to Overview')).toBeVisible();
-
-    // Click back
-    await page.locator('text=Back to Overview').click();
-
-    // Dashboard should return
-    await expect(page.locator('text=Your personalized overview')).toBeVisible({ timeout: DEFAULT_PAGE_WAIT_TIME });
   });
 
   test('should render widget content without JS errors', async ({ page }) => {
@@ -88,7 +94,7 @@ test.describe('SOTU Widget Dashboard @sotu-dashboard', () => {
     await pageLoadComplete(page);
 
     // Open widget picker
-    await page.locator('text=Add Widgets').first().click();
+    await page.getByRole('button', { name: 'Add Widgets' }).first().click();
     await expect(page.locator('h2:has-text("Add Widgets")')).toBeVisible({ timeout: DEFAULT_PAGE_WAIT_TIME });
 
     // Find and toggle the Release Schedule widget
