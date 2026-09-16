@@ -194,9 +194,7 @@ const roleHeadcount = computed(() => {
   if (!summary.value) return {}
   return {
     byRole: summary.value.roleBreakdown || {},
-    byRoleFte: summary.value.roleFteBreakdown || {},
-    totalHeadcount: summary.value.headcount || 0,
-    totalFte: Object.values(summary.value.roleFteBreakdown || {}).reduce((a, b) => a + b, 0)
+    totalHeadcount: summary.value.headcount || 0
   }
 })
 

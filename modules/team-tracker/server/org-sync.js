@@ -161,36 +161,21 @@ function parseComponentRows(columnPairs, rows, components) {
 }
 
 /**
- * Calculate headcount and FTE from people data.
- * A person on multiple teams counts as 1/N FTE per team.
- * teamCount comes from scrumTeams array length or miroTeam field.
+ * Calculate headcount by role from people data.
  */
 function calculateHeadcountByRole(people) {
   const headcount = {};
-  const fte = {};
   let totalHeadcount = 0;
-  let totalFte = 0;
 
   for (const person of people) {
-    const role = person.engineeringSpeciality || person.specialty || 'Unspecified';
+    const role = person.engineeringSpeciality || person.specialty || person.title || 'Unspecified';
     headcount[role] = (headcount[role] || 0) + 1;
     totalHeadcount++;
-
-    // FTE: if a person is on multiple teams, they're split
-    const miroTeam = person._teamGrouping || person.miroTeam || '';
-    const teamCount = miroTeam ? miroTeam.split(',').filter(t => t.trim()).length : 1;
-    const personFte = 1 / Math.max(teamCount, 1);
-    fte[role] = (fte[role] || 0) + personFte;
-    totalFte += personFte;
   }
 
   return {
     byRole: headcount,
-    byRoleFte: Object.fromEntries(
-      Object.entries(fte).map(([k, v]) => [k, Math.round(v * 100) / 100])
-    ),
-    totalHeadcount,
-    totalFte: Math.round(totalFte * 100) / 100
+    totalHeadcount
   };
 }
 

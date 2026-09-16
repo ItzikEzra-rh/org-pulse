@@ -27,9 +27,7 @@ const sampleMembers = [
 
 const sampleHeadcount = {
   totalHeadcount: 10,
-  totalFte: 9.5,
-  byRole: { 'Software Engineer': 7, 'QE': 3 },
-  byRoleFte: { 'Software Engineer': 6.5, 'QE': 3.0 }
+  byRole: { 'Software Engineer': 7, 'QE': 3 }
 }
 
 describe('TeamOverviewTab', () => {
@@ -65,5 +63,43 @@ describe('TeamOverviewTab', () => {
     })
     expect(wrapper.text()).toContain('1 member')
     expect(wrapper.text()).not.toContain('1 members')
+  })
+
+  it('does not render FTE anywhere in the headcount widget', () => {
+    const wrapper = mount(TeamOverviewTab, {
+      props: { headcount: sampleHeadcount, members: sampleMembers }
+    })
+    expect(wrapper.text()).not.toContain('FTE')
+  })
+
+  it('selecting a role in the headcount chart filters the members table', async () => {
+    const wrapper = mount(TeamOverviewTab, {
+      props: { headcount: sampleHeadcount, members: sampleMembers }
+    })
+    expect(wrapper.text()).toContain('Alice Smith')
+    expect(wrapper.text()).toContain('Bob Jones')
+
+    const roleRows = wrapper.findAll('[data-testid="headcount-role-row"]')
+    const qeRow = roleRows.find(r => r.text().includes('QE'))
+    await qeRow.trigger('click')
+
+    expect(wrapper.text()).toContain('Bob Jones')
+    expect(wrapper.text()).not.toContain('Alice Smith')
+  })
+
+  it('"All roles" clears a role selection made from the headcount chart', async () => {
+    const wrapper = mount(TeamOverviewTab, {
+      props: { headcount: sampleHeadcount, members: sampleMembers }
+    })
+    const roleRows = wrapper.findAll('[data-testid="headcount-role-row"]')
+    const qeRow = roleRows.find(r => r.text().includes('QE'))
+    await qeRow.trigger('click')
+    expect(wrapper.text()).not.toContain('Alice Smith')
+
+    const allRolesButton = wrapper.findAll('button').find(b => b.text() === 'All roles')
+    await allRolesButton.trigger('click')
+
+    expect(wrapper.text()).toContain('Alice Smith')
+    expect(wrapper.text()).toContain('Bob Jones')
   })
 })

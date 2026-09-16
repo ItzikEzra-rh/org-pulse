@@ -416,13 +416,9 @@ module.exports = function registerOrgTeamsRoutes(router, context) {
       });
 
       const roleHeadcount = {};
-      const roleFte = {};
       for (const person of orgPeople) {
-        const role = person.engineeringSpeciality || person.specialty || 'Unspecified';
+        const role = person.engineeringSpeciality || person.specialty || person.title || 'Unspecified';
         roleHeadcount[role] = (roleHeadcount[role] || 0) + 1;
-        const miroTeam = person._teamGrouping || person.miroTeam || '';
-        const teamCount = miroTeam ? miroTeam.split(',').filter(t => t.trim()).length : 1;
-        roleFte[role] = (roleFte[role] || 0) + (1 / Math.max(teamCount, 1));
       }
 
       const orgComponents = [...new Set(teams.flatMap(t => t.components || []))];
@@ -442,7 +438,6 @@ module.exports = function registerOrgTeamsRoutes(router, context) {
         teamCount: teams.length,
         headcount: new Set(orgPeople.map(p => p.name)).size,
         roleBreakdown: roleHeadcount,
-        roleFteBreakdown: Object.fromEntries(Object.entries(roleFte).map(([k, v]) => [k, Math.round(v * 100) / 100])),
         components: orgComponents,
         totalRfeCount,
         rfeByComponent,

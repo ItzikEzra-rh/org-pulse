@@ -13,6 +13,26 @@
       />
     </div>
 
+    <!-- Region / Country filters -->
+    <div v-if="uniqueRegions.length > 1 || uniqueCountries.length > 1" class="mb-4 flex flex-wrap gap-2">
+      <select
+        v-if="uniqueRegions.length > 1"
+        v-model="regionFilter"
+        class="h-[34px] border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+      >
+        <option :value="null">All Regions</option>
+        <option v-for="region in uniqueRegions" :key="region" :value="region">{{ region }}</option>
+      </select>
+      <select
+        v-if="uniqueCountries.length > 1"
+        v-model="countryFilter"
+        class="h-[34px] border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+      >
+        <option :value="null">All Countries</option>
+        <option v-for="country in uniqueCountries" :key="country" :value="country">{{ country }}</option>
+      </select>
+    </div>
+
     <!-- Custom field filters -->
     <div v-for="field in visibleFilterFields" :key="field.id" class="mb-3 flex flex-wrap gap-2">
       <button
@@ -51,9 +71,9 @@
     <!-- Filter by role -->
     <div v-if="uniqueRoles.length > 1" class="mb-4 flex flex-wrap gap-2">
       <button
-        @click="roleFilter = null"
+        @click="emit('update:roleFilter', null)"
         class="px-3 py-1 rounded text-xs font-medium transition-colors border"
-        :class="!roleFilter
+        :class="!props.roleFilter
           ? 'bg-primary-600 text-white border-primary-600'
           : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
       >
@@ -62,9 +82,9 @@
       <button
         v-for="role in uniqueRoles"
         :key="role"
-        @click="roleFilter = role"
+        @click="emit('update:roleFilter', role)"
         class="px-3 py-1 rounded text-xs font-medium transition-colors border"
-        :class="roleFilter === role
+        :class="props.roleFilter === role
           ? 'bg-primary-600 text-white border-primary-600'
           : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
       >
@@ -158,10 +178,11 @@ const props = defineProps({
   teamKey: { type: String, default: null },
   fieldDefinitions: { type: Array, default: () => [] },
   canManage: { type: Boolean, default: false },
-  teamId: { type: String, default: null }
+  teamId: { type: String, default: null },
+  roleFilter: { type: String, default: null }
 })
 
-const emit = defineEmits(['remove-member'])
+const emit = defineEmits(['remove-member', 'update:roleFilter'])
 
 const showMoreFilters = ref(false)
 
@@ -271,7 +292,8 @@ function getLocation(member) {
 
 const sortKey = ref('name')
 const sortAsc = ref(true)
-const roleFilter = ref(null)
+const regionFilter = ref(null)
+const countryFilter = ref(null)
 const searchQuery = ref('')
 
 function toggleSort(key) {
@@ -292,6 +314,23 @@ const uniqueRoles = computed(() => {
   return [...roles].sort()
 })
 
+const uniqueRegions = computed(() => {
+  const regions = new Set()
+  for (const m of props.members) {
+    const region = m.geo || m.region
+    if (region) regions.add(region)
+  }
+  return [...regions].sort()
+})
+
+const uniqueCountries = computed(() => {
+  const countries = new Set()
+  for (const m of props.members) {
+    if (m.country) countries.add(m.country)
+  }
+  return [...countries].sort()
+})
+
 const sortedMembers = computed(() => {
   let result = memberFieldFiltered.value
   if (searchQuery.value) {
@@ -305,8 +344,14 @@ const sortedMembers = computed(() => {
       getLocation(m).toLowerCase().includes(q)
     )
   }
-  if (roleFilter.value) {
-    result = result.filter(m => getSpecialty(m) === roleFilter.value)
+  if (props.roleFilter) {
+    result = result.filter(m => getSpecialty(m) === props.roleFilter)
+  }
+  if (regionFilter.value) {
+    result = result.filter(m => (m.geo || m.region) === regionFilter.value)
+  }
+  if (countryFilter.value) {
+    result = result.filter(m => m.country === countryFilter.value)
   }
 
   return [...result].sort((a, b) => {

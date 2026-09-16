@@ -3,7 +3,7 @@
     <!-- Headcount Chart -->
     <div v-if="headcount" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
       <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Headcount by Role</h3>
-      <HeadcountChart :headcount="headcount" />
+      <HeadcountChart :headcount="headcount" :selectedRole="roleFilter" @select-role="roleFilter = $event" />
     </div>
 
     <!-- Team Members -->
@@ -30,6 +30,8 @@
         :fieldDefinitions="fieldDefinitions"
         :canManage="canManage"
         :teamId="teamId"
+        :roleFilter="roleFilter"
+        @update:roleFilter="roleFilter = $event"
         @remove-member="handleRemoveMember"
       />
     </div>
@@ -68,6 +70,7 @@ const emit = defineEmits(['updated'])
 const { unassignMember } = useTeams()
 
 const showAddModal = ref(false)
+const roleFilter = ref(null)
 
 const memberUids = computed(() => new Set(props.members.map(m => m.uid)))
 

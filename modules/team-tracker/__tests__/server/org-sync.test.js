@@ -219,13 +219,20 @@ describe('runSync', () => {
 })
 
 describe('calculateHeadcountByRole', () => {
-  it('uses _teamGrouping before miroTeam for FTE calculation', () => {
+  it('prefers engineeringSpeciality, then specialty, then title', () => {
     const people = [
-      { _teamGrouping: 'A, B', miroTeam: 'C', engineeringSpeciality: 'SWE' },
+      { engineeringSpeciality: 'SWE' },
+      { specialty: 'QE' },
+      { title: 'Principal Software Engineer' },
     ]
     const result = calculateHeadcountByRole(people)
-    // _teamGrouping has 2 teams, so FTE should be 0.5
-    expect(result.totalFte).toBe(0.5)
-    expect(result.totalHeadcount).toBe(1)
+    expect(result.byRole).toEqual({ SWE: 1, QE: 1, 'Principal Software Engineer': 1 })
+    expect(result.totalHeadcount).toBe(3)
+  })
+
+  it('falls back to Unspecified when no role field is set', () => {
+    const people = [{ name: 'No Role' }]
+    const result = calculateHeadcountByRole(people)
+    expect(result.byRole).toEqual({ Unspecified: 1 })
   })
 })
