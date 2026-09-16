@@ -985,6 +985,11 @@ Derived summary index of all features in the unified feature store. Rebuilt auto
       "executionState": "in-progress",
       "executionCoverage": "available",
       "executionCoverageReason": null,
+      "effectiveExecutionIssueCount": 20,
+      "effectiveDoneExecutionIssueCount": 15,
+      "effectiveExecutionState": "in-progress",
+      "effectiveExecutionCoverage": "available",
+      "effectiveExecutionCoverageReason": null,
       "preparationReadiness": "ready",
       "lastUpdated": "2026-06-01T00:00:00Z",
       "targetVersions": ["3.5"],
@@ -1020,6 +1025,16 @@ Derived summary index of all features in the unified feature store. Rebuilt auto
   `executionCoverage` is `"available"`. Consumers must render a missing or unrecognized value the
   same as `"data-unavailable"` (a generic "Execution data unavailable" caption) — never infer a
   reason from `epicCount`/`issueCount`.
+- `effectiveExecutionIssueCount`, `effectiveDoneExecutionIssueCount`, `effectiveExecutionState`,
+  `effectiveExecutionCoverage`, and `effectiveExecutionCoverageReason` mirror the raw fields above,
+  crediting an Epic classified `completedViaStatus` (closed, any resolution) as fully done regardless
+  of its children. Consumers should treat `effective*` as the primary source for progress
+  bars/lanes/summaries, falling back to the same-named raw field only when the `effective*` key is
+  **absent from the object entirely** (a payload predating this contract) — an explicit `null` on a
+  present key is real insufficient-data, not a signal to fall back. A `complete`
+  `effectiveExecutionState` renders as 100% from the state itself, never from a `done/total`
+  division — a completedViaStatus Epic with zero children legitimately has
+  `effectiveExecutionIssueCount: 0` / `effectiveDoneExecutionIssueCount: 0` at `"complete"`.
 
 ## Releases — Execution Feature Detail (`data/releases/execution/features/{KEY}.json`)
 
@@ -1064,6 +1079,8 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
       "key": "OSAC-456",
       "summary": "Epic: Autoscaling backend",
       "status": "In Progress",
+      "statusCategory": "In Progress",
+      "updated": "2026-05-20T09:00:00.000+0000",
       "fixVersions": ["0.4"],
       "fixVersionSource": "direct",
       "components": ["Model Serving"],
@@ -1075,6 +1092,7 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
       "progress": 40,
       "executionIssueCount": 9,
       "doneExecutionIssueCount": 4,
+      "completedViaStatus": false,
       "issues": [
         { "key": "OSAC-457", "summary": "Wire up autoscaler webhook", "statusCategory": "Done", "isPreparation": false }
       ]
@@ -1095,6 +1113,11 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
     "executionState": "in-progress",
     "executionCoverage": "available",
     "executionCoverageReason": null,
+    "effectiveExecutionIssueCount": 20,
+    "effectiveDoneExecutionIssueCount": 15,
+    "effectiveExecutionState": "in-progress",
+    "effectiveExecutionCoverage": "available",
+    "effectiveExecutionCoverageReason": null,
     "preparationReadiness": "ready"
   },
   "topology": { "repos": [] },
@@ -1126,6 +1149,11 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
   from — `completionPct`/`health`/`colorStatus`/`ownerStatusColor`, which remain in the payload for
   compatibility but are not rendered in Feature List. See `metrics`/`epicMetrics` above for the
   pre-existing SP-weighted legacy rollup these do not replace.
+- `metrics.effectiveExecutionIssueCount`, `metrics.effectiveDoneExecutionIssueCount`,
+  `metrics.effectiveExecutionState`, `metrics.effectiveExecutionCoverage`, and
+  `metrics.effectiveExecutionCoverageReason` are the Epic status-completion override of the raw
+  fields above — see the Execution Index notes for the full semantics. org-pulse-data computes and
+  owns this classification entirely; org-pulse consumes it read-only.
 
 **Epic provenance (`fixVersionSource`, `componentSource`):** each is one of `direct`, `via-parent-feature`, or `unknown`. Consumers must render `via-parent-feature` values with a visible inherited-source indicator — never as if they were the epic's own — and render `unknown` as an explicit unknown state rather than leaving it blank. `parentFeatureKey`, `issueCount`, `blockerCount`, and `pct`/`progress` (`progress` is an alias of `pct`) make each epic object self-contained for consumers, without a separate lookup into `metrics.epicMetrics[]`.
 
@@ -1140,6 +1168,20 @@ legacy, preparation-inclusive `issueCount`/`pct`/`progress` on the same epic. Ea
 matched the project's configured preparation-title rule; `false` by default when no rule is
 configured. Consumers must read both directly rather than reconstructing them from issue
 title/label/type.
+
+**Epic status-completion classification (`completedViaStatus`):** boolean, `true` when the Epic's
+`statusCategory` is `Done` (closed, regardless of resolution) — it is then credited as fully done
+for `effective*` progress regardless of its actual children's status. Derived by org-pulse-data
+purely from `statusCategory`; org-pulse consumes it read-only and must not re-derive it from
+`status` itself.
+
+When a merge cycle has no Jira snapshot to arbitrate an Epic (enrichment failed or skipped),
+org-pulse compares the Epic's `updated` timestamp against the stored copy: an incoming Epic
+older than the one already stored keeps the stored `statusCategory`/`completedViaStatus`/`updated`
+rather than reviving a classification a more recent Jira observation already invalidated. Raw issue
+data (`issues[]`, execution counts) always comes from the incoming Epic regardless. Epics without a
+comparable `updated` on both sides always accept the incoming classification, as before this check
+existed.
 
 **Optional — AI Review (`aiReview`):**
 
@@ -1997,3 +2039,4 @@ The `fixtures/` directory provides read-only demo data used when `DEMO_MODE=true
 2. **Test mocks should match production format.** Unit test mock data (e.g., in `__tests__/`) should use the production JSON structure as the primary format. Add separate backward-compatibility tests if old formats need to be supported.
 3. **Verify against real data.** If you're unsure of a data file's format, check the actual files in `data/` (symlinked from the main worktree) rather than trusting fixtures alone.
 4. **Generate pipeline-derived fields from the producer, not by hand.** The `executionIssueCount`/`doneExecutionIssueCount`/`executionState`/`executionCoverage`/`executionCoverageReason`/`preparationReadiness` values on a representative subset of `fixtures/releases/execution/` features (e.g. `TEST1-1131`, `TEST1-1045`, `TEST1-284`, `TEST1-15`, `TEST1-157`, `TEST1-576`) were produced by calling org-pulse-data's `compute_metrics`/`compute_preparation_readiness` with controlled epic/issue inputs, one per execution/coverage/readiness state. The same six fixtures' `epics[].issues[].isPreparation` and per-epic `executionIssueCount`/`doneExecutionIssueCount` were produced by calling `is_preparation_issue()` against each fixture's own issue titles. The remaining fixtures intentionally omit these fields to keep covering the pre-contract/missing-metrics case.
+5. **Epic status-completion override fixtures.** `TEST1-9101`–`TEST1-9104` (OSAC-5234) were produced by calling org-pulse-data's `enrich_epics_with_provenance`/`compute_metrics`/`build_index_entry`/`build_detail_json` against hand-built Epic/issue inputs, one per scenario: `TEST1-9101` (zero-child completed-via-status Epic: raw `insufficient-data`, effective `complete`/0/0), `TEST1-9102` (completed-via-status Epic with open children, mixed with a normal Epic — weighted effective total across differently-sized Epics), `TEST1-9103` (a Won't Do-closed Epic with real open work credited complete alongside an already fully-done Epic), and `TEST1-9104` (a Duplicate-closed Epic with zero real progress credited fully complete). Trimmed to the same minimal field set as the other representative fixtures (no `aiReview`, no epic `fixVersionSource`/`componentSource`/`pct`/`progress` — unused by any consuming view).

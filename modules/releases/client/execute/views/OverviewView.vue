@@ -12,7 +12,16 @@ import {
   matchesStatus,
   componentDisplayLabel
 } from '../composables/useComponentStatusFilter'
-import { isValidProgressCount, executionUnavailableInfo, PROGRESS_SUPPORTING_TEXT } from '../utils/progress'
+import {
+  isValidProgressCount,
+  executionUnavailableInfo,
+  PROGRESS_SUPPORTING_TEXT,
+  effectiveExecutionState,
+  effectiveExecutionCoverage,
+  effectiveExecutionCoverageReason,
+  effectiveExecutionIssueCount,
+  effectiveDoneExecutionIssueCount
+} from '../utils/progress'
 import { preparationHelpText } from '../utils/readiness'
 
 const { features, fetchedAt, loading, error, loadFeatures } = useFeatureTraffic()
@@ -102,7 +111,8 @@ function handleOutsideClick(e) {
 // fallback, never a fabricated lane.
 const KNOWN_EXECUTION_STATES = new Set(['no-tracked-work', 'not-started', 'in-progress', 'complete'])
 function laneKey(f) {
-  return KNOWN_EXECUTION_STATES.has(f.executionState) ? f.executionState : 'unavailable'
+  const state = effectiveExecutionState(f)
+  return KNOWN_EXECUTION_STATES.has(state) ? state : 'unavailable'
 }
 
 const LANE_META = {
@@ -135,7 +145,7 @@ const LANE_META = {
   },
   complete: {
     title: 'Observed Work Done',
-    subtitle: 'All observed execution work is Done',
+    subtitle: 'All observed execution work is Done, or the Epic was credited complete via its Jira status',
     borderClass: 'border-emerald-300 dark:border-emerald-500/40',
     bgClass: 'bg-emerald-50 dark:bg-emerald-500/5',
     headerBg: 'bg-emerald-100 dark:bg-emerald-500/10',
@@ -169,17 +179,20 @@ function readinessMeta(r, featureKey) {
   return { ...READINESS_META[key], help: preparationHelpText(key, featureKey) }
 }
 
-// Presentation only — executionState/executionCoverage/executionCoverageReason are
-// producer-owned and never recomputed; invalid counts also fall through to unavailable.
+// `complete` is state-driven 100%, not a done/total division — a
+// confirmed-complete Epic can have zero actual children (0/0).
 function executionSummary(f) {
-  if (f.executionCoverage === 'available') {
-    const total = f.executionIssueCount
-    const done = f.doneExecutionIssueCount
-    if (isValidProgressCount(total) && isValidProgressCount(done) && total > 0 && done <= total) {
-      return { kind: 'available', pct: Math.round((done / total) * 100), done, total }
-    }
+  const coverage = effectiveExecutionCoverage(f)
+  const total = effectiveExecutionIssueCount(f)
+  const done = effectiveDoneExecutionIssueCount(f)
+  if (coverage === 'available' && effectiveExecutionState(f) === 'complete' &&
+      isValidProgressCount(total) && isValidProgressCount(done)) {
+    return { kind: 'available', pct: 100, done, total }
   }
-  const info = executionUnavailableInfo(f.executionCoverageReason)
+  if (coverage === 'available' && isValidProgressCount(total) && isValidProgressCount(done) && total > 0 && done <= total) {
+    return { kind: 'available', pct: Math.round((done / total) * 100), done, total }
+  }
+  const info = executionUnavailableInfo(effectiveExecutionCoverageReason(f))
   return { kind: 'unavailable', caption: info.caption, detail: info.detail }
 }
 

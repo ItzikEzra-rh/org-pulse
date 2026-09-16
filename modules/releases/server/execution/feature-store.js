@@ -34,6 +34,15 @@ const PIPELINE_INDEX_FIELDS = [
 // AI-review-owned fields — preserved across pipeline/Jira merges
 const AI_REVIEW_FIELDS = ['aiReview'];
 
+// Epic status-completion override fields under detail.metrics. See rebuildIndex().
+const EFFECTIVE_EXECUTION_FIELDS = [
+  'effectiveExecutionIssueCount',
+  'effectiveDoneExecutionIssueCount',
+  'effectiveExecutionState',
+  'effectiveExecutionCoverage',
+  'effectiveExecutionCoverageReason'
+];
+
 function epicKeySet(epics) {
   return new Set((epics || []).map(function(e) { return e.key; }));
 }
@@ -49,6 +58,19 @@ function epicMembershipChanged(before, after) {
   return false;
 }
 
+// True if any Epic present in both sets has a changed statusCategory — a
+// reopened Epic invalidates completedViaStatus even with membership unchanged.
+function epicClassificationChanged(before, after) {
+  const beforeByKey = new Map((before || []).map(function(e) { return [e.key, e]; }));
+  for (let i = 0; i < (after || []).length; i++) {
+    const epic = after[i];
+    const priorEpic = beforeByKey.get(epic.key);
+    if (!priorEpic) continue;
+    if (priorEpic.statusCategory !== epic.statusCategory) return true;
+  }
+  return false;
+}
+
 // Same shape rebuildIndex() falls back to for a missing/legacy payload.
 // Returns a new object — never mutates the input metrics.
 function invalidateExecutionProgress(metrics) {
@@ -57,8 +79,79 @@ function invalidateExecutionProgress(metrics) {
     doneExecutionIssueCount: null,
     executionState: null,
     executionCoverage: 'insufficient-data',
-    executionCoverageReason: null
+    executionCoverageReason: null,
+    effectiveExecutionIssueCount: null,
+    effectiveDoneExecutionIssueCount: null,
+    effectiveExecutionState: null,
+    effectiveExecutionCoverage: 'insufficient-data',
+    effectiveExecutionCoverageReason: null
   });
+}
+
+// Narrower than invalidateExecutionProgress: nulls only the effective fields, leaving
+// raw execution* untouched — for a classification-only change where membership is still valid.
+function invalidateEffectiveExecutionProgress(metrics) {
+  return Object.assign({}, metrics, {
+    effectiveExecutionIssueCount: null,
+    effectiveDoneExecutionIssueCount: null,
+    effectiveExecutionState: null,
+    effectiveExecutionCoverage: 'insufficient-data',
+    effectiveExecutionCoverageReason: null
+  });
+}
+
+// Resets completedViaStatus to false for Epics whose statusCategory changed (stale until the
+// next producer run); never fabricates the flag onto a sparse Jira-only Epic that never had it.
+function invalidateChangedEpicFlags(before, after) {
+  const beforeByKey = new Map((before || []).map(function(e) { return [e.key, e]; }));
+  return (after || []).map(function(epic) {
+    const priorEpic = beforeByKey.get(epic.key);
+    if (!priorEpic || priorEpic.statusCategory === epic.statusCategory) return epic;
+    if (!Object.prototype.hasOwnProperty.call(epic, 'completedViaStatus')) return epic;
+    return Object.assign({}, epic, { completedViaStatus: false });
+  });
+}
+
+// True when `stored.updated` is strictly newer than `incoming.updated`. Absent
+// or unparsable timestamps can't establish staleness, so they're not flagged.
+function isEpicStale(stored, incoming) {
+  const storedTime = stored.updated ? Date.parse(stored.updated) : NaN;
+  const incomingTime = incoming.updated ? Date.parse(incoming.updated) : NaN;
+  if (Number.isNaN(storedTime) || Number.isNaN(incomingTime)) return false;
+  return storedTime > incomingTime;
+}
+
+// With no Jira snapshot to arbitrate, pins a stale incoming Epic's statusCategory/`updated`/
+// completedViaStatus to the stored values; `changed` is true only on an actual contradiction.
+function reconcileEpicClassifications(storedEpics, incomingEpics) {
+  const storedByKey = new Map((storedEpics || []).map(function(e) { return [e.key, e]; }));
+  let changed = false;
+
+  const epics = (incomingEpics || []).map(function(epic) {
+    const stored = storedByKey.get(epic.key);
+    if (!stored || !isEpicStale(stored, epic)) return epic;
+
+    const reconciled = Object.assign({}, epic, { updated: stored.updated });
+    if (Object.prototype.hasOwnProperty.call(stored, 'statusCategory')) reconciled.statusCategory = stored.statusCategory;
+    // status is a display label paired with statusCategory — keep them consistent.
+    if (Object.prototype.hasOwnProperty.call(stored, 'status')) reconciled.status = stored.status;
+
+    // Prefer the stored flag; if absent, invalidate rather than trust a flag
+    // the producer computed against incoming's now-overridden classification.
+    const classificationChanged = reconciled.statusCategory !== epic.statusCategory;
+    if (Object.prototype.hasOwnProperty.call(stored, 'completedViaStatus')) {
+      reconciled.completedViaStatus = stored.completedViaStatus;
+    } else if (classificationChanged && Object.prototype.hasOwnProperty.call(reconciled, 'completedViaStatus')) {
+      reconciled.completedViaStatus = false;
+    }
+
+    if (classificationChanged || reconciled.completedViaStatus !== epic.completedViaStatus) {
+      changed = true;
+    }
+    return reconciled;
+  });
+
+  return { epics: epics, changed: changed };
 }
 
 /**
@@ -82,7 +175,11 @@ function mergeEpics(baseEpics, jiraEpics) {
     const epic = baseEpics[i];
     const jiraEpic = jiraByKey.get(epic.key);
     if (!jiraEpic) continue; // no longer in Jira's snapshot — drop
-    merged.push(Object.assign({}, epic, { summary: jiraEpic.summary, status: jiraEpic.status }));
+    const refreshed = Object.assign({}, epic, { summary: jiraEpic.summary, status: jiraEpic.status });
+    // Never overwrite with undefined — an older caller's snapshot must not erase a producer-known value.
+    if (jiraEpic.statusCategory !== undefined) refreshed.statusCategory = jiraEpic.statusCategory;
+    if (jiraEpic.updated !== undefined) refreshed.updated = jiraEpic.updated;
+    merged.push(refreshed);
   }
 
   for (let i = 0; i < jiraEpics.length; i++) {
@@ -143,15 +240,23 @@ function mergeFeatureData(existing, pipelineData, jiraData) {
   // Epics: this cycle's pipeline Epics if present, else whatever was already stored.
   const epicsBase = pipeline.epics !== undefined ? pipeline.epics : base.epics;
   if (jiraData && jira.epics !== undefined) {
-    merged.epics = mergeEpics(epicsBase, jira.epics);
+    merged.epics = invalidateChangedEpicFlags(epicsBase, mergeEpics(epicsBase, jira.epics));
 
-    // epicsBase is the Epic set merged.metrics was computed over; if Jira's
-    // membership diverges from it, that aggregate is stale.
+    // epicsBase is the Epic set merged.metrics was computed over: a membership change
+    // invalidates it wholesale; a classification-only change invalidates just the effective fields.
     if (merged.metrics && epicMembershipChanged(epicsBase, merged.epics)) {
       merged.metrics = invalidateExecutionProgress(merged.metrics);
+    } else if (merged.metrics && epicClassificationChanged(epicsBase, merged.epics)) {
+      merged.metrics = invalidateEffectiveExecutionProgress(merged.metrics);
     }
   } else if (epicsBase !== undefined) {
-    merged.epics = epicsBase;
+    // No Jira snapshot to arbitrate this cycle — reconcile against what's
+    // stored so a stale/replayed producer Epic can't undo a newer invalidation.
+    const reconciled = reconcileEpicClassifications(base.epics, epicsBase);
+    merged.epics = reconciled.epics;
+    if (merged.metrics && reconciled.changed) {
+      merged.metrics = invalidateEffectiveExecutionProgress(merged.metrics);
+    }
   }
 
   // created: Jira is source of truth (issue creation date)
@@ -314,6 +419,17 @@ async function rebuildIndex(storage) {
       } : null
     };
 
+    // Copied only when present so the client (progress.js effectiveOrRaw) can
+    // tell a legacy payload (key absent) from an invalidated value (key present, null).
+    if (feature.metrics) {
+      for (let j = 0; j < EFFECTIVE_EXECUTION_FIELDS.length; j++) {
+        const field = EFFECTIVE_EXECUTION_FIELDS[j];
+        if (Object.prototype.hasOwnProperty.call(feature.metrics, field)) {
+          indexEntry[field] = feature.metrics[field];
+        }
+      }
+    }
+
     features.push(indexEntry);
   }
 
@@ -328,6 +444,12 @@ async function rebuildIndex(storage) {
 module.exports = {
   mergeFeatureData,
   mergeEpics,
+  epicMembershipChanged,
+  epicClassificationChanged,
+  reconcileEpicClassifications,
+  invalidateExecutionProgress,
+  invalidateEffectiveExecutionProgress,
+  invalidateChangedEpicFlags,
   writeFeatures,
   rebuildIndex,
   DATA_PREFIX,

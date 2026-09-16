@@ -348,8 +348,10 @@ async function fetchSignOffDetails(keys, storage, jiraRequestFn, fetchAllJqlResu
  * @param {string[]} featureKeys - Feature issue keys
  * @param {Function} jiraRequestFn
  * @param {Function} fetchAllJqlResultsFn
- * @returns {Promise<{ epicMap: Map<string, Array<{ key: string, summary: string, status: string }>>, failedKeys: Set<string> }>}
+ * @returns {Promise<{ epicMap: Map<string, Array<{ key: string, summary: string, status: string, statusCategory: string|null, updated: string|null }>>, failedKeys: Set<string> }>}
  *   failedKeys marks keys whose batch failed — their absence from epicMap is unverified, not a confirmed empty snapshot.
+ *   statusCategory/updated are always present (null when absent); feature-store's mergeEpics()/
+ *   reconcileEpicClassifications() rely on this to detect classification changes and staleness.
  */
 async function fetchEpicsForFeatures(featureKeys, jiraRequestFn, fetchAllJqlResultsFn) {
   if (!featureKeys || featureKeys.length === 0) return { epicMap: new Map(), failedKeys: new Set() };
@@ -364,7 +366,7 @@ async function fetchEpicsForFeatures(featureKeys, jiraRequestFn, fetchAllJqlResu
     const batchKeys = batches[bi];
     const keyList = batchKeys.map(k => '"' + k + '"').join(', ');
     const jql = '("Epic Link" in (' + keyList + ') OR parent in (' + keyList + '))';
-    const fields = 'summary,status,parent,customfield_10014';
+    const fields = 'summary,status,parent,customfield_10014,updated';
 
     try {
       const children = await fetchAllJqlResultsFn(jql, fields);
@@ -384,7 +386,10 @@ async function fetchEpicsForFeatures(featureKeys, jiraRequestFn, fetchAllJqlResu
           epicMap.get(parentKey).push({
             key: child.key,
             summary: childFields.summary || '',
-            status: childFields.status ? childFields.status.name : ''
+            status: childFields.status ? childFields.status.name : '',
+            statusCategory: childFields.status && childFields.status.statusCategory
+              ? childFields.status.statusCategory.name : null,
+            updated: childFields.updated || null
           });
         }
       }

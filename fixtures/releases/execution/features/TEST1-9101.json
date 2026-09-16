@@ -1,0 +1,85 @@
+{
+  "key": "TEST1-9101",
+  "summary": "Feature with zero-child completed-via-status Epic",
+  "status": "Closed",
+  "statusCategory": "To Do",
+  "priority": "Normal",
+  "assignee": {
+    "displayName": "Priya Natarajan",
+    "accountId": "60011:aaaa1111-0000-4a11-8b11-000000000001"
+  },
+  "fixVersions": [],
+  "labels": [
+    "epic-completion"
+  ],
+  "components": [],
+  "created": "2026-02-01T09:00:00.000+0000",
+  "updated": "2026-05-01T10:00:00.000+0000",
+  "statusNotes": null,
+  "issueLinks": [],
+  "epics": [
+    {
+      "key": "TEST9-1001",
+      "parentKey": "TEST1-9101",
+      "summary": "Zero-child epic closed as Done",
+      "status": "Done",
+      "statusCategory": "Done",
+      "priority": "Normal",
+      "assignee": "Priya Natarajan",
+      "components": [],
+      "labels": [],
+      "created": "2026-01-01T00:00:00.000+0000",
+      "updated": "2026-06-01T00:00:00.000+0000",
+      "issues": [],
+      "executionIssueCount": null,
+      "doneExecutionIssueCount": null,
+      "completedViaStatus": true
+    }
+  ],
+  "metrics": {
+    "totalEpics": 1,
+    "totalIssues": 0,
+    "issuesByStatus": {},
+    "issuesByCategory": {
+      "Done": 0,
+      "In Progress": 0,
+      "To Do": 0
+    },
+    "totalStoryPoints": 0,
+    "storyPointsDone": 0,
+    "completionPct": 0,
+    "staleCount": 0,
+    "unassignedCount": 0,
+    "blockerCount": 0,
+    "health": "YELLOW",
+    "epicMetrics": [
+      {
+        "key": "TEST9-1001",
+        "summary": "Zero-child epic closed as Done",
+        "total": 0,
+        "done": 0,
+        "pct": 0
+      }
+    ],
+    "executionIssueCount": null,
+    "doneExecutionIssueCount": null,
+    "executionState": null,
+    "executionCoverage": "insufficient-data",
+    "preparationReadiness": "not-applicable",
+    "executionCoverageReason": "epics-without-issue-detail",
+    "effectiveExecutionIssueCount": 0,
+    "effectiveDoneExecutionIssueCount": 0,
+    "effectiveExecutionState": "complete",
+    "effectiveExecutionCoverage": "available",
+    "effectiveExecutionCoverageReason": null
+  },
+  "topology": {
+    "repos": []
+  },
+  "_sources": {
+    "pipeline": "2026-05-01T10:00:00.000+0000",
+    "jira": "2026-05-01T10:00:00.000+0000"
+  },
+  "colorStatus": "Green",
+  "ownerStatusColor": "Green"
+}

@@ -379,6 +379,47 @@ test.describe('Releases Feature List @releases', () => {
 
     expect(page.errors).toHaveLength(0);
   });
+
+  /**
+   * Covers zero-child, mixed-child, and closed-with-any-resolution Epics
+   * (fixtures TEST1-9101/9102/9103/9104).
+   */
+  test('effective execution fields override raw for the board/coverage progress display', async ({ page }) => {
+    await openFeatureList(page);
+    const search = page.getByLabel('Search');
+
+    // Zero-child completed-via-status Epic: must render 100%, not 0% or unavailable.
+    await search.fill('TEST1-9101');
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-9101', exact: true })).toBeVisible();
+    await expect(page.getByText('0/0')).toBeVisible();
+    await expect(page.getByText('100%')).toBeVisible();
+
+    // A Won't Do-closed Epic with no real progress is still credited complete,
+    // so the feature reads complete even though raw execution is in-progress.
+    await search.fill('TEST1-9103');
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-9103', exact: true })).toBeVisible();
+    await expect(page.getByText('5/5')).toBeVisible();
+
+    // A Duplicate-closed Epic with zero real progress is credited fully complete, regardless of resolution.
+    await search.fill('TEST1-9104');
+    await expect(page.getByRole('button', { name: 'Open details for TEST1-9104', exact: true })).toBeVisible();
+    await expect(page.getByText('2/2')).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('drawer shows "Completed via Epic status" for a completed-via-status Epic', async ({ page }) => {
+    await openFeatureList(page);
+    const search = page.getByLabel('Search');
+
+    await search.fill('TEST1-9102');
+    await page.getByRole('button', { name: 'Open details for TEST1-9102' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('Completed via Epic status', { exact: true })).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
 });
 
 /**

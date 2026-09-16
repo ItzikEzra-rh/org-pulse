@@ -425,4 +425,86 @@ describe('OverviewView (Feature List)', () => {
     expect(wrapper.find('[role="dialog"]').text()).toContain('EP-COMPLETE')
     expect(wrapper.find('[role="dialog"]').text()).not.toContain('EP-NS')
   })
+
+  describe('effective execution fields (Epic status-completion override)', () => {
+    async function mountFeatures(features) {
+      mockApiRequest.mockImplementation((url) => {
+        if (url.indexOf('/versions') !== -1) return Promise.resolve({ versions: [] })
+        return Promise.resolve({ features, fetchedAt: '2026-09-10T00:00:00Z', featureCount: features.length })
+      })
+      const wrapper = mount(OverviewView, { global: { provide: { moduleNav: mockNav() } } })
+      await flushPromises()
+      return wrapper
+    }
+
+    it('uses effective fields over raw for lane placement, landing an Epic-status-completed feature in Observed Work Done', async () => {
+      const wrapper = await mountFeatures([{
+        key: 'EFF-COMPLETE', summary: 'Completed via Epic status override', status: 'Done', statusCategory: 'Done',
+        fixVersions: [], components: [], labels: [], epicCount: 1, issueCount: 3, blockerCount: 0,
+        // Raw says in-progress/1-of-3; effective credits the Epic as fully complete.
+        executionIssueCount: 3, doneExecutionIssueCount: 1, executionState: 'in-progress', executionCoverage: 'available',
+        executionCoverageReason: null, preparationReadiness: 'unknown',
+        effectiveExecutionIssueCount: 3, effectiveDoneExecutionIssueCount: 3, effectiveExecutionState: 'complete',
+        effectiveExecutionCoverage: 'available', effectiveExecutionCoverageReason: null
+      }])
+
+      const columns = wrapper.findAll('.rounded-lg.border.overflow-hidden').filter(el => el.find('h3').exists())
+      expect(columns).toHaveLength(3)
+      expect(columns[0].text()).not.toContain('EFF-COMPLETE')
+      expect(columns[1].text()).not.toContain('EFF-COMPLETE')
+      expect(columns[2].text()).toContain('EFF-COMPLETE')
+      expect(columns[2].text()).toContain('3/3')
+      expect(columns[2].text()).toContain('100%')
+    })
+
+    it('falls back to raw execution fields when effective keys are absent entirely (pre-contract payload)', async () => {
+      const wrapper = await mountFeatures([{
+        key: 'LEGACY-1', summary: 'Legacy in-progress feature', status: 'In Progress', statusCategory: 'In Progress',
+        fixVersions: [], components: [], labels: [], epicCount: 1, issueCount: 2, blockerCount: 0,
+        executionIssueCount: 2, doneExecutionIssueCount: 1, executionState: 'in-progress', executionCoverage: 'available',
+        executionCoverageReason: null, preparationReadiness: 'unknown'
+        // No effective* keys at all.
+      }])
+
+      const columns = wrapper.findAll('.rounded-lg.border.overflow-hidden').filter(el => el.find('h3').exists())
+      expect(columns[1].text()).toContain('LEGACY-1')
+      expect(columns[1].text()).toContain('1/2')
+      expect(columns[1].text()).toContain('50%')
+    })
+
+    it('treats an explicit effectiveExecutionState: null as insufficient data, never a silent fallback to raw', async () => {
+      const wrapper = await mountFeatures([{
+        key: 'NULLEFF-1', summary: 'Explicit null effective', status: 'In Progress', statusCategory: 'In Progress',
+        fixVersions: [], components: [], labels: [], epicCount: 2, issueCount: 4, blockerCount: 0,
+        executionIssueCount: 4, doneExecutionIssueCount: 2, executionState: 'in-progress', executionCoverage: 'available',
+        executionCoverageReason: null, preparationReadiness: 'unknown',
+        effectiveExecutionIssueCount: null, effectiveDoneExecutionIssueCount: null, effectiveExecutionState: null,
+        effectiveExecutionCoverage: 'insufficient-data', effectiveExecutionCoverageReason: 'epics-without-issue-detail'
+      }])
+
+      // Hidden until the coverage panel is opened — never placed on the board despite raw being in-progress/available.
+      expect(wrapper.text()).not.toContain('NULLEFF-1')
+      const coverageButton = wrapper.findAll('button').find(b => b.text().includes('Without progress data'))
+      await coverageButton.trigger('click')
+      expect(wrapper.text()).toContain('NULLEFF-1')
+      expect(wrapper.text()).toContain('Issue details missing')
+    })
+
+    it('renders a producer-confirmed complete state with zero issue counts as 100%, not 0% or unavailable', async () => {
+      const wrapper = await mountFeatures([{
+        key: 'ZEROCOMPLETE-1', summary: 'Zero-child completed Epic', status: 'Done', statusCategory: 'Done',
+        fixVersions: [], components: [], labels: [], epicCount: 1, issueCount: 0, blockerCount: 0,
+        // Raw is insufficient-data (zero observed children); effective is a confirmed 0/0 complete.
+        executionIssueCount: null, doneExecutionIssueCount: null, executionState: null, executionCoverage: 'insufficient-data',
+        executionCoverageReason: 'epics-without-issue-detail', preparationReadiness: 'not-applicable',
+        effectiveExecutionIssueCount: 0, effectiveDoneExecutionIssueCount: 0, effectiveExecutionState: 'complete',
+        effectiveExecutionCoverage: 'available', effectiveExecutionCoverageReason: null
+      }])
+
+      const columns = wrapper.findAll('.rounded-lg.border.overflow-hidden').filter(el => el.find('h3').exists())
+      expect(columns[2].text()).toContain('ZEROCOMPLETE-1')
+      expect(columns[2].text()).toContain('0/0')
+      expect(columns[2].text()).toContain('100%')
+    })
+  })
 })

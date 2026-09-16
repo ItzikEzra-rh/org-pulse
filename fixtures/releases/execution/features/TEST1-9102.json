@@ -1,0 +1,171 @@
+{
+  "key": "TEST1-9102",
+  "summary": "Feature mixing completed-via-status and normal Epics",
+  "status": "In Progress",
+  "statusCategory": "To Do",
+  "priority": "Major",
+  "assignee": {
+    "displayName": "Marcus Webb",
+    "accountId": "60011:aaaa1111-0000-4a11-8b11-000000000002"
+  },
+  "fixVersions": [],
+  "labels": [
+    "epic-completion"
+  ],
+  "components": [],
+  "created": "2026-02-10T09:00:00.000+0000",
+  "updated": "2026-05-10T10:00:00.000+0000",
+  "statusNotes": null,
+  "issueLinks": [],
+  "epics": [
+    {
+      "key": "TEST9-2001",
+      "parentKey": "TEST1-9102",
+      "summary": "Completed-via-status Epic with open children",
+      "status": "Done",
+      "statusCategory": "Done",
+      "priority": "Normal",
+      "assignee": "Marcus Webb",
+      "components": [],
+      "labels": [],
+      "created": "2026-01-01T00:00:00.000+0000",
+      "updated": "2026-06-01T00:00:00.000+0000",
+      "issues": [
+        {
+          "key": "TEST9-2001-1",
+          "summary": "Implement thing one",
+          "status": "Done",
+          "statusCategory": "Done",
+          "isPreparation": false
+        },
+        {
+          "key": "TEST9-2001-2",
+          "summary": "Implement thing two",
+          "status": "In Progress",
+          "statusCategory": "In Progress",
+          "isPreparation": false
+        },
+        {
+          "key": "TEST9-2001-3",
+          "summary": "Implement thing three",
+          "status": "New",
+          "statusCategory": "To Do",
+          "isPreparation": false
+        }
+      ],
+      "executionIssueCount": 3,
+      "doneExecutionIssueCount": 1,
+      "completedViaStatus": true
+    },
+    {
+      "key": "TEST9-2002",
+      "parentKey": "TEST1-9102",
+      "summary": "Normal in-progress Epic",
+      "status": "In Progress",
+      "statusCategory": "In Progress",
+      "priority": "Normal",
+      "assignee": "Dana Brown",
+      "components": [],
+      "labels": [],
+      "created": "2026-01-01T00:00:00.000+0000",
+      "updated": "2026-06-01T00:00:00.000+0000",
+      "issues": [
+        {
+          "key": "TEST9-2002-1",
+          "summary": "Implement feature part A",
+          "status": "Done",
+          "statusCategory": "Done",
+          "isPreparation": false
+        },
+        {
+          "key": "TEST9-2002-2",
+          "summary": "Implement feature part B",
+          "status": "Done",
+          "statusCategory": "Done",
+          "isPreparation": false
+        },
+        {
+          "key": "TEST9-2002-3",
+          "summary": "Implement feature part C",
+          "status": "In Progress",
+          "statusCategory": "In Progress",
+          "isPreparation": false
+        },
+        {
+          "key": "TEST9-2002-4",
+          "summary": "Implement feature part D",
+          "status": "In Progress",
+          "statusCategory": "In Progress",
+          "isPreparation": false
+        },
+        {
+          "key": "TEST9-2002-5",
+          "summary": "Implement feature part E",
+          "status": "New",
+          "statusCategory": "To Do",
+          "isPreparation": false
+        }
+      ],
+      "executionIssueCount": 5,
+      "doneExecutionIssueCount": 2,
+      "completedViaStatus": false
+    }
+  ],
+  "metrics": {
+    "totalEpics": 2,
+    "totalIssues": 8,
+    "issuesByStatus": {
+      "Done": 3,
+      "In Progress": 3,
+      "New": 2
+    },
+    "issuesByCategory": {
+      "Done": 3,
+      "In Progress": 3,
+      "To Do": 2
+    },
+    "totalStoryPoints": 0,
+    "storyPointsDone": 0,
+    "completionPct": 38,
+    "staleCount": 3,
+    "unassignedCount": 8,
+    "blockerCount": 0,
+    "health": "RED",
+    "epicMetrics": [
+      {
+        "key": "TEST9-2001",
+        "summary": "Completed-via-status Epic with open children",
+        "total": 3,
+        "done": 1,
+        "pct": 33
+      },
+      {
+        "key": "TEST9-2002",
+        "summary": "Normal in-progress Epic",
+        "total": 5,
+        "done": 2,
+        "pct": 40
+      }
+    ],
+    "executionIssueCount": 8,
+    "doneExecutionIssueCount": 3,
+    "executionState": "in-progress",
+    "executionCoverage": "available",
+    "preparationReadiness": "not-applicable",
+    "executionCoverageReason": null,
+    "effectiveExecutionIssueCount": 8,
+    "effectiveDoneExecutionIssueCount": 5,
+    "effectiveExecutionState": "in-progress",
+    "effectiveExecutionCoverage": "available",
+    "effectiveExecutionCoverageReason": null
+  },
+  "topology": {
+    "repos": []
+  },
+  "_sources": {
+    "pipeline": "2026-05-10T10:00:00.000+0000",
+    "jira": "2026-05-10T10:00:00.000+0000"
+  },
+  "colorStatus": "Green",
+  "ownerStatusColor": "Green"
+}

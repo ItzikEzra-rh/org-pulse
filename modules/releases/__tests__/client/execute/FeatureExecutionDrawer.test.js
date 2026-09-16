@@ -179,4 +179,104 @@ describe('FeatureExecutionDrawer', () => {
     await wrapper.find('[aria-hidden="true"]').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
   })
+
+  describe('Epic status completion', () => {
+    it('shows "Completed via Epic status" with the actual N/M below it, labelled as actual', () => {
+      const detail = {
+        key: 'OSAC-100',
+        epics: [{
+          key: 'EP-1', summary: 'Completed via status', status: 'Done',
+          completedViaStatus: true,
+          executionIssueCount: 3, doneExecutionIssueCount: 1, issues: []
+        }]
+      }
+      const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), detail })
+      const text = wrapper.text()
+      expect(text).toContain('Completed via Epic status')
+      expect(text).toContain('1/3')
+      expect(text).toContain('(actual)')
+    })
+
+    it('shows "No execution issues recorded" for a confirmed zero-execution-issue completed-via-status Epic', () => {
+      const detail = {
+        key: 'OSAC-100',
+        epics: [{
+          key: 'EP-1', summary: 'Zero-child epic closed as Done', status: 'Done',
+          completedViaStatus: true,
+          executionIssueCount: 0, doneExecutionIssueCount: 0, issues: []
+        }]
+      }
+      const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), detail })
+      const text = wrapper.text()
+      expect(text).toContain('Completed via Epic status')
+      expect(text).toContain('No execution issues recorded')
+      expect(text).not.toContain('No tracked execution work')
+    })
+
+    it('shows "No execution issues recorded" (not "no children") when a completed-via-status Epic has only preparation children', () => {
+      const detail = {
+        key: 'OSAC-100',
+        epics: [{
+          key: 'EP-1', summary: 'Completed Epic with only prep issues', status: 'Done',
+          completedViaStatus: true,
+          executionIssueCount: 0, doneExecutionIssueCount: 0,
+          issues: [{ key: 'I-1', summary: 'PRD doc', isPreparation: true }]
+        }]
+      }
+      const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), detail })
+      expect(wrapper.text()).toContain('No execution issues recorded')
+    })
+
+    it('keeps "No issue-level progress available" for a completed-via-status Epic with no collected count, not a confirmed zero', () => {
+      const detail = {
+        key: 'OSAC-100',
+        epics: [{
+          key: 'EP-1', summary: 'Completed epic, no issue detail collected', status: 'Done',
+          completedViaStatus: true,
+          executionIssueCount: null, doneExecutionIssueCount: null, issues: []
+        }]
+      }
+      const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), detail })
+      const text = wrapper.text()
+      expect(text).toContain('Completed via Epic status')
+      expect(text).toContain('No issue-level progress available')
+      expect(text).not.toContain('No execution issues recorded')
+    })
+
+    it('adds a feature-level explanatory line summarizing completed-via-status Epics', () => {
+      const detail = {
+        key: 'OSAC-100',
+        epics: [
+          { key: 'EP-1', summary: 'A', status: 'Done', completedViaStatus: true, executionIssueCount: 2, doneExecutionIssueCount: 1, issues: [] },
+          { key: 'EP-2', summary: 'B', status: 'In Progress', completedViaStatus: false, executionIssueCount: 2, doneExecutionIssueCount: 1, issues: [] }
+        ]
+      }
+      const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), detail })
+      expect(wrapper.text()).toContain('1 epic completed via Epic status.')
+    })
+
+    it('does not show a stale completion label for a reopened Epic whose flag was invalidated to false', () => {
+      const detail = {
+        key: 'OSAC-100',
+        epics: [{
+          key: 'EP-1', summary: 'Reopened Epic', status: 'New', statusCategory: 'To Do',
+          completedViaStatus: false,
+          executionIssueCount: 3, doneExecutionIssueCount: 1, issues: []
+        }]
+      }
+      const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), detail })
+      const text = wrapper.text()
+      expect(text).not.toContain('Completed via Epic status')
+      expect(text).toContain('1/3')
+    })
+
+    it('omits the completed-via-status explanatory line when no Epic carries the flag', () => {
+      const detail = {
+        key: 'OSAC-100',
+        epics: [{ key: 'EP-1', summary: 'Normal', status: 'In Progress', executionIssueCount: 2, doneExecutionIssueCount: 1, issues: [] }]
+      }
+      const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), detail })
+      expect(wrapper.text()).not.toContain('completed via Epic status')
+    })
+  })
 })

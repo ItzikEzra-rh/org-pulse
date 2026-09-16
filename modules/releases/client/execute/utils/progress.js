@@ -18,6 +18,32 @@ const EXECUTION_UNAVAILABLE_REASONS = {
   }
 }
 
+// `hasOwnProperty` (not `??`) so an explicit `effective* === null` (insufficient-data)
+// is distinguished from a legacy payload that predates the effective fields.
+function effectiveOrRaw(feature, effectiveKey, rawKey) {
+  return Object.prototype.hasOwnProperty.call(feature, effectiveKey) ? feature[effectiveKey] : feature[rawKey]
+}
+
+export function effectiveExecutionState(feature) {
+  return effectiveOrRaw(feature, 'effectiveExecutionState', 'executionState')
+}
+
+export function effectiveExecutionCoverage(feature) {
+  return effectiveOrRaw(feature, 'effectiveExecutionCoverage', 'executionCoverage')
+}
+
+export function effectiveExecutionCoverageReason(feature) {
+  return effectiveOrRaw(feature, 'effectiveExecutionCoverageReason', 'executionCoverageReason')
+}
+
+export function effectiveExecutionIssueCount(feature) {
+  return effectiveOrRaw(feature, 'effectiveExecutionIssueCount', 'executionIssueCount')
+}
+
+export function effectiveDoneExecutionIssueCount(feature) {
+  return effectiveOrRaw(feature, 'effectiveDoneExecutionIssueCount', 'doneExecutionIssueCount')
+}
+
 const EXECUTION_DATA_UNAVAILABLE = {
   caption: 'Execution data unavailable',
   detail: 'There isn’t enough execution data to calculate progress.'
