@@ -220,6 +220,13 @@ test.describe('Releases Feature List @releases', () => {
     for (const title of ['Not Started', 'In Progress', 'Observed Work Done']) {
       await expect(page.locator('h3', { hasText: title })).toBeVisible();
     }
+    const notStartedToggle = page.locator('button[aria-controls="execution-section-not-started"]');
+    await expect(notStartedToggle).toHaveAttribute('aria-expanded', 'true');
+    await notStartedToggle.click();
+    await expect(notStartedToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#execution-section-not-started')).toBeHidden();
+    await notStartedToggle.click();
+    await expect(page.locator('#execution-section-not-started')).toBeVisible();
     await expect(page.locator('h3', { hasText: 'No Tracked Work' })).toHaveCount(0);
     await expect(page.locator('h3', { hasText: 'Execution Data Unavailable' })).toHaveCount(0);
 
@@ -244,7 +251,7 @@ test.describe('Releases Feature List @releases', () => {
     const search = page.getByLabel('Search');
 
     // Each case is searched by key so it lands on the first page rather than
-    // assuming board/column order (paginated at 6/page).
+    // assuming board/column order (paginated at 12/page).
     await search.fill('TEST1-1131');
     await expect(page.getByRole('button', { name: 'Open details for TEST1-1131', exact: true })).toBeVisible();
     await expect(page.getByText('7/10')).toBeVisible();

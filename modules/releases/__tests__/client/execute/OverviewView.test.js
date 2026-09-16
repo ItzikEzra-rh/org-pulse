@@ -135,7 +135,7 @@ describe('OverviewView (Feature List)', () => {
   })
 
   it('paginates each column independently while keeping the full column count visible', async () => {
-    const manyFeatures = Array.from({ length: 8 }, (_, i) => ({
+    const manyFeatures = Array.from({ length: 13 }, (_, i) => ({
       key: `PAGED-${i}`, summary: `Paged feature ${i}`, status: 'In Progress', statusCategory: 'In Progress',
       fixVersions: [], components: [], labels: [], epicCount: 1, issueCount: 2, blockerCount: 0,
       executionIssueCount: 2, doneExecutionIssueCount: 0, executionState: 'not-started', executionCoverage: 'available',
@@ -148,19 +148,37 @@ describe('OverviewView (Feature List)', () => {
     const wrapper = mount(OverviewView, { global: { provide: { moduleNav: mockNav() } } })
     await flushPromises()
 
-    // Column count badge always reflects the full 8, independent of the 6-per-page slice
+    // Column count badge always reflects the full 13, independent of the 12-per-page slice
     expect(wrapper.text()).toContain('Not Started')
-    expect(wrapper.text()).toContain('8')
-    expect(wrapper.text()).not.toContain('PAGED-7')
+    expect(wrapper.text()).toContain('13')
+    expect(wrapper.text()).toContain('PAGED-11')
+    expect(wrapper.text()).not.toContain('PAGED-12')
     expect(wrapper.text()).toContain('Page 1 of 2')
 
     const nextButton = wrapper.findAll('button').find(b => b.text() === 'Next')
     await nextButton.trigger('click')
-    expect(wrapper.text()).toContain('PAGED-7')
+    expect(wrapper.text()).toContain('PAGED-12')
     expect(wrapper.text()).toContain('Page 2 of 2')
     // Pagination is presentation-only; the filtered population is unchanged
     expect(wrapper.text()).toContain('Features:')
-    expect(wrapper.text()).toContain('8')
+    expect(wrapper.text()).toContain('13')
+  })
+
+  it('collapses and expands each execution column without changing its pagination', async () => {
+    const { wrapper } = await mountWithData()
+    const header = wrapper.find('button[aria-controls="execution-section-not-started"]')
+    const section = wrapper.find('#execution-section-not-started')
+
+    expect(header.attributes('aria-expanded')).toBe('true')
+    expect(section.isVisible()).toBe(true)
+
+    await header.trigger('click')
+    expect(header.attributes('aria-expanded')).toBe('false')
+    expect(section.attributes('style')).toContain('display: none')
+
+    await header.trigger('click')
+    expect(header.attributes('aria-expanded')).toBe('true')
+    expect(section.attributes('style')).not.toContain('display: none')
   })
 
   it('expands and collapses Jira labels beyond the accessible +N pill', async () => {

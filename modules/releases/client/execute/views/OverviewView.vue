@@ -166,7 +166,7 @@ const LANE_META = {
 // and `unavailable` both fold into the separate coverage total instead of
 // being columns of their own.
 const BOARD_COLUMNS = ['not-started', 'in-progress', 'complete']
-const PAGE_SIZE = 6
+const PAGE_SIZE = 12
 
 const READINESS_META = {
   ready: { label: 'Ready', class: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30' },
@@ -326,9 +326,9 @@ function isBoardEligible(d) {
   return BOARD_COLUMNS.includes(d.lane) && d.progress.kind === 'available'
 }
 
-// Three side-by-side execution columns, replacing the previous vertically
-// stacked five-lane board. `LANE_META`/`laneKey` remain in use by filtering
-// and the List view's per-row lane badge.
+// The three execution columns are rendered as vertically stacked sections.
+// `LANE_META`/`laneKey` remain in use by filtering and the List view's
+// per-row lane badge.
 const boardColumns = computed(() => {
   const buckets = { 'not-started': [], 'in-progress': [], complete: [] }
   for (const d of decoratedFeatures.value) {
@@ -344,9 +344,9 @@ const coverageFeatures = computed(() =>
 const measurableCount = computed(() => decoratedFeatures.value.length - coverageFeatures.value.length)
 
 const columnPage = ref({ 'not-started': 1, 'in-progress': 1, complete: 1 })
+const collapsedColumns = ref(new Set())
 const coveragePage = ref(1)
 const coveragePanelOpen = ref(false)
-const activeColumnMobile = ref('not-started')
 
 // Measured content width, not viewport width — the sidebar can leave a "wide" viewport narrow.
 const rootEl = ref(null)
@@ -357,7 +357,6 @@ function updateContentWidth() {
   if (rootEl.value) contentWidth.value = rootEl.value.getBoundingClientRect().width
 }
 
-const useColumnTabs = computed(() => contentWidth.value < 700)
 const coverageGridClass = computed(() => {
   if (contentWidth.value < 420) return 'grid-cols-1'
   if (contentWidth.value < 700) return 'grid-cols-2'
@@ -374,6 +373,12 @@ function pageCount(items) {
 }
 function setColumnPage(id, page) {
   columnPage.value = { ...columnPage.value, [id]: page }
+}
+function toggleColumn(id) {
+  const next = new Set(collapsedColumns.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  collapsedColumns.value = next
 }
 
 watch(filteredFeatures, () => {
@@ -740,43 +745,45 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
-        <!-- Column selector, narrow content width only: tabs replace squeezed side-by-side columns -->
-        <div v-if="useColumnTabs" class="flex gap-2 mb-3 overflow-x-auto">
-          <button
-            v-for="col in boardColumns"
-            :key="col.id"
-            type="button"
-            class="px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap"
-            :class="activeColumnMobile === col.id
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm border border-gray-300 dark:border-gray-600'
-              : 'text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800'"
-            @click="activeColumnMobile = col.id"
-          >{{ col.title }} ({{ col.items.length }})</button>
-        </div>
-
-        <!-- Three side-by-side execution columns -->
-        <div class="grid gap-4" :class="useColumnTabs ? 'grid-cols-1' : 'grid-cols-3'">
+        <!-- Vertically stacked execution sections -->
+        <div class="grid grid-cols-1 gap-4">
           <div
             v-for="col in boardColumns"
             :key="col.id"
             class="rounded-lg border overflow-hidden"
-            :class="[col.borderClass, col.bgClass, !useColumnTabs || activeColumnMobile === col.id ? 'block' : 'hidden']"
+            :class="[col.borderClass, col.bgClass]"
           >
-            <!-- Column header -->
-            <div class="px-4 py-3 flex items-center justify-between" :class="col.headerBg">
+            <!-- Collapsible column header -->
+            <button
+              type="button"
+              class="w-full px-4 py-3 flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+              :class="col.headerBg"
+              :aria-expanded="!collapsedColumns.has(col.id)"
+              :aria-controls="'execution-section-' + col.id"
+              @click="toggleColumn(col.id)"
+            >
               <div class="flex items-center gap-2">
                 <span class="w-3 h-3 rounded-full" :class="col.dotClass" />
                 <h3 class="text-sm font-semibold" :class="col.textClass">{{ col.title }}</h3>
                 <span class="text-xs font-medium px-1.5 py-0.5 rounded-full bg-white/60 dark:bg-gray-900/30" :class="col.textClass">{{ col.items.length }}</span>
               </div>
-            </div>
+              <svg
+                class="w-4 h-4 transition-transform"
+                :class="{ '-rotate-90': collapsedColumns.has(col.id) }"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6" /></svg>
+            </button>
 
-            <div v-if="col.items.length === 0" class="p-4 text-center text-xs text-gray-400 dark:text-gray-500">
-              No features
-            </div>
+            <div v-show="!collapsedColumns.has(col.id)" :id="'execution-section-' + col.id">
+              <div v-if="col.items.length === 0" class="p-4 text-center text-xs text-gray-400 dark:text-gray-500">
+                No features
+              </div>
 
-            <!-- Feature cards -->
-            <div v-else class="p-3 grid grid-cols-1 gap-2">
+              <!-- Feature cards: spread each page across three columns on wide screens -->
+              <div v-else class="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               <div
                 v-for="d in pageSlice(col.items, columnPage[col.id])"
                 :key="d.feature.key"
@@ -899,21 +906,22 @@ onBeforeUnmount(() => {
                   </template>
                 </div>
               </div>
-            </div>
+              </div>
 
-            <div
-              v-if="pageCount(col.items) > 1"
-              class="flex items-center justify-center gap-3 py-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200/60 dark:border-gray-700/60"
-            >
-              <button
-                type="button" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40"
-                :disabled="columnPage[col.id] <= 1" @click="setColumnPage(col.id, columnPage[col.id] - 1)"
-              >Prev</button>
-              <span>Page {{ columnPage[col.id] }} of {{ pageCount(col.items) }}</span>
-              <button
-                type="button" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40"
-                :disabled="columnPage[col.id] >= pageCount(col.items)" @click="setColumnPage(col.id, columnPage[col.id] + 1)"
-              >Next</button>
+              <div
+                v-if="pageCount(col.items) > 1"
+                class="flex items-center justify-center gap-3 py-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200/60 dark:border-gray-700/60"
+              >
+                <button
+                  type="button" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40"
+                  :disabled="columnPage[col.id] <= 1" @click="setColumnPage(col.id, columnPage[col.id] - 1)"
+                >Prev</button>
+                <span>Page {{ columnPage[col.id] }} of {{ pageCount(col.items) }}</span>
+                <button
+                  type="button" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40"
+                  :disabled="columnPage[col.id] >= pageCount(col.items)" @click="setColumnPage(col.id, columnPage[col.id] + 1)"
+                >Next</button>
+              </div>
             </div>
           </div>
         </div>
