@@ -97,6 +97,39 @@ function makeFeature(overrides = {}) {
 }
 
 describe('PipelineTimeline design-review phase', () => {
+  it('uses the canonical PRD PR URL without treating an EP source as an RFE', () => {
+    const wrapper = mount(PipelineTimeline, {
+      props: {
+        feature: makeFeature({
+          sourceRfe: 'EP-208',
+          prdPrUrl: 'https://github.com/osac-project/enhancement-proposals/pull/168'
+        }),
+        phases: PHASES
+      }
+    });
+
+    const prdLink = wrapper.find('a');
+    expect(prdLink.attributes('href')).toBe('https://github.com/osac-project/enhancement-proposals/pull/168');
+    expect(prdLink.attributes('title')).toBe('View PRD pull request on GitHub');
+    expect(prdLink.text()).toContain('PRD PR');
+    expect(wrapper.find('button').exists()).toBe(false);
+  });
+
+  it('keeps in-app PRD navigation for a real RFE source', async () => {
+    const wrapper = mount(PipelineTimeline, {
+      props: {
+        feature: makeFeature({
+          sourceRfe: 'RHAIRFE-208',
+          prdPrUrl: 'https://github.com/osac-project/enhancement-proposals/pull/168'
+        }),
+        phases: PHASES
+      }
+    });
+
+    await wrapper.find('button').trigger('click');
+    expect(wrapper.emitted('navigateToRFE')).toEqual([['RHAIRFE-208']]);
+  });
+
   it('shows recommendation and score for a scored Design', () => {
     const wrapper = mount(PipelineTimeline, { props: { feature: makeFeature(), phases: PHASES } });
     expect(wrapper.text()).toContain('approve — 6/8');
