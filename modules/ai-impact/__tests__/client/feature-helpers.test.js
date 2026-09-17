@@ -17,6 +17,7 @@ describe('PRD link and navigation helpers', () => {
   it('does not turn an EP source into an in-app PRD Review selection', () => {
     expect(getPrdReviewNavigationKey({ sourceRfe: 'EP-208' })).toBeNull()
     expect(getPrdReviewNavigationKey({ sourceRfe: 'EP-208', linkedRfeKey: 'RHAIRFE-99' })).toBe('RHAIRFE-99')
+    expect(getPrdReviewNavigationKey({ sourceRfe: 'RHAIRFE-208', linkedRfeKey: 'RHAIRFE-abc' })).toBe('RHAIRFE-208')
   })
 
   it('keeps legacy RFE sources navigable in PRD Review', () => {

@@ -63,6 +63,28 @@ describe('validateFeature', () => {
     expect(result.data.size).toBeNull();
   });
 
+  it('accepts canonical HTTPS GitHub pull-request links', () => {
+    const result = validateFeature(makeValidFeature({
+      prdPrUrl: 'https://github.com/osac-project/enhancement-proposals/pull/168',
+      designPrUrl: 'https://github.com/osac-project/enhancement-proposals/pull/208'
+    }));
+    expect(result.valid).toBe(true);
+    expect(result.data.prdPrUrl).toContain('/pull/168');
+    expect(result.data.designPrUrl).toContain('/pull/208');
+  });
+
+  it('rejects non-HTTPS or non-pull-request links', () => {
+    const result = validateFeature(makeValidFeature({
+      prdPrUrl: 'javascript:alert(1)',
+      designPrUrl: 'https://example.com/design'
+    }));
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.stringContaining('prdPrUrl'),
+      expect.stringContaining('designPrUrl')
+    ]));
+  });
+
   it('rejects null body', () => {
     const result = validateFeature(null);
     expect(result.valid).toBe(false);

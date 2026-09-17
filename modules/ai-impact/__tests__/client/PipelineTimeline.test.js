@@ -74,6 +74,17 @@ describe('PipelineTimeline prd-review phase', () => {
     expect(wrapper.find('button').exists()).toBe(false);
   });
 
+  it('does not derive an EP PRD link for a feature marked No PR', () => {
+    const wrapper = mount(PipelineTimeline, {
+      props: {
+        feature: makeFeature({ sourceRfe: 'EP-208', status: 'No PR', prdPrUrl: null }),
+        phases: PHASES
+      }
+    });
+
+    expect(wrapper.find('a').exists()).toBe(false);
+  });
+
   it('renders the same resolved PR link for a non-EP RFE with linkedFeature.prdPrUrl', () => {
     const rfe = makeRFE({
       sourceRfe: 'OSAC-99',

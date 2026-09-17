@@ -1,5 +1,6 @@
 const SIGN_OFF_LABEL = 'strat-creator-human-sign-off';
 const NEEDS_ATTENTION_LABEL = 'strat-creator-needs-attention';
+const { isCanonicalPullRequestUrl } = require('../../../../shared/server/feature-links');
 
 /**
  * Derive humanReviewStatus from strat-creator pipeline labels.
@@ -180,10 +181,14 @@ function validateFeature(body) {
     }
   }
 
-  // designPrUrl: optional valid URL string
-  if (body.designPrUrl !== undefined && body.designPrUrl !== null) {
-    if (typeof body.designPrUrl !== 'string') {
-      errors.push('designPrUrl must be a string');
+  // PRD/Design links: optional canonical HTTPS GitHub pull-request URLs
+  for (const field of ['prdPrUrl', 'designPrUrl']) {
+    if (body[field] !== undefined && body[field] !== null) {
+      if (typeof body[field] !== 'string') {
+        errors.push(`${field} must be a string`);
+      } else if (!isCanonicalPullRequestUrl(body[field].trim())) {
+        errors.push(`${field} must be a canonical HTTPS GitHub pull-request URL`);
+      }
     }
   }
 
@@ -227,6 +232,7 @@ function validateFeature(body) {
       verdict: typeof body.verdict === 'string' ? body.verdict.trim() : undefined,
       feedback: typeof body.feedback === 'string' ? body.feedback.trim() : undefined,
       criterionNotes: body.criterionNotes || undefined,
+      prdPrUrl: typeof body.prdPrUrl === 'string' ? body.prdPrUrl.trim() : undefined,
       designPrUrl: typeof body.designPrUrl === 'string' ? body.designPrUrl.trim() : undefined
     }
   };

@@ -131,7 +131,7 @@ function getFeaturePhaseSignal(phaseId) {
         detail: linkedKey,
         linkedKey,
         displayKey: linkedKey,
-        prUrl: getPrdReviewPrUrl({ sourceRfe, linkedFeature: feature }),
+        prUrl: getPrdReviewPrUrl({ sourceRfe, status: feature.status, linkedFeature: feature }),
         sourceRfe,
         isSourceRfe: Boolean(linkedKey),
         isFeatureSource: true

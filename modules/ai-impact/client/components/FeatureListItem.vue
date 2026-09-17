@@ -16,6 +16,7 @@ const emit = defineEmits(['select'])
 
 const reviewStatus = computed(() => getMeaningfulDesignReviewStatus(props.feature))
 const prdPrUrl = computed(() => getPrdReviewPrUrl({
+  status: props.feature.status,
   sourceRfe: props.feature.sourceRfe,
   linkedFeature: props.feature
 }))

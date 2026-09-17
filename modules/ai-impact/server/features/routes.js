@@ -104,6 +104,7 @@ function toAiReviewPayload(validated) {
       verdict: validated.verdict || undefined,
       feedback: validated.feedback || undefined,
       criterionNotes: validated.criterionNotes || undefined,
+      prdPrUrl: validated.prdPrUrl || undefined,
       designPrUrl: validated.designPrUrl || undefined
     }
   };

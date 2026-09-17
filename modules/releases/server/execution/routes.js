@@ -18,6 +18,7 @@ const {
 const { logAudit } = require('../planning/audit-log');
 const { mergeAiReview } = require('./ai-review-merge');
 const { writeFeatures } = require('./feature-store');
+const { getInvalidPullRequestUrlFields } = require('../../../../shared/server/feature-links');
 
 const DATA_PREFIX = 'releases/execution';
 const jsonLimit = express.json({ limit: '10mb' });
@@ -600,6 +601,13 @@ module.exports = function registerExecutionRoutes(router, context) {
         if (!KEY_RE.test(entry.key)) {
           counts.skipped++;
           continue;
+        }
+
+        const invalidLinkFields = getInvalidPullRequestUrlFields(entry.aiReview);
+        if (invalidLinkFields.length > 0) {
+          return res.status(400).json({
+            error: `${invalidLinkFields.join(', ')} must be canonical HTTPS GitHub pull-request URLs`
+          });
         }
 
         const existing = readDataFile('features/' + entry.key + '.json');

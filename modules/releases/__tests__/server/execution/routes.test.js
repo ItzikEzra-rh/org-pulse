@@ -87,6 +87,29 @@ describe('execution routes', () => {
     })
   })
 
+  describe('AI review pull-request URL validation', () => {
+    it('rejects unsafe PRD and Design URLs before persistence', async () => {
+      const handler = router._routes.post['/ai-review/bulk'].at(-1)
+      const res = makeRes()
+
+      await handler({
+        body: {
+          features: [{
+            key: 'OSAC-1',
+            aiReview: {
+              prdPrUrl: 'javascript:alert(1)',
+              designPrUrl: 'http://github.com/org/repo/pull/2'
+            }
+          }]
+        }
+      }, res)
+
+      expect(res._status).toBe(400)
+      expect(res._json.error).toContain('prdPrUrl')
+      expect(res._json.error).toContain('designPrUrl')
+    })
+  })
+
   describe('requireAdmin middleware', () => {
     it('gates POST /refresh behind requireAdmin', () => {
       expect(router.post).toHaveBeenCalledWith('/refresh', requireAdmin, expect.any(Function), expect.any(Function))
