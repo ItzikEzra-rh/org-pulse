@@ -1,5 +1,28 @@
 import { describe, it, expect } from 'vitest'
-import { getTotalScoreClass, getDesignStatusClass, getDesignStatusLabel, getMeaningfulDesignReviewStatus } from '../../client/utils/feature-helpers.js'
+import { getTotalScoreClass, getDesignStatusClass, getDesignStatusLabel, getMeaningfulDesignReviewStatus, getPrdReviewPrUrl, getPrdReviewNavigationKey } from '../../client/utils/feature-helpers.js'
+
+describe('PRD link and navigation helpers', () => {
+  it('derives an EP PRD pull-request URL when the canonical URL is absent', () => {
+    expect(getPrdReviewPrUrl({ sourceRfe: 'EP-208', linkedFeature: {} }))
+      .toBe('https://github.com/osac-project/enhancement-proposals/pull/208')
+  })
+
+  it('prefers the linked feature PRD URL for legacy RFE sources', () => {
+    expect(getPrdReviewPrUrl({
+      sourceRfe: 'RHAIRFE-208',
+      linkedFeature: { prdPrUrl: 'https://github.com/org/repo/pull/168' }
+    })).toBe('https://github.com/org/repo/pull/168')
+  })
+
+  it('does not turn an EP source into an in-app PRD Review selection', () => {
+    expect(getPrdReviewNavigationKey({ sourceRfe: 'EP-208' })).toBeNull()
+    expect(getPrdReviewNavigationKey({ sourceRfe: 'EP-208', linkedRfeKey: 'RHAIRFE-99' })).toBe('RHAIRFE-99')
+  })
+
+  it('keeps legacy RFE sources navigable in PRD Review', () => {
+    expect(getPrdReviewNavigationKey({ sourceRfe: 'RHAIRFE-208' })).toBe('RHAIRFE-208')
+  })
+})
 
 describe('getMeaningfulDesignReviewStatus', () => {
   it('existing + unscored + default awaiting-review: not meaningful', () => {

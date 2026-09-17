@@ -60,6 +60,20 @@ describe('PipelineTimeline prd-review phase', () => {
     expect(link.attributes('href')).toBe('https://github.com/osac-project/enhancement-proposals/pull/42');
   });
 
+  it('derives an EP PRD link for a feature when prdPrUrl is missing without adding RFE navigation', () => {
+    const wrapper = mount(PipelineTimeline, {
+      props: {
+        feature: makeFeature({ sourceRfe: 'EP-208', prdPrUrl: null }),
+        phases: PHASES
+      }
+    });
+
+    const link = wrapper.find('a');
+    expect(link.attributes('href')).toBe('https://github.com/osac-project/enhancement-proposals/pull/208');
+    expect(link.text()).toContain('PRD PR');
+    expect(wrapper.find('button').exists()).toBe(false);
+  });
+
   it('renders the same resolved PR link for a non-EP RFE with linkedFeature.prdPrUrl', () => {
     const rfe = makeRFE({
       sourceRfe: 'OSAC-99',

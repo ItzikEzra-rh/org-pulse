@@ -4,6 +4,7 @@ import { useFeatureDetail } from '../execute/composables/useFeatureTraffic'
 import { useAIReview } from '../execute/composables/useAIReview.js'
 import { useModuleLink } from '@shared/client/composables/useModuleLink.js'
 import { apiRequest } from '@shared/client/services/api.js'
+import { getPrdReviewNavigationKey, getPrdReviewPrUrl } from '@shared/client/utils/feature-links.js'
 import StatusBadge from '../execute/components/StatusBadge.vue'
 import TrafficMap from '../execute/components/TrafficMap.vue'
 import EpicBreakdown from '../execute/components/EpicBreakdown.vue'
@@ -129,15 +130,29 @@ const featureKey = computed(() => nav.params.value.key)
 
 const aiReviewLatest = computed(() => aiReview.value?.latest || null)
 const sourceRfeKey = computed(() => aiReviewLatest.value?.sourceRfe || null)
-const prdPrUrl = computed(() => aiReviewLatest.value?.prdPrUrl || null)
+const sourcePrdReviewKey = computed(() => getPrdReviewNavigationKey({
+  sourceRfe: sourceRfeKey.value,
+  linkedRfeKey: feature.value?.linkedRfeKey
+}))
+const prdPrUrl = computed(() => getPrdReviewPrUrl({
+  sourceRfe: sourceRfeKey.value,
+  linkedFeature: { prdPrUrl: aiReviewLatest.value?.prdPrUrl || null }
+}))
 const designPrUrl = computed(() => aiReviewLatest.value?.designPrUrl || null)
-const sourceRfeIsNavigable = computed(() => Boolean(
-  sourceRfeKey.value && !sourceRfeKey.value.startsWith('EP-')
-))
+const hasDesignReview = computed(() => {
+  const latest = aiReviewLatest.value
+  return Boolean(feature.value?.key && latest && (
+    latest.designPrStatus != null ||
+    latest.designStatus != null ||
+    latest.designReviewState != null ||
+    latest.scores != null ||
+    latest.reviewers != null
+  ))
+})
 
 function navigateToAIReview(view) {
   const key = view === 'prd-review'
-    ? sourceRfeKey.value
+    ? sourcePrdReviewKey.value
     : featureKey.value || feature.value?.key
   if (!key) return
   crossNavigate('ai-impact', view, { select: key })
@@ -416,9 +431,10 @@ onMounted(() => {
               <span v-if="prdPrUrl" class="flex items-center gap-1">
                 PRD:
                 <button
-                  v-if="sourceRfeIsNavigable"
+                  v-if="sourcePrdReviewKey"
                   class="font-mono text-primary-600 dark:text-blue-400 hover:underline"
                   title="Open PRD Review"
+                  :aria-label="`Open ${sourcePrdReviewKey} in PRD Review`"
                   @click="navigateToAIReview('prd-review')"
                 >Review</button>
                 <a
@@ -427,17 +443,19 @@ onMounted(() => {
                   rel="noopener noreferrer"
                   class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                   title="View PRD pull request on GitHub"
+                  aria-label="View PRD pull request on GitHub"
                 >
                   <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
               </span>
-              <span v-if="designPrUrl" class="flex items-center gap-1">
+              <span v-if="hasDesignReview" class="flex items-center gap-1">
                 Design:
                 <button
                   class="font-mono text-primary-600 dark:text-blue-400 hover:underline"
                   title="Open Design Review"
+                  :aria-label="`Open ${feature.key} in Design Review`"
                   @click="navigateToAIReview('design-review')"
                 >Review</button>
                 <a
@@ -446,6 +464,7 @@ onMounted(() => {
                   rel="noopener noreferrer"
                   class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                   title="View design pull request on GitHub"
+                  aria-label="View design pull request on GitHub"
                 >
                   <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10v-4M14 4h6m0 0v6m0-6L10 14" />

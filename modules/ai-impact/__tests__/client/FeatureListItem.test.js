@@ -44,6 +44,15 @@ describe('FeatureListItem Missing Design badge', () => {
     expect(links[0].attributes('title')).toBe('View PRD pull request on GitHub');
     expect(links[1].attributes('title')).toBe('View design pull request on GitHub');
   });
+
+  it('derives the PRD link from an EP source when prdPrUrl is missing', () => {
+    const wrapper = mount(FeatureListItem, {
+      props: { feature: makeFeature({ sourceRfe: 'EP-208', prdPrUrl: null }) }
+    });
+
+    expect(wrapper.find('a[title="View PRD pull request on GitHub"]').attributes('href'))
+      .toBe('https://github.com/osac-project/enhancement-proposals/pull/208');
+  });
 });
 
 describe('FeatureListItem Review pill (meaningful humanReviewStatus only)', () => {

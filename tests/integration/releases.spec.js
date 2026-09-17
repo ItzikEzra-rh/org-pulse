@@ -633,6 +633,69 @@ test.describe('Releases Unified Feature Store @releases', () => {
     expect(feature.aiReview).toHaveProperty('reviewedAt');
   });
 
+  test('feature detail resolves legacy RFE and EP PRD/Design links correctly', async ({ page }) => {
+    const epFeature = {
+      key: 'TEST1-208',
+      summary: 'EP-sourced feature',
+      status: 'In Progress',
+      statusCategory: 'In Progress',
+      priority: 'Major',
+      fixVersions: [],
+      labels: [],
+      components: [],
+      epics: [],
+      metrics: {},
+      created: '2026-04-20T00:00:00Z',
+      updated: '2026-04-20T00:00:00Z'
+    };
+    const epReview = {
+      latest: {
+        sourceRfe: 'EP-208',
+        recommendation: 'revise',
+        scores: { total: 6 },
+        reviewers: {},
+        designPrStatus: 'Open',
+        designReviewState: 'CHANGES_REQUESTED'
+      },
+      history: []
+    };
+
+    await page.route('**/api/modules/releases/execution/features/TEST1-208', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(epFeature) })
+    );
+    await page.route('**/api/modules/ai-impact/features/TEST1-208', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(epReview) })
+    );
+
+    await page.goto('/#/releases/feature-detail?key=TEST1-1168');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const legacyPrdReview = page.getByRole('button', { name: 'Open RHAIRFE-1001 in PRD Review', exact: true });
+    await expect(legacyPrdReview).toBeVisible();
+    await expect(page.getByRole('link', { name: 'View PRD pull request on GitHub', exact: true }))
+      .toHaveAttribute('href', 'https://github.com/osac-project/enhancement-proposals/pull/1168');
+    await expect(page.getByRole('button', { name: 'Open TEST1-1168 in Design Review', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'View design pull request on GitHub', exact: true }))
+      .toHaveAttribute('href', 'https://github.com/osac-project/enhancement-proposals/pull/131');
+
+    await legacyPrdReview.click();
+    await expect(page).toHaveURL(/#\/ai-impact\/prd-review\?select=RHAIRFE-1001$/);
+
+    await page.goto('/#/releases/feature-detail?key=TEST1-208');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByRole('link', { name: 'View PRD pull request on GitHub', exact: true }))
+      .toHaveAttribute('href', 'https://github.com/osac-project/enhancement-proposals/pull/208');
+    await expect(page.getByRole('button', { name: 'Open TEST1-208 in Design Review', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'View design pull request on GitHub', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Open EP-208 in PRD Review', exact: true })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Open TEST1-208 in Design Review', exact: true }).click();
+    await expect(page).toHaveURL(/#\/ai-impact\/design-review\?select=TEST1-208$/);
+  });
+
   test('AI Impact features API reads from unified store', async ({ request }) => {
     const res = await request.get('/api/modules/ai-impact/features');
     expect(res.ok()).toBe(true);

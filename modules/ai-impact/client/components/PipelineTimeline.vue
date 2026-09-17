@@ -1,6 +1,6 @@
 <script setup>
 import { useDisabledPipelines } from '../composables/useDisabledPipelines.js'
-import { getPrdReviewPrUrl } from '../utils/feature-helpers.js'
+import { getPrdReviewNavigationKey, getPrdReviewPrUrl } from '../utils/feature-helpers.js'
 
 const { isDisabled } = useDisabledPipelines()
 
@@ -123,17 +123,17 @@ function getFeaturePhaseSignal(phaseId) {
   switch (phaseId) {
     case 'prd-review': {
       const sourceRfe = feature.sourceRfe || null
-      const sourceRfeIsNavigable = Boolean(sourceRfe && !sourceRfe.startsWith('EP-'))
+      const linkedKey = getPrdReviewNavigationKey(feature)
       return {
         completed: true,
         current: false,
         aiUsed: true,
-        detail: sourceRfeIsNavigable ? sourceRfe : null,
-        linkedKey: sourceRfeIsNavigable ? sourceRfe : null,
-        displayKey: sourceRfeIsNavigable ? sourceRfe : null,
-        prUrl: feature.prdPrUrl || null,
+        detail: linkedKey,
+        linkedKey,
+        displayKey: linkedKey,
+        prUrl: getPrdReviewPrUrl({ sourceRfe, linkedFeature: feature }),
         sourceRfe,
-        isSourceRfe: sourceRfeIsNavigable,
+        isSourceRfe: Boolean(linkedKey),
         isFeatureSource: true
       }
     }

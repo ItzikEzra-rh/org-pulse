@@ -131,20 +131,11 @@ export function getPrdSignOffStatus(prdPrStatus) {
   return 'awaiting-review'
 }
 
-export const EP_GITHUB_REPO = 'https://github.com/osac-project/enhancement-proposals/pull'
-
-// Single source of truth for the RFE's PRD pull-request link, shared by
-// Pipeline Progress (PipelineTimeline) and the top-level PRD PR action
-// (RFEDetailModal) so the two can't resolve to different URLs. Mirrors the
-// EP-sourced PR that Pipeline Progress renders for the "PRD Review" phase,
-// falling back to the linked feature's own prdPrUrl when no EP source exists.
-export function getPrdReviewPrUrl(rfe) {
-  if (!rfe || rfe.status === 'No PR') return null
-  if (rfe.sourceRfe && rfe.sourceRfe.startsWith('EP-')) {
-    return `${EP_GITHUB_REPO}/${rfe.sourceRfe.slice(3)}`
-  }
-  return rfe.linkedFeature?.prdPrUrl || null
-}
+export {
+  EP_GITHUB_REPO,
+  getPrdReviewPrUrl,
+  getPrdReviewNavigationKey
+} from '@shared/client/utils/feature-links.js'
 
 // --- Shared filter-bar option sets (PRD Review + Design Review) ---
 // Centralized here so the two list filter bars can't drift apart again.

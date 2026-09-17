@@ -241,4 +241,11 @@ describe('FeatureDetailPanel Design artifact/review semantics', () => {
     expect(document.body.querySelector('a[title="View design PR on GitHub"]')?.getAttribute('href'))
       .toBe('https://github.com/org/repo/pull/208');
   });
+
+  it('derives the PRD link from an EP source when prdPrUrl is missing', () => {
+    wrapper = mountPanel(makeFeature({ sourceRfe: 'EP-208', prdPrUrl: null }));
+
+    expect(document.body.querySelector('a[title="View PRD pull request on GitHub"]')?.getAttribute('href'))
+      .toBe('https://github.com/osac-project/enhancement-proposals/pull/208');
+  });
 });

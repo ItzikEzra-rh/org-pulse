@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import {
   getReviewStatusClass, getReviewStatusLabel, getReviewStatusTooltip,
   getDesignStatusClass, getDesignStatusLabel, getMeaningfulDesignReviewStatus,
-  getInvolvementLabel, getInvolvementClass
+  getInvolvementLabel, getInvolvementClass, getPrdReviewPrUrl
 } from '../utils/feature-helpers.js'
 import InfoBubble from './InfoBubble.vue'
 
@@ -15,6 +15,10 @@ const props = defineProps({
 const emit = defineEmits(['select'])
 
 const reviewStatus = computed(() => getMeaningfulDesignReviewStatus(props.feature))
+const prdPrUrl = computed(() => getPrdReviewPrUrl({
+  sourceRfe: props.feature.sourceRfe,
+  linkedFeature: props.feature
+}))
 </script>
 
 <template>
@@ -74,8 +78,8 @@ const reviewStatus = computed(() => getMeaningfulDesignReviewStatus(props.featur
       </div>
       <div class="flex items-center gap-1 shrink-0">
         <a
-          v-if="feature.prdPrUrl"
-          :href="feature.prdPrUrl"
+          v-if="prdPrUrl"
+          :href="prdPrUrl"
           target="_blank"
           rel="noopener noreferrer"
           class="text-blue-500 dark:text-blue-400"

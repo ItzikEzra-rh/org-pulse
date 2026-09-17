@@ -2,7 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import PipelineTimeline from './PipelineTimeline.vue'
 import FeedbackText from './FeedbackText.vue'
-import { getRecommendationClass, getRecommendationLabel, getRecommendationTooltip, getScoreClass, getTotalScoreClass, getReviewStatusClass, getReviewStatusLabel, getReviewStatusTooltip, getMeaningfulDesignReviewStatus } from '../utils/feature-helpers.js'
+import { getRecommendationClass, getRecommendationLabel, getRecommendationTooltip, getScoreClass, getTotalScoreClass, getReviewStatusClass, getReviewStatusLabel, getReviewStatusTooltip, getMeaningfulDesignReviewStatus, getPrdReviewPrUrl } from '../utils/feature-helpers.js'
 import { useTestPlans } from '../composables/useTestPlans.js'
 import InfoBubble from './InfoBubble.vue'
 import MetaChipGroup from './MetaChipGroup.vue'
@@ -32,6 +32,11 @@ function selectDimension(dim) {
 }
 
 const currentData = computed(() => featureDetail.value?.latest || props.feature)
+const prdPrUrl = computed(() => getPrdReviewPrUrl({
+  sourceRfe: currentData.value?.sourceRfe,
+  status: currentData.value?.status,
+  linkedFeature: currentData.value
+}))
 
 const meaningfulReviewStatus = computed(() => getMeaningfulDesignReviewStatus(props.feature))
 
@@ -196,8 +201,8 @@ const history = computed(() => featureDetail.value?.history || [])
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <a
-                  v-if="currentData?.prdPrUrl"
-                  :href="currentData.prdPrUrl"
+                  v-if="prdPrUrl"
+                  :href="prdPrUrl"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
