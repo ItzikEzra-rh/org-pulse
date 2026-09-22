@@ -215,6 +215,8 @@ const loading = ref(true)
 const showArchived = ref(false)
 const selectedProduct = ref(null)
 const searchQuery = ref('')
+const projectId = computed(() => nav.params.value?.projectId || '')
+let requestSequence = 0
 
 const KNOWN_MILESTONES = ['codeFreeze', 'ea1', 'ga']
 
@@ -245,15 +247,27 @@ const filteredReleases = computed(() => {
 })
 
 async function fetchReleases() {
+  const sequence = ++requestSequence
+  loading.value = true
+  releases.value = []
+  const suffix = projectId.value ? `?projectId=${encodeURIComponent(projectId.value)}` : ''
   try {
-    const data = await apiRequest('/modules/releases/registry')
+    const data = await apiRequest(`/modules/releases/registry${suffix}`)
+    if (sequence !== requestSequence) return
     releases.value = data.releases || []
   } catch (e) {
+    if (sequence !== requestSequence) return
     console.error('Failed to fetch releases:', e)
   } finally {
-    loading.value = false
+    if (sequence === requestSequence) loading.value = false
   }
 }
+
+watch(projectId, () => {
+  selectedProduct.value = null
+  searchQuery.value = ''
+  if (hasAccess.value) fetchReleases()
+})
 
 function formatMilestoneLabel(key) {
   const labels = { codeFreeze: 'Code Freeze', ea1: 'EA1', ga: 'GA' }

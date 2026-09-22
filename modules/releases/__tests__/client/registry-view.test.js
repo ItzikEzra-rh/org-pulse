@@ -30,7 +30,7 @@ function makeRelease(id, overrides = {}) {
   }
 }
 
-function mountView() {
+function mountView(params = {}) {
   return mount(RegistryView, {
     global: {
       provide: {
@@ -38,7 +38,7 @@ function mountView() {
           navigateTo: vi.fn(),
           goBack: vi.fn(),
           updateParams: vi.fn(),
-          params: ref({})
+          params: ref(params)
         }
       }
     }
@@ -117,6 +117,15 @@ describe('RegistryView write controls', () => {
     expect(apiRequest).toHaveBeenCalledTimes(1)
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/registry')
     expect(wrapper.text()).toContain('RHOAI 2.16')
+  })
+
+  it('uses the explicit project context for a published registry', async () => {
+    apiRequest.mockResolvedValueOnce({ releases: [makeRelease('flightctl-1.4.0')] })
+    const wrapper = mountView({ projectId: 'flightctl' })
+    await flushPromises()
+
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/registry?projectId=flightctl')
+    expect(wrapper.find('h1').text()).toBe('Release Registry')
   })
 
   it('shows an empty read-only message when there are no releases', async () => {

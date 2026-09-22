@@ -30,6 +30,68 @@ function readRegistry(readFromStorage) {
 }
 
 /**
+ * Read one published project registry through the data-backed profile reader.
+ * An unknown or unavailable project never falls back to the legacy OSAC file.
+ */
+function readProjectRegistry(projects, projectId, artifactKey = 'releases/registry.json') {
+  if (!projects || typeof projects.get !== 'function' || typeof projects.readArtifact !== 'function') {
+    return { status: 503, error: 'Project publication reader is unavailable' };
+  }
+
+  let profile;
+  try {
+    profile = projects.get(projectId);
+  } catch (error) {
+    return { status: 400, error: error.message };
+  }
+  if (!profile) return { status: 404, error: 'Unknown project' };
+
+  let artifact;
+  try {
+    artifact = projects.readArtifact(projectId, artifactKey);
+  } catch (error) {
+    return { status: 502, error: error.message };
+  }
+  if (!artifact) return { status: 404, error: 'Project registry is unavailable' };
+
+  const envelope = artifact.value;
+  if (envelope.schemaVersion !== undefined && envelope.schemaVersion !== 1) {
+    return { status: 502, error: 'Unsupported project registry publication schema' };
+  }
+  if (envelope.projectId && envelope.projectId !== projectId) {
+    return { status: 502, error: 'Project registry identity mismatch' };
+  }
+  const registry = envelope.data && Array.isArray(envelope.data.releases)
+    ? envelope.data
+    : envelope;
+  if (!Array.isArray(registry.releases)) return { status: 502, error: 'Invalid project registry publication' };
+  if (registry.projectId && registry.projectId !== projectId) {
+    return { status: 502, error: 'Project registry payload identity mismatch' };
+  }
+
+  return {
+    status: 200,
+    registry: {
+      ...registry,
+      projectId,
+      profileRevision: envelope.profileRevision || registry.profileRevision || profile.profileRevision,
+      publication: {
+        state: envelope.state || 'supported',
+        freshness: envelope.freshness || 'unknown',
+        partial: envelope.partial === true,
+        error: envelope.error || null,
+        generatedAt: envelope.generatedAt || null,
+        fetchedAt: envelope.fetchedAt || null,
+        publishedAt: envelope.publishedAt || null,
+        source: envelope.source || null,
+        lastKnownGood: envelope.lastKnownGood || null,
+        generationId: artifact.generationId
+      }
+    }
+  };
+}
+
+/**
  * Write the registry to storage.
  */
 function writeRegistry(writeToStorage, registry) {
@@ -490,7 +552,7 @@ async function runRegistrySync(storage, options) {
  * Register release registry routes on the provided router.
  */
 function registerRegistryRoutes(router, context) {
-  const { storage, requireAuth, requirePlanningManager, requireScope } = context;
+  const { storage, requireAuth, requirePlanningManager, requireScope, projects } = context;
   const { readFromStorage } = storage;
 
   /**
@@ -499,6 +561,11 @@ function registerRegistryRoutes(router, context) {
    *   get:
    *     tags: [Releases]
    *     summary: List all releases in the registry
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: false
+   *         schema: { type: string }
    *     responses:
    *       200:
    *         description: Release registry
@@ -515,6 +582,11 @@ function registerRegistryRoutes(router, context) {
    *                     type: object
    */
   router.get('/registry', requireAuth, requireScope('releases:read'), function(req, res) {
+    if (req.query?.projectId) {
+      const result = readProjectRegistry(projects, req.query.projectId);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.registry);
+    }
     const registry = readRegistry(readFromStorage);
     res.json(registry);
   });
@@ -578,6 +650,10 @@ function registerRegistryRoutes(router, context) {
    *         required: true
    *         schema:
    *           type: string
+   *       - in: query
+   *         name: projectId
+   *         required: false
+   *         schema: { type: string }
    *     responses:
    *       200:
    *         description: Release object
@@ -585,7 +661,13 @@ function registerRegistryRoutes(router, context) {
    *         description: Release not found
    */
   router.get('/registry/:id', requireAuth, requireScope('releases:read'), function(req, res) {
-    const registry = readRegistry(readFromStorage);
+    const projectResult = req.query?.projectId
+      ? readProjectRegistry(projects, req.query.projectId)
+      : null;
+    if (projectResult && projectResult.status !== 200) {
+      return res.status(projectResult.status).json({ error: projectResult.error });
+    }
+    const registry = projectResult ? projectResult.registry : readRegistry(readFromStorage);
     const release = registry.releases.find(r => r.id === req.params.id);
     if (!release) {
       return res.status(404).json({ error: 'Release not found' });
@@ -606,5 +688,5 @@ function registerRegistryRoutes(router, context) {
 module.exports = {
   registerRegistryRoutes, readRegistry, writeRegistry, validateRelease, normalizeRelease,
   normalizeVersionName, matchVersionsToReleases, runRegistrySync, migrateNormalizedIds,
-  autoResolveFixVersions, REGISTRY_FILE
+  autoResolveFixVersions, REGISTRY_FILE, readProjectRegistry
 };

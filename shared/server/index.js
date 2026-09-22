@@ -8,6 +8,7 @@ const jira = require('./jira')
 const jiraOAuth = require('./jira-oauth')
 const permissions = require('./permissions')
 const { createRoleStore, normalizeEmail } = require('./role-store')
+const projectProfile = require('./project-profile')
 
 module.exports = {
   storage,
@@ -16,6 +17,7 @@ module.exports = {
   proxySecretGuard,
   createRoleStore,
   normalizeEmail,
+  projectProfile,
   googleSheets,
   roster,
   rosterSync,

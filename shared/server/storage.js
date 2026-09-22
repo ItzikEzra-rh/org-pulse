@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 
@@ -75,13 +76,19 @@ function writeToStorage(key, data) {
 function writeToStorageAtomic(key, data) {
   const filePath = path.resolve(DATA_DIR, key);
   if (!isPathSafe(filePath)) {
-    console.error(`[storage] Blocked path traversal attempt: ${key}`);
-    return;
+    const error = new Error(`Blocked unsafe storage path: ${key}`);
+    error.code = 'PATH_TRAVERSAL';
+    throw error;
   }
   ensureDir(filePath);
-  const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-  fs.renameSync(tmpPath, filePath);
+  const tmpPath = filePath + '.tmp.' + process.pid + '.' + crypto.randomBytes(6).toString('hex');
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, filePath);
+  } catch (error) {
+    try { fs.unlinkSync(tmpPath); } catch { /* best effort cleanup */ }
+    throw error;
+  }
 }
 
 /**

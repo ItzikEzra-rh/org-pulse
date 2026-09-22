@@ -32,6 +32,7 @@ const apiTokens = require('./api-tokens');
 
 const modulesConfig = require('./modules/config');
 const gitSync = require('./modules/git-sync');
+const createProjectProfiles = require('./project-profiles');
 const { createModuleStaticMiddleware, invalidateCache: invalidateStaticCache } = require('./modules/static-serve');
 const {
   getDiscoveredModules,
@@ -1726,7 +1727,8 @@ if (allocationStrategy) {
 } else {
   console.log('[platform] No allocation strategy found — allocation features will be hidden');
 }
-const coreServices = { storage: storageModule, requireAuth: authMiddleware, requireAdmin, requireTeamAdmin, requireRole, requireScope, roleStore, roleRegistry, scopeRegistry, secretRegistry, allocationStrategy };
+const projectProfiles = createProjectProfiles(storageModule);
+const coreServices = { storage: storageModule, requireAuth: authMiddleware, requireAdmin, requireTeamAdmin, requireRole, requireScope, roleStore, roleRegistry, scopeRegistry, secretRegistry, allocationStrategy, projects: projectProfiles };
 const registries = { diagnostics: diagnosticsRegistry, messages: messageRegistry, refresh: refreshRegistry, exports: exportRegistry };
 
 const persistedState = loadModuleState(storageModule);

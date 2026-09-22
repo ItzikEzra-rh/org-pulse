@@ -188,7 +188,7 @@ module.exports = function registerRoutes(router, context) {
   }
 
   // Registry routes (top-level under /api/modules/releases/)
-  registerRegistryRoutes(router, { storage, requireAuth, requirePlanningManager, requireScope, registerRefresh: context.registerRefresh || null, isRefreshRunning: context.isRefreshRunning || null });
+  registerRegistryRoutes(router, { storage, projects: context.projects || null, requireAuth, requirePlanningManager, requireScope, registerRefresh: context.registerRefresh || null, isRefreshRunning: context.isRefreshRunning || null });
 
   // Planning sub-router (mounted at /api/modules/releases/planning/)
   var planningRouter = express.Router();

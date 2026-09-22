@@ -42,6 +42,7 @@
  * @property {Function} requireRole    - Factory: requireRole(role) returns Express middleware
  * @property {Function} requireScope   - Factory returning Express middleware for API token scope check
  * @property {object} roleStore        - Role store instance
+ * @property {object|null} projects    - Project profile registry and publication helpers
  * @property {Function} registerDiagnostics - Register a diagnostics function for admin health checks
  * @property {Function} registerMessageProvider - Register a message provider (id, fn)
  * @property {Function} registerRefresh - Register a refresh handler (id, config)
@@ -87,6 +88,7 @@ function buildModuleContext(coreServices, slug, registries = {}) {
     requireRole: coreServices.requireRole,
     requireScope: coreServices.requireScope,
     roleStore: coreServices.roleStore,
+    projects: coreServices.projects || null,
 
     registerRole: roleRegistry
       ? function (id, config) {
@@ -194,6 +196,7 @@ function createTestContext(overrides = {}) {
       removeRole: noop,
       getAllRoles: function () { return {} }
     },
+    projects: null,
     registerDiagnostics: noop,
     registerMessageProvider: noop,
     registerRefresh: noop,

@@ -2,6 +2,58 @@
 
 This document describes the JSON structure of all files stored in the `data/` directory (production) and `fixtures/` directory (demo mode). **Demo fixtures must always match production format** — see [Fixture Rules](#fixture-rules) below.
 
+## Project-qualified publication envelope
+
+Project-aware collectors publish artifacts under `projects/{projectId}/` and
+wrap the raw collector result in an envelope. The envelope keeps project
+identity and source evidence separate from any derived product policy.
+
+```json
+{
+  "schemaVersion": 1,
+  "projectId": "flightctl",
+  "profileRevision": "flightctl-2026-09-22-1",
+  "artifactKey": "releases/registry.json",
+  "source": {
+    "id": "jira-versions",
+    "kind": "jira",
+    "revision": null,
+    "runId": null
+  },
+  "generatedAt": "2026-09-22T11:00:00.000Z",
+  "fetchedAt": "2026-09-22T11:01:00.000Z",
+  "attemptedAt": "2026-09-22T11:01:00.000Z",
+  "publishedAt": "2026-09-22T11:01:00.000Z",
+  "state": "supported",
+  "freshness": "fresh",
+  "partial": false,
+  "error": null,
+  "lastKnownGood": null,
+  "data": {}
+}
+```
+
+`state` is one of `supported`, `unavailable`, `inaccessible`, `empty`,
+`inapplicable`, `disabled`, `source-only`, or `error`. `freshness` is one of
+`fresh`, `stale`, `expired`, or `unknown`. A failed publication leaves the
+project-qualified artifact untouched and writes a separate stale/error status
+record with the previous artifact's last-known-good metadata.
+
+## Project profiles and generations
+
+The data repository owns canonical profiles under
+`config/projects/{projectId}.json` and publishes sanitized projections under
+`projects/{projectId}/profile.json`. `projects/index.json` lists the published
+profiles. The app never maintains a second source registry.
+
+In a sidecar-managed volume, `projects/{projectId}/current.json` points to an
+immutable generation under `projects/{projectId}/generations/{generationId}/`.
+The pointer is replaced atomically. Local development may read the direct
+published path before a sidecar generation has been materialized. A project
+profile contains `schemaVersion`, `profileRevision`, `projectId`, Jira identity,
+source-qualified repositories/sources, team IDs, capability metadata, and
+provenance. Credentials and access grants are not profile fields.
+
 ## Person Metrics — `data/people/{name}.json`
 
 Filename is the person's display name lowercased with non-alphanumeric chars replaced by `_`.

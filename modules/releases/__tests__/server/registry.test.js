@@ -311,6 +311,7 @@ describe('registerRegistryRoutes', () => {
       requireAuth: (req, res, next) => next(),
       requirePlanningManager: (req, res, next) => next(),
       requireScope: () => (req, res, next) => next(),
+      projects: null,
       registerRefresh: vi.fn()
     };
   }
@@ -334,5 +335,66 @@ describe('registerRegistryRoutes', () => {
 
     expect(router.put).not.toHaveBeenCalled();
     expect(router.delete).not.toHaveBeenCalled();
+  });
+
+  it('serves an explicitly project-qualified published registry without legacy fallback', () => {
+    const router = makeRouter();
+    const projectRegistry = {
+      schemaVersion: 1,
+      projectId: 'flightctl',
+      profileRevision: 'flightctl-real-1',
+      releases: [{ id: 'flightctl-1.4.0', displayName: 'Flight Control 1.4.0' }]
+    };
+    const projects = {
+      get: vi.fn(() => ({ projectId: 'flightctl', profileRevision: 'flightctl-real-1' })),
+      readArtifact: vi.fn(() => ({
+        generationId: 'current-sha',
+        value: {
+          schemaVersion: 1,
+          projectId: 'flightctl',
+          profileRevision: 'flightctl-real-1',
+          state: 'supported',
+          freshness: 'unknown',
+          data: projectRegistry
+        }
+      }))
+    };
+    const context = { ...makeContext(), projects };
+    registerRegistryRoutes(router, context);
+    const handler = router.get.mock.calls.find(call => call[0] === '/registry')[3];
+    const res = {
+      status: vi.fn(function () { return this }),
+      json: vi.fn(function (body) { this.body = body; return this })
+    };
+
+    handler({ query: { projectId: 'flightctl' } }, res);
+
+    expect(projects.readArtifact).toHaveBeenCalledWith('flightctl', 'releases/registry.json');
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'flightctl',
+      releases: projectRegistry.releases,
+      publication: expect.objectContaining({ generationId: 'current-sha' })
+    }));
+  });
+
+  it('does not resolve an unknown project to legacy OSAC data', () => {
+    const router = makeRouter();
+    const context = {
+      ...makeContext(),
+      storage: createMockStorage({ [REGISTRY_FILE]: { schemaVersion: 1, releases: [{ id: 'osac-0.4' }] } }),
+      projects: { get: vi.fn(() => null), readArtifact: vi.fn() }
+    };
+    registerRegistryRoutes(router, context);
+    const handler = router.get.mock.calls.find(call => call[0] === '/registry')[3];
+    const res = {
+      status: vi.fn(function (code) { this.code = code; return this }),
+      json: vi.fn(function (body) { this.body = body; return this })
+    };
+
+    handler({ query: { projectId: 'flightctl' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Unknown project' });
+    expect(res.body.releases).toBeUndefined();
   });
 });
