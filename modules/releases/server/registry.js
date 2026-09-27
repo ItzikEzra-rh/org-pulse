@@ -82,6 +82,8 @@ function readProjectRegistry(projects, projectId, artifactKey = 'releases/regist
         error: envelope.error || null,
         generatedAt: envelope.generatedAt || null,
         fetchedAt: envelope.fetchedAt || null,
+        observedAt: envelope.observedAt || null,
+        attemptedAt: envelope.attemptedAt || null,
         publishedAt: envelope.publishedAt || null,
         source: envelope.source || null,
         lastKnownGood: envelope.lastKnownGood || null,

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-const { readRegistry, writeRegistry, validateRelease, normalizeRelease, migrateNormalizedIds, registerRegistryRoutes, REGISTRY_FILE } = require('../../server/registry');
+const { readRegistry, readProjectRegistry, writeRegistry, validateRelease, normalizeRelease, migrateNormalizedIds, registerRegistryRoutes, REGISTRY_FILE } = require('../../server/registry');
 
 function createMockStorage(initial = {}) {
   const store = { ...initial };
@@ -42,6 +42,28 @@ describe('writeRegistry', () => {
     const registry = { schemaVersion: 1, releases: [{ id: 'v1' }] };
     writeRegistry(storage.writeToStorage, registry);
     expect(storage._store[REGISTRY_FILE]).toEqual(registry);
+  });
+});
+
+describe('readProjectRegistry', () => {
+  it('returns explicit nulls when an older publication lacks observation and attempt timestamps', () => {
+    const projects = {
+      get: () => ({ projectId: 'flightctl', profileRevision: 'flightctl-real-1' }),
+      readArtifact: () => ({
+        generationId: 'older-sha',
+        value: {
+          schemaVersion: 1,
+          projectId: 'flightctl',
+          data: { schemaVersion: 1, projectId: 'flightctl', releases: [] }
+        }
+      })
+    };
+
+    const result = readProjectRegistry(projects, 'flightctl');
+
+    expect(result.status).toBe(200);
+    expect(result.registry.publication).toHaveProperty('observedAt', null);
+    expect(result.registry.publication).toHaveProperty('attemptedAt', null);
   });
 });
 
@@ -353,13 +375,33 @@ describe('registerRegistryRoutes', () => {
           schemaVersion: 1,
           projectId: 'flightctl',
           profileRevision: 'flightctl-real-1',
+          artifactKey: 'releases/registry.json',
+          source: {
+            id: 'jira-versions',
+            kind: 'jira',
+            endpoint: 'https://example.atlassian.net/rest/api/3/project/EDM/version',
+            revision: null,
+            runId: null
+          },
+          generatedAt: '2026-09-22T11:00:00.000Z',
+          fetchedAt: '2026-09-22T11:01:00.000Z',
+          observedAt: '2026-09-22T11:01:00.000Z',
+          attemptedAt: '2026-09-22T11:02:00.000Z',
+          publishedAt: '2026-09-22T11:03:00.000Z',
           state: 'supported',
-          freshness: 'unknown',
+          freshness: 'fresh',
+          partial: false,
+          error: null,
+          lastKnownGood: null,
           data: projectRegistry
         }
       }))
     };
-    const context = { ...makeContext(), projects };
+    const context = {
+      ...makeContext(),
+      storage: createMockStorage({ [REGISTRY_FILE]: { schemaVersion: 1, releases: [{ id: 'osac-0.4' }] } }),
+      projects
+    };
     registerRegistryRoutes(router, context);
     const handler = router.get.mock.calls.find(call => call[0] === '/registry')[3];
     const res = {
@@ -373,8 +415,18 @@ describe('registerRegistryRoutes', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'flightctl',
       releases: projectRegistry.releases,
-      publication: expect.objectContaining({ generationId: 'current-sha' })
+      publication: expect.objectContaining({
+        generationId: 'current-sha',
+        observedAt: '2026-09-22T11:01:00.000Z',
+        attemptedAt: '2026-09-22T11:02:00.000Z',
+        source: expect.objectContaining({
+          id: 'jira-versions',
+          endpoint: 'https://example.atlassian.net/rest/api/3/project/EDM/version'
+        })
+      })
     }));
+    expect(res.body.releases).toEqual(projectRegistry.releases);
+    expect(res.body.releases).not.toContainEqual(expect.objectContaining({ id: 'osac-0.4' }));
   });
 
   it('does not resolve an unknown project to legacy OSAC data', () => {
