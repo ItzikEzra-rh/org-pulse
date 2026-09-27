@@ -17,11 +17,13 @@ identity and source evidence separate from any derived product policy.
   "source": {
     "id": "jira-versions",
     "kind": "jira",
+    "endpoint": "https://example.atlassian.net/rest/api/3/project/EDM/version",
     "revision": null,
     "runId": null
   },
   "generatedAt": "2026-09-22T11:00:00.000Z",
   "fetchedAt": "2026-09-22T11:01:00.000Z",
+  "observedAt": "2026-09-22T11:01:00.000Z",
   "attemptedAt": "2026-09-22T11:01:00.000Z",
   "publishedAt": "2026-09-22T11:01:00.000Z",
   "state": "supported",
@@ -37,7 +39,13 @@ identity and source evidence separate from any derived product policy.
 `inapplicable`, `disabled`, `source-only`, or `error`. `freshness` is one of
 `fresh`, `stale`, `expired`, or `unknown`. A failed publication leaves the
 project-qualified artifact untouched and writes a separate stale/error status
-record with the previous artifact's last-known-good metadata.
+record with the previous artifact's last-known-good metadata. `source.endpoint`
+is the actual source endpoint when known and `null` otherwise. `observedAt` uses
+an explicit observation timestamp, or the explicit fetch timestamp for
+`supported` and `empty` publications. Otherwise it is `null`. A failed
+publication retains the prior artifact's source, `generatedAt`, `fetchedAt`,
+and `observedAt` (or explicit nulls when absent), while `attemptedAt` records
+the new attempt.
 
 ## Project profiles and generations
 

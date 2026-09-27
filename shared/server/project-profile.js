@@ -171,11 +171,15 @@ function createPublicationEnvelope(profile, artifactKey, data, metadata = {}) {
     source: {
       id: metadata.sourceId || null,
       kind: metadata.sourceKind || null,
+      endpoint: metadata.sourceEndpoint || null,
       revision: metadata.sourceRevision || null,
       runId: metadata.runId || null
     },
-    generatedAt: metadata.generatedAt || now,
-    fetchedAt: metadata.fetchedAt || now,
+    generatedAt: metadata.generatedAt === undefined ? now : metadata.generatedAt,
+    fetchedAt: metadata.fetchedAt === undefined ? now : metadata.fetchedAt,
+    observedAt: metadata.observedAt || (
+      state === 'supported' || state === 'empty' ? metadata.fetchedAt || null : null
+    ),
     attemptedAt: metadata.attemptedAt || now,
     publishedAt: metadata.publishedAt || now,
     state,
@@ -314,6 +318,14 @@ function createProjectProfileRegistry(profiles) {
     } catch (error) {
       const failure = envelope(projectId, artifactKey, previous?.data ?? null, {
         ...metadata,
+        sourceId: previous?.source?.id ?? null,
+        sourceKind: previous?.source?.kind ?? null,
+        sourceEndpoint: previous?.source?.endpoint ?? null,
+        sourceRevision: previous?.source?.revision ?? null,
+        runId: previous?.source?.runId ?? null,
+        generatedAt: previous?.generatedAt ?? null,
+        fetchedAt: previous?.fetchedAt ?? null,
+        observedAt: previous?.observedAt ?? null,
         state: 'error',
         freshness: 'stale',
         partial: true,

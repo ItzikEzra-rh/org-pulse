@@ -134,6 +134,7 @@ describe('project-profile', () => {
     const envelope = createPublicationEnvelope(profile, 'ci/run-1.json', { passed: 3 }, {
       sourceId: 'flightctl-core-actions',
       sourceKind: 'github-actions',
+      sourceEndpoint: 'https://api.github.com/repos/flightctl/flightctl/actions/runs',
       sourceRevision: 'abc123',
       runId: '35722329385',
       generatedAt: '2026-09-22T11:00:00.000Z',
@@ -151,14 +152,47 @@ describe('project-profile', () => {
       source: {
         id: 'flightctl-core-actions',
         kind: 'github-actions',
+        endpoint: 'https://api.github.com/repos/flightctl/flightctl/actions/runs',
         revision: 'abc123',
         runId: '35722329385'
       },
+      observedAt: '2026-09-22T11:01:00.000Z',
       state: 'supported',
       freshness: 'fresh',
       partial: true,
       data: { passed: 3 }
     })
+  })
+
+  it('uses explicit nulls for an unknown endpoint and an unsuccessful observation', () => {
+    const envelope = createPublicationEnvelope(FLIGHTCTL, 'ci/status.json', null, {
+      state: 'error'
+    })
+
+    expect(envelope.source.endpoint).toBeNull()
+    expect(envelope.observedAt).toBeNull()
+  })
+
+  it.each([
+    ['supported without a fetch timestamp', 'supported', {}, null],
+    ['empty without a fetch timestamp', 'empty', {}, null],
+    ['supported with blank timestamps', 'supported', { observedAt: '', fetchedAt: '' }, null],
+    ['supported with a fetch timestamp', 'supported', { fetchedAt: '2026-09-22T11:01:00.000Z' }, '2026-09-22T11:01:00.000Z'],
+    ['empty with a fetch timestamp', 'empty', { fetchedAt: '2026-09-22T11:01:00.000Z' }, '2026-09-22T11:01:00.000Z'],
+    ['unavailable with a fetch timestamp', 'unavailable', { fetchedAt: '2026-09-22T11:01:00.000Z' }, null],
+    ['source-only with a fetch timestamp', 'source-only', { fetchedAt: '2026-09-22T11:01:00.000Z' }, null],
+    ['error with a fetch timestamp', 'error', { fetchedAt: '2026-09-22T11:01:00.000Z' }, null],
+    ['unavailable with an explicit observation', 'unavailable', { observedAt: '2026-09-22T11:02:00.000Z' }, '2026-09-22T11:02:00.000Z'],
+    ['supported with an explicit observation', 'supported', {
+      fetchedAt: '2026-09-22T11:01:00.000Z', observedAt: '2026-09-22T11:02:00.000Z'
+    }, '2026-09-22T11:02:00.000Z']
+  ])('sets observedAt for %s', (_description, state, timestamps, expected) => {
+    const envelope = createPublicationEnvelope(FLIGHTCTL, 'ci/status.json', null, {
+      state,
+      ...timestamps
+    })
+
+    expect(envelope.observedAt).toBe(expected)
   })
 
   it('publishes atomically under the project-qualified key', () => {
@@ -181,7 +215,16 @@ describe('project-profile', () => {
       schemaVersion: 1,
       projectId: 'flightctl',
       generatedAt: '2026-09-22T10:00:00.000Z',
-      source: { revision: 'old-sha', runId: 'old-run' },
+      fetchedAt: '2026-09-22T10:01:00.000Z',
+      observedAt: '2026-09-22T10:01:00.000Z',
+      attemptedAt: '2026-09-22T10:01:00.000Z',
+      source: {
+        id: 'old-source',
+        kind: 'github-actions',
+        endpoint: 'https://api.github.com/repos/flightctl/flightctl/actions/runs/old-run',
+        revision: 'old-sha',
+        runId: 'old-run'
+      },
       data: { passed: 3 }
     }
     const storage = makeStorage({ [key]: previous }, (writeKey, value, data) => {
@@ -189,16 +232,32 @@ describe('project-profile', () => {
       data[writeKey] = value
     })
 
-    const result = registry.publish(storage, 'flightctl', 'ci/run-1.json', { passed: 4 })
+    const result = registry.publish(storage, 'flightctl', 'ci/run-1.json', { passed: 4 }, {
+      sourceId: 'new-source',
+      sourceKind: 'gitlab',
+      sourceEndpoint: 'https://example.com/new-run',
+      sourceRevision: 'new-sha',
+      runId: 'new-run',
+      generatedAt: '2026-09-22T11:00:00.000Z',
+      fetchedAt: '2026-09-22T11:01:00.000Z',
+      observedAt: '2026-09-22T11:01:00.000Z',
+      attemptedAt: '2026-09-22T11:02:00.000Z'
+    })
 
     expect(result.ok).toBe(false)
     expect(result.preserved).toBe(true)
     expect(storage.data[key]).toBe(previous)
+    expect(storage.data[result.statusKey].source).toEqual(previous.source)
     expect(storage.data[result.statusKey]).toMatchObject({
       state: 'error',
       freshness: 'stale',
       partial: true,
       error: { code: 'ETIMEDOUT', message: 'source timeout' },
+      generatedAt: '2026-09-22T10:00:00.000Z',
+      fetchedAt: '2026-09-22T10:01:00.000Z',
+      observedAt: '2026-09-22T10:01:00.000Z',
+      attemptedAt: '2026-09-22T11:02:00.000Z',
+      source: previous.source,
       lastKnownGood: {
         available: true,
         key,
@@ -207,6 +266,36 @@ describe('project-profile', () => {
         sourceRunId: 'old-run'
       },
       data: { passed: 3 }
+    })
+  })
+
+  it('writes null source and data timestamps when publication fails without a previous artifact', () => {
+    const registry = createProjectProfileRegistry([FLIGHTCTL])
+    const key = 'projects/flightctl/ci/run-1.json'
+    const storage = makeStorage({}, (writeKey, value, data) => {
+      if (writeKey === key) throw new Error('storage unavailable')
+      data[writeKey] = value
+    })
+
+    const result = registry.publish(storage, 'flightctl', 'ci/run-1.json', { passed: 4 }, {
+      sourceId: 'new-source',
+      sourceEndpoint: 'https://example.com/new-run',
+      generatedAt: '2026-09-22T11:00:00.000Z',
+      fetchedAt: '2026-09-22T11:01:00.000Z',
+      observedAt: '2026-09-22T11:01:00.000Z',
+      attemptedAt: '2026-09-22T11:02:00.000Z'
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.preserved).toBe(false)
+    expect(storage.data[result.statusKey]).toMatchObject({
+      source: { id: null, kind: null, endpoint: null, revision: null, runId: null },
+      generatedAt: null,
+      fetchedAt: null,
+      observedAt: null,
+      attemptedAt: '2026-09-22T11:02:00.000Z',
+      lastKnownGood: null,
+      data: null
     })
   })
 })
