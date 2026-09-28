@@ -57,6 +57,7 @@
             >
               <MenuIcon :size="20" />
             </button>
+            <ProjectSelector />
             <div class="flex items-center gap-2">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ currentPageTitle }}</h2>
               <div v-if="activeModule === 'module-iframe' && activeModuleConfig?.description" class="relative group">
@@ -202,6 +203,7 @@ import SettingsView from './SettingsView.vue'
 import AboutView from './AboutView.vue'
 import ApiTokensView from './ApiTokensView.vue'
 import AppSidebar from './AppSidebar.vue'
+import ProjectSelector from './ProjectSelector.vue'
 import LandingPage from './LandingPage.vue'
 import ModuleIframeView from './ModuleIframeView.vue'
 import BackendConnectivityModal from './BackendConnectivityModal.vue'
@@ -238,6 +240,7 @@ export default {
     AboutView,
     ApiTokensView,
     AppSidebar,
+    ProjectSelector,
     RefreshModal,
     LandingPage,
     ModuleIframeView,

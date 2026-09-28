@@ -1728,6 +1728,24 @@ if (allocationStrategy) {
   console.log('[platform] No allocation strategy found — allocation features will be hidden');
 }
 const projectProfiles = createProjectProfiles(storageModule);
+
+/**
+ * Published project profiles for the shell project selector.
+ * Returns projectId + displayName per published profile; the server has no
+ * source configuration of its own.
+ */
+app.get('/api/projects', authMiddleware, function (req, res) {
+  try {
+    const projects = projectProfiles.list().map(function (profile) {
+      return { projectId: profile.projectId, displayName: profile.displayName };
+    });
+    res.json({ projects });
+  } catch (error) {
+    console.error('[projects] Failed to list published projects:', error.message);
+    res.status(500).json({ error: 'Failed to list published projects' });
+  }
+});
+
 const coreServices = { storage: storageModule, requireAuth: authMiddleware, requireAdmin, requireTeamAdmin, requireRole, requireScope, roleStore, roleRegistry, scopeRegistry, secretRegistry, allocationStrategy, projects: projectProfiles };
 const registries = { diagnostics: diagnosticsRegistry, messages: messageRegistry, refresh: refreshRegistry, exports: exportRegistry };
 
