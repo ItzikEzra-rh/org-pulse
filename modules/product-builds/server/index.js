@@ -43,6 +43,38 @@ function getConfig(readFromStorage) {
 module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin } = context;
   const { readFromStorage, writeToStorage } = storage;
+  const { readProjectPublication } = require('./project-publication');
+
+  // The AIPCC Dashboard API is an OSAC-only source: a non-OSAC project never
+  // receives AIPCC data. Project build evidence is exposed through the
+  // capability-driven publication route instead.
+  function osacOnlyDataGuard(req, res) {
+    if (req.query?.projectId && req.query.projectId !== 'osac') {
+      res.status(200).json({
+        projectId: req.query.projectId,
+        state: 'unavailable',
+        reason: 'osac-only-data-source',
+        data: null
+      });
+      return true;
+    }
+    return false;
+  }
+
+  // Project build evidence: artifact key from the published profile's
+  // capabilities block (every project configures its own build evidence).
+  router.get('/project-publication', function(req, res) {
+    const projectId = req.query?.projectId;
+    const capability = req.query?.capability || 'buildRegistry';
+    if (!projectId) return res.status(400).json({ error: 'projectId is required' });
+    try {
+      const result = readProjectPublication(context.projects, projectId, capability);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.publication);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
 
   // OSAC routes are self-contained, with no AIPCC/proxy dependencies.
   registerOsacRoutes(router, { storage });
@@ -109,6 +141,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: Health status with latency
    */
   router.get('/health', async function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const { baseUrl } = getConfig(readFromStorage);
     if (!baseUrl) {
       return res.json({ status: 'not_configured' });
@@ -163,6 +196,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: AIPCC Dashboard API not configured
    */
   router.get('/products/:key', function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     upstream(`/products/${encodeURIComponent(req.params.key)}`, req, res);
   });
 
@@ -214,6 +248,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: Array of Drop objects (key, name, product_key, product_version, git_branch, environments, release_timings, created_at)
    */
   router.get('/drops', function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     upstream('/drops', req, res);
   });
 
@@ -238,6 +273,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: Drop not found
    */
   router.get('/drops/:key', function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     upstream(`/drops/${encodeURIComponent(req.params.key)}`, req, res);
   });
 
@@ -262,6 +298,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: Drop not found
    */
   router.get('/drops/:key/changelog', function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     upstream(`/drops/${encodeURIComponent(req.params.key)}/changelog`, req, res);
   });
 
