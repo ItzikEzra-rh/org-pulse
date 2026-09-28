@@ -26,7 +26,7 @@ const BULK_CAP = 5000;
  * @param {import('express').Router} router
  * @param {object} context - Module context with storage and auth middleware
  */
-module.exports = function registerAssessmentRoutes(router, context) {
+module.exports = function registerAssessmentRoutes(router, context, osacOnlyDataGuard) {
   const { storage, requireAdmin, requireScope } = context;
   const { readFromStorage, writeToStorageAtomic } = storage;
 
@@ -101,7 +101,7 @@ module.exports = function registerAssessmentRoutes(router, context) {
 
   // GET /assessments — list all latest assessments (slim projection)
   router.get('/assessments', requireScope('ai-impact:read'), function(req, res) {
-    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readAssessments(readFromStorage);
     res.json(getLatestProjection(data));
   });
@@ -110,7 +110,7 @@ module.exports = function registerAssessmentRoutes(router, context) {
 
   // GET /assessments/:key — single RFE assessment + history
   router.get('/assessments/:key', requireScope('ai-impact:read'), function(req, res) {
-    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readAssessments(readFromStorage);
     const entry = data.assessments[req.params.key];
     if (!entry) {

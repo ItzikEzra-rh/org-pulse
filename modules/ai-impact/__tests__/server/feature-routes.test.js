@@ -123,6 +123,34 @@ describe('GET /features/status', () => {
 });
 
 describe('GET /features', () => {
+  it('returns the truthful unavailable envelope for a non-OSAC project (regression: the OSAC-only guard was missing on sub-route groups)', async () => {
+    const { router, routes } = createRouter();
+    const osacOnlyDataGuard = (req, res) => {
+      if (req.query?.projectId && req.query.projectId !== 'osac') {
+        res.status(200).json({
+          projectId: req.query.projectId,
+          state: 'unavailable',
+          reason: 'osac-only-data-source',
+          data: null
+        });
+        return true;
+      }
+      return false;
+    };
+    registerFeatureRoutes(router, makeContext(), osacOnlyDataGuard);
+
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const handlers = routes['GET /features'];
+    await handlers[handlers.length - 1]({ body: {}, params: {}, query: { projectId: 'flightctl' } }, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      projectId: 'flightctl',
+      state: 'unavailable',
+      reason: 'osac-only-data-source',
+      data: null
+    });
+  });
+
   it('returns slim projection of all features', async () => {
     const data = {
       lastSyncedAt: '2026-04-19T12:00:00Z',

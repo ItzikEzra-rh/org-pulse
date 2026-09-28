@@ -20,7 +20,6 @@ module.exports = function registerRoutes(router, context) {
   }
 
   // Register module scopes
-  context.osacOnlyDataGuard = osacOnlyDataGuard;
   context.registerScopes([
     { key: 'ai-impact:read', label: 'AI Impact (Read)', description: 'Read AI impact data', category: 'AI Impact' },
     { key: 'ai-impact:write', label: 'AI Impact (Write)', description: 'Push/clear AI impact data', category: 'AI Impact' }
@@ -53,19 +52,19 @@ module.exports = function registerRoutes(router, context) {
 
   // Assessment routes (Phase 1: Storage + Ingest API)
   const registerAssessmentRoutes = require('./assessments/routes');
-  registerAssessmentRoutes(router, context);
+  registerAssessmentRoutes(router, context, osacOnlyDataGuard);
 
   // Feature review routes
   const registerFeatureRoutes = require('./features/routes');
-  registerFeatureRoutes(router, context);
+  registerFeatureRoutes(router, context, osacOnlyDataGuard);
 
-  // Test plan quality routes
+  // Test plan routes
   const registerTestPlanRoutes = require('./test-plans/routes');
-  registerTestPlanRoutes(router, context);
+  registerTestPlanRoutes(router, context, osacOnlyDataGuard);
 
-  // Component onboarding routes (Build & Release)
+  // Component onboarding routes
   const registerComponentOnboardingRoutes = require('./component-onboarding/routes');
-  registerComponentOnboardingRoutes(router, context);
+  registerComponentOnboardingRoutes(router, context, osacOnlyDataGuard);
 
   // ─── Refresh state (in-memory) ───
 
