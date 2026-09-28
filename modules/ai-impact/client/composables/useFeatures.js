@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 // Singleton state — fetch once, share refs
 const features = ref({})
@@ -17,7 +18,7 @@ async function loadFeatures() {
   featureLoading.value = true
   featureError.value = null
   try {
-    const data = await apiRequest('/modules/ai-impact/features')
+    const data = await apiRequest(`/modules/ai-impact/features${projectQuery(useProjectId().value)}`)
     features.value = data.features || {}
     detailCache.value = {}
     featureMeta.value = {
@@ -34,7 +35,10 @@ async function loadFeatures() {
 async function loadFeatureTrend() {
   const tw = featureTimeWindow.value || 'month'
   try {
-    const data = await apiRequest(`/modules/ai-impact/features/trend?timeWindow=${tw}`)
+    const params = new URLSearchParams({ timeWindow: tw })
+    const projectId = useProjectId().value
+    if (projectId) params.set('projectId', projectId)
+    const data = await apiRequest(`/modules/ai-impact/features/trend?${params}`)
     // Ignore a stale response if the window changed while this request was in
     // flight, so an earlier request can't clobber a newer selection's data.
     if ((featureTimeWindow.value || 'month') !== tw) return
@@ -50,7 +54,7 @@ async function loadFeatureDetail(key) {
     return detailCache.value[key]
   }
   try {
-    const data = await apiRequest(`/modules/ai-impact/features/${encodeURIComponent(key)}`)
+    const data = await apiRequest(`/modules/ai-impact/features/${encodeURIComponent(key)}${projectQuery(useProjectId().value)}`)
     detailCache.value[key] = data
     return data
   } catch (e) {
@@ -63,6 +67,13 @@ async function loadFeatureDetail(key) {
 
 // Re-fetch trend when its time window changes
 watch(featureTimeWindow, () => loadFeatureTrend())
+
+// Re-fetch both lists when the project context changes; loadFeatures clears
+// the detail cache, so cached details never leak across projects
+watch(useProjectId(), () => {
+  loadFeatures()
+  loadFeatureTrend()
+})
 
 export function useFeatures() {
   if (!hasFetched) {

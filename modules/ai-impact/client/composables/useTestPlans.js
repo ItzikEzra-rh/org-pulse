@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 /**
  * Composable for loading and caching test plan quality data.
@@ -20,7 +21,7 @@ export function useTestPlans() {
     testPlanLoading.value = true
     testPlanError.value = null
     try {
-      const data = await apiRequest('/modules/ai-impact/test-plans')
+      const data = await apiRequest(`/modules/ai-impact/test-plans${projectQuery(useProjectId().value)}`)
       testPlans.value = data.testPlans || {}
       detailCache.value = {}
       testPlanMeta.value = {
@@ -39,7 +40,7 @@ export function useTestPlans() {
       return detailCache.value[key]
     }
     try {
-      const data = await apiRequest(`/modules/ai-impact/test-plans/${encodeURIComponent(key)}`)
+      const data = await apiRequest(`/modules/ai-impact/test-plans/${encodeURIComponent(key)}${projectQuery(useProjectId().value)}`)
       detailCache.value[key] = data
       return data
     } catch (e) {

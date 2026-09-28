@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 export function useComponentOnboarding() {
   const data = ref(null)
@@ -11,7 +12,7 @@ export function useComponentOnboarding() {
     loading.value = true
     error.value = null
     try {
-      data.value = await apiRequest('/modules/ai-impact/component-onboarding')
+      data.value = await apiRequest(`/modules/ai-impact/component-onboarding${projectQuery(useProjectId().value)}`)
     } catch (e) {
       error.value = e.message
     } finally {
@@ -22,7 +23,7 @@ export function useComponentOnboarding() {
   async function loadDetail(key) {
     if (detailCache.value[key]) return
     try {
-      detailCache.value[key] = await apiRequest(`/modules/ai-impact/component-onboarding/${encodeURIComponent(key)}`)
+      detailCache.value[key] = await apiRequest(`/modules/ai-impact/component-onboarding/${encodeURIComponent(key)}${projectQuery(useProjectId().value)}`)
     } catch (e) {
       console.error(`[component-onboarding] Failed to load detail for ${key}:`, e.message)
     }

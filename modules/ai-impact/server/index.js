@@ -20,6 +20,7 @@ module.exports = function registerRoutes(router, context) {
   }
 
   // Register module scopes
+  context.osacOnlyDataGuard = osacOnlyDataGuard;
   context.registerScopes([
     { key: 'ai-impact:read', label: 'AI Impact (Read)', description: 'Read AI impact data', category: 'AI Impact' },
     { key: 'ai-impact:write', label: 'AI Impact (Write)', description: 'Push/clear AI impact data', category: 'AI Impact' }

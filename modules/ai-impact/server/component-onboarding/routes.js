@@ -129,6 +129,7 @@ module.exports = function registerComponentOnboardingRoutes(router, context) {
    *         description: All component onboarding data with latest projections
    */
   router.get('/component-onboarding', requireScope('ai-impact:read'), function(req, res) {
+    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
     const data = readComponentOnboarding(readFromStorage);
     res.json(getLatestProjection(data));
   });
@@ -154,6 +155,7 @@ module.exports = function registerComponentOnboardingRoutes(router, context) {
    *         description: Component not found
    */
   router.get('/component-onboarding/:key', requireScope('ai-impact:read'), function(req, res) {
+    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
     const data = readComponentOnboarding(readFromStorage);
     const entry = data.components[req.params.key];
     if (!entry) {

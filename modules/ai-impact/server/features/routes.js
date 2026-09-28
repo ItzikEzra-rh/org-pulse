@@ -232,6 +232,7 @@ module.exports = function registerFeatureRoutes(router, context) {
 
   // GET /features — list all features (slim projection)
   router.get('/features', requireScope('ai-impact:read'), function(req, res) {
+    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
     const data = readFeatures(readFromStorage);
     res.json(getLatestProjection(data));
   });
@@ -255,6 +256,7 @@ module.exports = function registerFeatureRoutes(router, context) {
    *         description: Trend points (daily for week/month, weekly for 3months) and an AI-involvement breakdown, matching the /rfe-data trend shape
    */
   router.get('/features/trend', requireScope('ai-impact:read'), function(req, res) {
+    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
     // Normalize to a supported window, matching the sibling /rfe-data route
     // (unknown values fall back to 'month' rather than erroring).
     const timeWindow = ['week', 'month', '3months'].includes(req.query.timeWindow)
@@ -295,6 +297,7 @@ module.exports = function registerFeatureRoutes(router, context) {
 
   // GET /features/:key — single feature + history
   router.get('/features/:key', requireScope('ai-impact:read'), function(req, res) {
+    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
     const data = readFeatures(readFromStorage);
     const entry = data.features[req.params.key];
     if (!entry) {

@@ -199,6 +199,7 @@ import { Menu as MenuIcon, RefreshCw, ExternalLink as ExternalLinkIcon, Sun as S
 import LoadingOverlay from '@shared/client/components/LoadingOverlay.vue'
 import Toast from '@shared/client/components/Toast.vue'
 import RefreshModal from '@shared/client/components/RefreshModal.vue'
+import { useProjectId, projectParam } from '@shared/client/composables/useProjectId.js'
 import SettingsView from './SettingsView.vue'
 import AboutView from './AboutView.vue'
 import ApiTokensView from './ApiTokensView.vue'
@@ -373,10 +374,13 @@ export default {
       navigateTo(viewId, params = {}) {
         const slug = activeModuleSlugRef.value
         if (!slug) return
-        routeParams.value = params
+        // Preserve the shell project context across module navigation unless
+        // the caller explicitly passes a different projectId
+        const merged = { ...projectParam(useProjectId().value), ...params }
+        routeParams.value = merged
         // Build hash with query params
         let hash = `#/${slug}/${viewId}`
-        const qs = Object.entries(params)
+        const qs = Object.entries(merged)
           .filter(([, v]) => v !== undefined && v !== null)
           .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
           .join('&')

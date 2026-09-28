@@ -101,6 +101,7 @@ module.exports = function registerAssessmentRoutes(router, context) {
 
   // GET /assessments — list all latest assessments (slim projection)
   router.get('/assessments', requireScope('ai-impact:read'), function(req, res) {
+    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
     const data = readAssessments(readFromStorage);
     res.json(getLatestProjection(data));
   });
@@ -109,6 +110,7 @@ module.exports = function registerAssessmentRoutes(router, context) {
 
   // GET /assessments/:key — single RFE assessment + history
   router.get('/assessments/:key', requireScope('ai-impact:read'), function(req, res) {
+    if (context.osacOnlyDataGuard && context.osacOnlyDataGuard(req, res)) return;
     const data = readAssessments(readFromStorage);
     const entry = data.assessments[req.params.key];
     if (!entry) {

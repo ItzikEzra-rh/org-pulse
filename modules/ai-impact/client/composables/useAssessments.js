@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 // Singleton state — fetch once, share refs
 const assessments = ref({})
@@ -13,7 +14,7 @@ async function loadAssessments() {
   assessmentLoading.value = true
   assessmentError.value = null
   try {
-    const data = await apiRequest('/modules/ai-impact/assessments')
+    const data = await apiRequest(`/modules/ai-impact/assessments${projectQuery(useProjectId().value)}`)
     assessments.value = data.assessments || {}
     assessmentMeta.value = {
       lastSyncedAt: data.lastSyncedAt,
@@ -31,7 +32,7 @@ async function loadAssessmentDetail(key) {
     return detailCache.value[key]
   }
   try {
-    const data = await apiRequest(`/modules/ai-impact/assessments/${encodeURIComponent(key)}`)
+    const data = await apiRequest(`/modules/ai-impact/assessments/${encodeURIComponent(key)}${projectQuery(useProjectId().value)}`)
     detailCache.value[key] = data
     return data
   } catch (e) {

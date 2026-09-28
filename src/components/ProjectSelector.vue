@@ -15,7 +15,7 @@
 </template>
 
 <script setup>
-import { inject, onMounted, ref } from 'vue'
+import { inject, onMounted, ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
 
 const nav = inject('moduleNav', null)
@@ -34,6 +34,17 @@ onMounted(async () => {
         : (projects.value[0]?.projectId || '')
   } catch (error) {
     console.error('Failed to load projects:', error)
+  }
+})
+
+// Sync the displayed selection from the hash query param reactively, so a
+// selection lost or regained outside this selector never goes stale
+watch(() => nav?.params.value?.projectId, current => {
+  if (projects.value.length === 0) return
+  if (current && projects.value.some(p => p.projectId === current)) {
+    selectedProjectId.value = current
+  } else if (!current) {
+    selectedProjectId.value = projects.value[0]?.projectId || ''
   }
 })
 
