@@ -1,6 +1,7 @@
 module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin, requireTeamAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage, listStorageFiles, deleteStorageDirectory } = storage;
+  const { readProjectRoster } = require('./project-roster');
 
   // Register module scopes
   context.registerScopes([
@@ -2810,6 +2811,11 @@ module.exports = function registerRoutes(router, context) {
    */
   router.get('/roster', requireScope('roster:read'), function(req, res) {
     try {
+      if (req.query?.projectId) {
+        const result = readProjectRoster(context.projects, req.query.projectId);
+        if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+        return res.json(result.roster);
+      }
       const full = readRosterFull();
       if (!full) {
         return res.json({ orgs: [] });
