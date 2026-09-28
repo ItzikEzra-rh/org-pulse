@@ -81,6 +81,15 @@
     <!-- Loading state -->
     <div v-if="loading" class="text-center py-12 text-gray-500 dark:text-gray-400">Loading releases...</div>
 
+    <!-- Error state -->
+    <div
+      v-else-if="fetchError"
+      class="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-red-300 dark:border-red-700"
+    >
+      <h3 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Failed to load releases</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{{ fetchError }}</p>
+    </div>
+
     <!-- Empty state -->
     <div
       v-else-if="releases.length === 0"
@@ -215,6 +224,7 @@ const loading = ref(true)
 const showArchived = ref(false)
 const selectedProduct = ref(null)
 const searchQuery = ref('')
+const fetchError = ref('')
 const projectId = computed(() => nav.params.value?.projectId || '')
 let requestSequence = 0
 
@@ -250,6 +260,7 @@ async function fetchReleases() {
   const sequence = ++requestSequence
   loading.value = true
   releases.value = []
+  fetchError.value = ''
   const suffix = projectId.value ? `?projectId=${encodeURIComponent(projectId.value)}` : ''
   try {
     const data = await apiRequest(`/modules/releases/registry${suffix}`)
@@ -258,6 +269,7 @@ async function fetchReleases() {
   } catch (e) {
     if (sequence !== requestSequence) return
     console.error('Failed to fetch releases:', e)
+    fetchError.value = e?.message || 'The release registry is unavailable.'
   } finally {
     if (sequence === requestSequence) loading.value = false
   }

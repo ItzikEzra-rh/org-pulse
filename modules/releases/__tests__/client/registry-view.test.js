@@ -128,6 +128,16 @@ describe('RegistryView write controls', () => {
     expect(wrapper.find('h1').text()).toBe('Release Registry')
   })
 
+  it('shows the request error instead of the empty state', async () => {
+    apiRequest.mockRejectedValueOnce(new Error('Project registry is unavailable'))
+    const wrapper = mountView({ projectId: 'flightctl' })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Failed to load releases')
+    expect(wrapper.text()).toContain('Project registry is unavailable')
+    expect(wrapper.text()).not.toContain('The release registry is empty.')
+  })
+
   it('shows an empty read-only message when there are no releases', async () => {
     apiRequest.mockResolvedValueOnce({ releases: [] })
     const wrapper = mountView()
