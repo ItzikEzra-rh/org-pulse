@@ -144,4 +144,30 @@ describe('useAIImpact', () => {
     const lastCall = mockApiRequest.mock.calls.at(-1)[0];
     expect(lastCall).toBe(`/modules/ai-impact/rfe-data?timeWindow=${prd.vm.timeWindow}`);
   });
+
+  it('fetches the project context with a single ? separator (regression: a second ? made the server ignore projectId)', async () => {
+    window.location.hash = '#/releases/registry?projectId=flightctl';
+    window.dispatchEvent(new Event('urlchange'));
+    await Promise.resolve();
+    mockApiRequest.mockClear();
+
+    const { load } = useAIImpact();
+    await load();
+
+    const url = mockApiRequest.mock.calls[0][0];
+    expect(url).toBe('/modules/ai-impact/rfe-data?timeWindow=month&projectId=flightctl');
+    expect((url.match(/\?/g) || []).length).toBe(1);
+  });
+
+  it('omits the project context when none is selected', async () => {
+    window.location.hash = '#/releases/registry';
+    window.dispatchEvent(new Event('urlchange'));
+    await Promise.resolve();
+    mockApiRequest.mockClear();
+
+    const { load } = useAIImpact();
+    await load();
+
+    expect(mockApiRequest).toHaveBeenCalledWith('/modules/ai-impact/rfe-data?timeWindow=month');
+  });
 });

@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
-import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 
 // Singleton state — fetch once, share refs
 const rfeData = ref(null)
@@ -16,7 +16,10 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    const data = await apiRequest(`/modules/ai-impact/rfe-data?timeWindow=${tw}${projectQuery(useProjectId().value)}`)
+    const params = new URLSearchParams({ timeWindow: tw })
+    const projectId = useProjectId().value
+    if (projectId) params.set('projectId', projectId)
+    const data = await apiRequest(`/modules/ai-impact/rfe-data?${params}`)
     // Ignore a stale response if the window changed while this request was in
     // flight, so an earlier request can't clobber a newer selection's data
     // (or its loading/error state).
