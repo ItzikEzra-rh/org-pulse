@@ -25,7 +25,7 @@ const updating = ref(false)
 
 onMounted(async () => {
   try {
-    const data = await apiRequest('/api/projects')
+    const data = await apiRequest('/projects')
     projects.value = data.projects || []
     const current = nav?.params.value?.projectId
     selectedProjectId.value =
