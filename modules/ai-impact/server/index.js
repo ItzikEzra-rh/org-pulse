@@ -1,6 +1,23 @@
 module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage } = storage;
+  const { readProjectProvenance } = require('./project-provenance');
+
+  // The OSAC autofix/EP-review/doc pipeline routes are OSAC-only data sources:
+  // a non-OSAC project never receives OSAC pipeline data. Project-qualified AI
+  // evidence is exposed through the provenance publication route instead.
+  function osacOnlyDataGuard(req, res) {
+    if (req.query?.projectId && req.query.projectId !== 'osac') {
+      res.status(200).json({
+        projectId: req.query.projectId,
+        state: 'unavailable',
+        reason: 'osac-only-data-source',
+        data: null
+      });
+      return true;
+    }
+    return false;
+  }
 
   // Register module scopes
   context.registerScopes([
@@ -80,6 +97,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: RFE dataset with metrics, trend data, breakdown, and pipeline friction
    */
   router.get('/rfe-data', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const timeWindow = VALID_TIME_WINDOWS.includes(req.query.timeWindow)
       ? req.query.timeWindow
       : 'month';
@@ -169,6 +187,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: Autofix dataset with metrics, trend data, and issues
    */
   router.get('/autofix-data', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const timeWindow = VALID_AUTOFIX_TIME_WINDOWS.includes(req.query.timeWindow)
       ? req.query.timeWindow
       : 'month';
@@ -242,6 +261,7 @@ module.exports = function registerRoutes(router, context) {
   }
 
   router.get('/doc-data', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const rawData = readFromStorage('ai-impact/doc-data.json');
     if (!rawData || !rawData.issues) {
       return res.json({
@@ -280,6 +300,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: MR KPI data with merge request metrics
    */
   router.get('/doc-mr-kpi-data', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const data = readFromStorage('ai-impact/doc-mr-kpi-data.json');
     if (!data || !data.mergeRequests) {
       return res.json({ fetchedAt: null, mergeRequests: [] });
@@ -522,6 +543,21 @@ module.exports = function registerRoutes(router, context) {
    *       200:
    *         description: Modified HTML report
    */
+  // Project-qualified AI provenance: real evidence per published project
+  // (scanner totals, source markers, provenance footers) from the data repo's
+  // collectors. Never falls back between projects.
+  router.get('/project-provenance', requireScope('ai-impact:read'), function(req, res) {
+    const projectId = req.query?.projectId;
+    if (!projectId) return res.status(400).json({ error: 'projectId is required' });
+    try {
+      const result = readProjectProvenance(context.projects, projectId);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.provenance);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   router.get('/ai-commits-proxy', requireScope('ai-impact:read'), async function(req, res) {
     try {
       const now = Date.now();
