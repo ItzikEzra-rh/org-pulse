@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { getRoster, apiRequest } from '../services/api'
 import { useProjectId, projectQuery } from './useProjectId.js'
 
@@ -7,6 +7,35 @@ const loading = ref(false)
 const error = ref(null)
 const selectedOrgKey = ref(null)
 const _rosterProjectId = useProjectId()
+
+async function reloadRoster() {
+  loading.value = true
+  error.value = null
+  try {
+    const fresh = await apiRequest(`/roster${projectQuery(_rosterProjectId.value)}`)
+    rosterData.value = fresh
+  } catch (err) {
+    error.value = err.message
+    console.error('Failed to reload roster:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadRoster() {
+  loading.value = true
+  error.value = null
+  try {
+    rosterData.value = await getRoster(_rosterProjectId.value)
+  } catch (err) {
+    error.value = err.message
+    console.error('Failed to load roster:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(_rosterProjectId, () => reloadRoster())
 
 export function useRoster() {
   const orgs = computed(() => {
@@ -93,33 +122,6 @@ export function useRoster() {
 
   function selectOrg(orgKey) {
     selectedOrgKey.value = orgKey
-  }
-
-  async function reloadRoster() {
-    loading.value = true
-    error.value = null
-    try {
-      const fresh = await apiRequest(`/roster${projectQuery(_rosterProjectId.value)}`)
-      rosterData.value = fresh
-    } catch (err) {
-      error.value = err.message
-      console.error('Failed to reload roster:', err)
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function loadRoster() {
-    loading.value = true
-    error.value = null
-    try {
-      rosterData.value = await getRoster(_rosterProjectId.value)
-    } catch (err) {
-      error.value = err.message
-      console.error('Failed to load roster:', err)
-    } finally {
-      loading.value = false
-    }
   }
 
   return {

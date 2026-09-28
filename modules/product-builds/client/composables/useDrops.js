@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api'
 import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
@@ -28,8 +28,12 @@ export function useDrops() {
   const drops = ref([])
   const loading = ref(false)
   const error = ref(null)
+  let lastProductKey = null
+  let lastFilters = {}
 
   async function loadDrops(productKey, filters = {}) {
+    lastProductKey = productKey
+    lastFilters = filters
     loading.value = true
     error.value = null
 
@@ -52,6 +56,10 @@ export function useDrops() {
     }
   }
 
+  watch(useProjectId(), () => {
+    if (lastProductKey) loadDrops(lastProductKey, lastFilters)
+  })
+
   return { drops, loading, error, loadDrops }
 }
 
@@ -61,8 +69,10 @@ export function useDropDetail() {
   const metrics = ref(null)
   const loading = ref(false)
   const error = ref(null)
+  let lastKey = null
 
   async function loadDrop(key) {
+    lastKey = key
     loading.value = true
     error.value = null
     try {
@@ -75,12 +85,20 @@ export function useDropDetail() {
   }
 
   async function loadChangelog(key) {
+    lastKey = key
     try {
       changelog.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}/changelog${projectQuery(useProjectId().value)}`)
     } catch {
       changelog.value = null
     }
   }
+
+  watch(useProjectId(), () => {
+    if (lastKey) {
+      loadDrop(lastKey)
+      loadChangelog(lastKey)
+    }
+  })
 
   async function loadMetrics(key) {
     try {

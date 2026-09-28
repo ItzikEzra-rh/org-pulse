@@ -416,6 +416,9 @@ export default {
         routeParams.value = { ...params }
         const method = push ? 'pushState' : 'replaceState'
         history[method](null, '', newHash)
+        // history writes do not fire hashchange; hash-query listeners
+        // (useProjectId) rely on this signal to pick up the new params
+        window.dispatchEvent(new Event('urlchange'))
       },
       goBack() {
         history.back()

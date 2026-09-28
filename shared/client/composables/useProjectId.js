@@ -25,9 +25,14 @@ let _projectId = null
 export function useProjectId() {
   if (_projectId === null) {
     _projectId = ref(readProjectIdFromHash())
-    window.addEventListener('hashchange', () => {
+    const sync = () => {
       _projectId.value = readProjectIdFromHash()
-    })
+    }
+    window.addEventListener('hashchange', sync)
+    // The shell writes param-only changes via history.pushState/replaceState,
+    // which does not fire hashchange; App dispatches urlchange after those
+    // writes so the project context stays in sync with the selector.
+    window.addEventListener('urlchange', sync)
   }
   return _projectId
 }

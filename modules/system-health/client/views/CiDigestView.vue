@@ -209,9 +209,10 @@ const topFailingText = computed(() => {
   return tf ? `${tf.workflow} (${tf.failure} failures)` : 'None'
 })
 
+watch(useProjectId(), () => load())
+
 function retry() {
   load()
-  watch(useProjectId(), () => load())
 }
 </script>
 
