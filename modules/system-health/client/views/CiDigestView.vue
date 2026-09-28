@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ExternalLinkIcon } from 'lucide-vue-next'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 import { formatRelativeTime } from '../composables/useDisconnectedReadiness.js'
 import InfraFailureDonuts from '../components/ci-digest/InfraFailureDonuts.vue'
 import RepoWindowBarChart from '../components/ci-digest/RepoWindowBarChart.vue'
@@ -23,7 +24,7 @@ async function load() {
   error.value = null
   notFound.value = false
   try {
-    envelope.value = await apiRequest('/modules/system-health/ci-digest')
+    envelope.value = await apiRequest(`/modules/system-health/ci-digest${projectQuery(useProjectId().value)}`)
   } catch (e) {
     if (e.status === 404) {
       notFound.value = true
@@ -210,6 +211,7 @@ const topFailingText = computed(() => {
 
 function retry() {
   load()
+  watch(useProjectId(), () => load())
 }
 </script>
 

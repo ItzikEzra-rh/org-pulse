@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiRequest } from '@shared/client/services/api'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const BASE = '/modules/product-builds'
 
@@ -41,7 +42,8 @@ export function useDrops() {
     if (filters.offset) params.set('offset', filters.offset)
 
     try {
-      const data = await apiRequest(`${BASE}/drops?${params}`)
+      const projectSuffix = projectQuery(useProjectId().value)
+      const data = await apiRequest(`${BASE}/drops?${params}${projectSuffix ? `&${projectSuffix.slice(1)}` : ''}`)
       drops.value = Array.isArray(data) ? data : []
     } catch (err) {
       error.value = err.message
@@ -64,7 +66,7 @@ export function useDropDetail() {
     loading.value = true
     error.value = null
     try {
-      drop.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}`)
+      drop.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}${projectQuery(useProjectId().value)}`)
     } catch (err) {
       error.value = err.message
     } finally {
@@ -74,7 +76,7 @@ export function useDropDetail() {
 
   async function loadChangelog(key) {
     try {
-      changelog.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}/changelog`)
+      changelog.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}/changelog${projectQuery(useProjectId().value)}`)
     } catch {
       changelog.value = null
     }

@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 // Singleton state — fetch once, share refs
 const rfeData = ref(null)
@@ -15,7 +16,7 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    const data = await apiRequest(`/modules/ai-impact/rfe-data?timeWindow=${tw}`)
+    const data = await apiRequest(`/modules/ai-impact/rfe-data?timeWindow=${tw}${projectQuery(useProjectId().value)}`)
     // Ignore a stale response if the window changed while this request was in
     // flight, so an earlier request can't clobber a newer selection's data
     // (or its loading/error state).
@@ -41,6 +42,7 @@ async function checkRefreshStatus() {
 
 // Re-fetch when time window changes
 watch(timeWindow, () => load())
+watch(useProjectId(), () => load())
 
 // No caller-supplied time window: consumers that care about the period read
 // and write the returned `timeWindow` ref directly (same pattern as

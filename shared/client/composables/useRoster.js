@@ -1,10 +1,12 @@
 import { ref, computed } from 'vue'
 import { getRoster, apiRequest } from '../services/api'
+import { useProjectId, projectQuery } from './useProjectId.js'
 
 const rosterData = ref(null)
 const loading = ref(false)
 const error = ref(null)
 const selectedOrgKey = ref(null)
+const _rosterProjectId = useProjectId()
 
 export function useRoster() {
   const orgs = computed(() => {
@@ -97,7 +99,7 @@ export function useRoster() {
     loading.value = true
     error.value = null
     try {
-      const fresh = await apiRequest('/roster')
+      const fresh = await apiRequest(`/roster${projectQuery(_rosterProjectId.value)}`)
       rosterData.value = fresh
     } catch (err) {
       error.value = err.message
@@ -108,11 +110,10 @@ export function useRoster() {
   }
 
   async function loadRoster() {
-    if (rosterData.value) return
     loading.value = true
     error.value = null
     try {
-      rosterData.value = await getRoster()
+      rosterData.value = await getRoster(_rosterProjectId.value)
     } catch (err) {
       error.value = err.message
       console.error('Failed to load roster:', err)

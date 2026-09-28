@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 export function useAutofix(timeWindow) {
   const autofixData = ref(null)
@@ -11,7 +12,7 @@ export function useAutofix(timeWindow) {
     error.value = null
     try {
       const tw = timeWindow.value || 'month'
-      autofixData.value = await apiRequest(`/modules/ai-impact/autofix-data?timeWindow=${tw}`)
+      autofixData.value = await apiRequest(`/modules/ai-impact/autofix-data?timeWindow=${tw}${projectQuery(useProjectId().value)}`)
     } catch (e) {
       error.value = e.message
     } finally {
@@ -20,6 +21,7 @@ export function useAutofix(timeWindow) {
   }
 
   watch(timeWindow, () => load())
+  watch(useProjectId(), () => load())
   load()
 
   return { autofixData, loading, error, load }
