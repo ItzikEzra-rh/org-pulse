@@ -26,6 +26,16 @@ module.exports = function registerCiDutyRoutes(router, context) {
    *         description: No CI Duty roster has been delivered yet
    */
   router.get('/ci-duty', requireAuth, requireScope('system-health:read'), function(req, res) {
+    // CI Duty is user-approved OSAC-only (inapplicable for Flightctl): a
+    // non-OSAC project never receives OSAC duty data.
+    if (req.query?.projectId && req.query.projectId !== 'osac') {
+      return res.status(200).json({
+        projectId: req.query.projectId,
+        state: 'inapplicable',
+        reason: 'user-approved-osac-only',
+        data: null
+      })
+    }
     const roster = readFromStorage(DATA_KEY)
     if (!roster) {
       return res.status(404).json({ error: 'No CI Duty roster available yet' })

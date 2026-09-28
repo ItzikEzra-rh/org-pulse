@@ -33,6 +33,17 @@ module.exports = function registerCiDigestRoutes(router, context) {
    *         description: No CI digest report has been delivered yet
    */
   router.get('/ci-digest', requireAuth, requireScope('system-health:read'), function(req, res) {
+    // The CI digest envelope is an OSAC-only data source: a non-OSAC project
+    // never receives OSAC digest data. Project CI evidence flows through the
+    // capability-driven release-execution publication instead.
+    if (req.query?.projectId && req.query.projectId !== 'osac') {
+      return res.status(200).json({
+        projectId: req.query.projectId,
+        state: 'unavailable',
+        reason: 'osac-only-data-source',
+        data: null
+      })
+    }
     const envelope = readFromStorage(DATA_KEY)
     if (!envelope) {
       return res.status(404).json({ error: 'No CI digest report available yet' })
