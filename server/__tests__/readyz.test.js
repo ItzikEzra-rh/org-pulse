@@ -68,11 +68,11 @@ describe('readyz', () => {
     expect(res.body.status).toBe('error')
   })
 
-  it('returns 503 when data directory is read-only', function () {
+  it('returns 503 when data directory is read-only', (ctx) => {
     // Root bypasses file permissions (chmod does not block root writes), so
     // the read-only precondition cannot be exercised in a root container.
     if (typeof process.getuid === 'function' && process.getuid() === 0) {
-      this.skip()
+      ctx.skip()
     }
     var roDir = path.join(tmpDir, 'readonly')
     fs.mkdirSync(roDir)
