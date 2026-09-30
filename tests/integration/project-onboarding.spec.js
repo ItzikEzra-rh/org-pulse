@@ -126,23 +126,16 @@ test.describe('Project onboarding @project-onboarding', () => {
 
     const moduleHeader = page.locator('aside nav button').filter({ hasText: 'People & Teams' }).first();
     await moduleHeader.scrollIntoViewIfNeeded();
-    await moduleHeader.click({ force: true });
-    await page.waitForTimeout(600);
+    await moduleHeader.dispatchEvent('click');
+    await page.waitForTimeout(800);
 
-    const viewLink = page.locator('aside nav button').filter({ hasText: /^People$/ }).first();
-    if (await viewLink.count()) {
-      await viewLink.click({ force: true });
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
-      expect(page.url()).toContain(`projectId=${FLIGHTCTL}`);
-    } else {
-      // Expanded nav renders links, not buttons
-      const navLink = page.locator('aside nav a').filter({ hasText: /^People$/ }).first();
-      await navLink.click({ force: true });
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
-      expect(page.url()).toContain(`projectId=${FLIGHTCTL}`);
-    }
+    // View entries render inside the expanded section with aria-labels
+    const viewLink = page.locator('aside nav button[aria-label="People"]').first();
+    await viewLink.waitFor({ state: 'visible', timeout: 10_000 });
+    await viewLink.click({ force: true });
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    expect(page.url()).toContain(`projectId=${FLIGHTCTL}`);
   });
 
   test('project evidence surfaces fill from collected artifacts', async ({ page }) => {
