@@ -2,6 +2,7 @@ const express = require('express');
 const registerDisconnectedRoutes = require('./disconnected/routes');
 const registerCiDigestRoutes = require('./ci-digest/routes');
 const registerCiDutyRoutes = require('./ci-duty/routes');
+const registerReleaseExecutionRoutes = require('./release-execution/routes');
 const scheduler = require('./disconnected/scheduler');
 
 module.exports = function registerRoutes(router, context) {
@@ -26,6 +27,7 @@ module.exports = function registerRoutes(router, context) {
 
   registerCiDigestRoutes(router, { storage, requireAuth, requireScope });
   registerCiDutyRoutes(router, { storage, requireAuth, requireScope });
+  registerReleaseExecutionRoutes(router, { requireAuth, requireScope, projects: context.projects });
 
   if (context.registerRefresh) {
     context.registerRefresh('disconnected-readiness', {

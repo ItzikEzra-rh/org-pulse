@@ -2,6 +2,7 @@ module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage } = storage;
   const { readProjectProvenance } = require('./project-provenance');
+  const { readProjectDesignDocs } = require('./project-design-docs');
 
   // The OSAC autofix/EP-review/doc pipeline routes are OSAC-only data sources:
   // a non-OSAC project never receives OSAC pipeline data. Project-qualified AI
@@ -553,6 +554,21 @@ module.exports = function registerRoutes(router, context) {
       const result = readProjectProvenance(context.projects, projectId);
       if (result.status !== 200) return res.status(result.status).json({ error: result.error });
       return res.json(result.provenance);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Project-qualified design-docs presence: feature/artifact counts and
+  // design PRs from the data repo's design-docs collector. Never falls back
+  // between projects.
+  router.get('/project-design-docs', requireScope('ai-impact:read'), function(req, res) {
+    const projectId = req.query?.projectId;
+    if (!projectId) return res.status(400).json({ error: 'projectId is required' });
+    try {
+      const result = readProjectDesignDocs(context.projects, projectId);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.designDocs);
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }

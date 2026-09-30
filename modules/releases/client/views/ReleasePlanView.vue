@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const versions = ref([])
 const selectedVersion = ref('')
@@ -14,7 +15,7 @@ function jiraLink(key) {
 
 async function loadVersions() {
   try {
-    const data = await apiRequest('/modules/releases/release-plans')
+    const data = await apiRequest(`/modules/releases/release-plans${projectQuery(useProjectId().value)}`)
     // Index entries are version-metadata objects ({ version, generatedAt, ... }),
     // not bare strings — normalize to the version string the picker/API need.
     versions.value = (data.versions || [])
@@ -37,7 +38,7 @@ async function loadPlan(version) {
   loading.value = true
   error.value = null
   try {
-    const nextPlan = await apiRequest(`/modules/releases/release-plan?version=${encodeURIComponent(version)}`)
+    const nextPlan = await apiRequest(`/modules/releases/release-plan?version=${encodeURIComponent(version)}${projectQuery(useProjectId().value)}`)
     if (requestId === planRequestId) plan.value = nextPlan
   } catch (e) {
     if (requestId === planRequestId) {
@@ -77,6 +78,9 @@ function retry() {
 }
 
 onMounted(bootstrap)
+
+// Re-bootstrap when the project context changes
+watch(useProjectId(), () => bootstrap())
 
 const matrixCells = computed(() => {
   if (!plan.value) return {}
