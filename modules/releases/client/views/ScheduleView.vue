@@ -137,8 +137,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, h } from 'vue'
+import { ref, computed, onMounted, watch, h } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 // ── Data ──
 
@@ -151,7 +152,7 @@ async function fetchRegistry() {
   loading.value = true
   error.value = null
   try {
-    const data = await apiRequest('/modules/releases/registry')
+    const data = await apiRequest(`/modules/releases/registry${projectQuery(useProjectId().value)}`)
     releases.value = (data.releases || []).filter(function (r) { return r.state === 'active' })
   } catch (e) {
     error.value = e.message || 'Failed to load schedule data'
@@ -162,6 +163,9 @@ async function fetchRegistry() {
 }
 
 onMounted(fetchRegistry)
+
+// Re-fetch when the project context changes
+watch(useProjectId(), () => fetchRegistry())
 
 // ── Helpers ──
 

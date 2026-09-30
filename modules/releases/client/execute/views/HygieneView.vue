@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 import { extractProduct } from '../../deliver/composables/release-utils.js'
 import KanbanBoard from '../components/hygiene/KanbanBoard.vue'
 import HygieneWelcomeModal from '../components/hygiene/HygieneWelcomeModal.vue'
@@ -50,7 +51,7 @@ const fetchedAt = ref(null)
 
 async function loadVersions() {
   try {
-    const data = await apiRequest('/modules/releases/registry')
+    const data = await apiRequest(`/modules/releases/registry${projectQuery(useProjectId().value)}`)
     const releases = (data.releases || []).filter(r => r.state !== 'archived')
     registryReleases.value = releases
     allVersions.value = releases.map(r => r.displayName).sort()

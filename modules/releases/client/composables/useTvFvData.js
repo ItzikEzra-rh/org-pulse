@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiRequest } from '@shared/client'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const MAX_POLL_RETRIES = 24 // 24 x 5s = 2 minutes max
 
@@ -22,7 +23,7 @@ export function useTvFvData() {
 
   async function fetchRegistry() {
     try {
-      const result = await apiRequest('/modules/releases/registry')
+      const result = await apiRequest(`/modules/releases/registry${projectQuery(useProjectId().value)}`)
       registryReleases.value = (result.releases || []).filter(r => r.state === 'active')
       return registryReleases.value
     } catch (e) {
