@@ -94,7 +94,7 @@ test.describe('Project onboarding @project-onboarding', () => {
     expect((registryBody?.releases || []).some((release) => String(release.id || '').startsWith('flightctl-'))).toBe(true);
   });
 
-  test('AI pipeline screens serve the truthful unavailable envelope for Flight Control, never OSAC rows', async ({ page }) => {
+  test('AI pipeline screens serve the project-qualified envelope for Flight Control, never OSAC rows', async ({ page }) => {
     let rfeStatus = null;
     let rfeBody = null;
     page.on('response', async (response) => {
@@ -110,9 +110,12 @@ test.describe('Project onboarding @project-onboarding', () => {
 
     expect(rfeStatus).toBe(200);
     expect(rfeBody?.projectId).toBe(FLIGHTCTL);
-    expect(rfeBody?.state).toBe('unavailable');
-    expect(rfeBody?.reason).toBe('osac-only-data-source');
-    expect(rfeBody?.data).toBeNull();
+    // The profile-driven EP-review collector published the rfe-data artifact,
+    // so the route serves it project-qualified — honest empty until marker
+    // reviews exist — rather than the osac-only unavailable envelope.
+    expect(rfeBody?.state).toBe('empty');
+    expect(rfeBody?.reason).toBeUndefined();
+    expect(rfeBody?.issues).toEqual([]);
 
     // No OSAC issue keys may render for the flightctl context
     const osacRows = await page.locator('text=/OSAC-\\d+/').count();
