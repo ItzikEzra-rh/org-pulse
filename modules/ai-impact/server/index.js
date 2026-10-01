@@ -4,9 +4,11 @@ module.exports = function registerRoutes(router, context) {
   const { readProjectProvenance } = require('./project-provenance');
   const { readProjectDesignDocs } = require('./project-design-docs');
 
-  // The OSAC autofix/EP-review/doc pipeline routes are OSAC-only data sources:
-  // a non-OSAC project never receives OSAC pipeline data. Project-qualified AI
-  // evidence is exposed through the provenance publication route instead.
+  // The OSAC autofix/EP-review/doc pipeline routes are OSAC-only data sources
+  // when a project has no project-qualified artifact: a non-OSAC project never
+  // receives OSAC pipeline data. When the project's own pipeline published a
+  // project-qualified artifact (e.g. the profile-driven autofix or EP-review
+  // collectors), that data is served instead — never an OSAC fallback.
   function osacOnlyDataGuard(req, res) {
     if (req.query?.projectId && req.query.projectId !== 'osac') {
       res.status(200).json({
@@ -18,6 +20,36 @@ module.exports = function registerRoutes(router, context) {
       return true;
     }
     return false;
+  }
+
+  function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  // Read one published project-qualified artifact for a non-OSAC project.
+  // Returns the envelope only when the identity fully matches; never an
+  // OSAC fallback, never a guess.
+  function readProjectArtifactData(req, artifactKey) {
+    const projectId = req.query?.projectId;
+    if (!projectId || projectId === 'osac') return null;
+    const projects = context.projects;
+    if (!projects || typeof projects.readArtifact !== 'function') return null;
+    let artifact;
+    try {
+      artifact = projects.readArtifact(projectId, artifactKey);
+    } catch {
+      return null;
+    }
+    if (!artifact || !isPlainObject(artifact.value)) return null;
+    const envelope = artifact.value;
+    if (envelope.schemaVersion !== 1
+        || envelope.projectId !== projectId
+        || envelope.artifactKey !== artifactKey
+        || !isPlainObject(envelope.data)
+        || envelope.data.projectId !== projectId) {
+      return null;
+    }
+    return envelope;
   }
 
   // Register module scopes
@@ -188,6 +220,23 @@ module.exports = function registerRoutes(router, context) {
    *         description: Autofix dataset with metrics, trend data, and issues
    */
   router.get('/autofix-data', requireScope('ai-impact:read'), function(req, res) {
+    const projectEnvelope = readProjectArtifactData(req, 'sources/autofix/issues.json');
+    if (projectEnvelope) {
+      const projectIssues = projectEnvelope.data.issues || [];
+      const projectTimeWindow = VALID_AUTOFIX_TIME_WINDOWS.includes(req.query.timeWindow)
+        ? req.query.timeWindow
+        : 'month';
+      return res.json({
+        projectId: projectEnvelope.projectId,
+        state: projectEnvelope.state,
+        freshness: projectEnvelope.freshness,
+        fetchedAt: projectEnvelope.generatedAt,
+        jiraHost: JIRA_HOST,
+        metrics: computeAutofixMetrics(projectIssues, projectTimeWindow),
+        trendData: buildAutofixTrend(projectIssues, projectTimeWindow),
+        issues: projectIssues
+      });
+    }
     if (osacOnlyDataGuard(req, res)) return;
     const timeWindow = VALID_AUTOFIX_TIME_WINDOWS.includes(req.query.timeWindow)
       ? req.query.timeWindow
