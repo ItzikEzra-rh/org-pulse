@@ -498,10 +498,15 @@ describe('computeAllMetrics', () => {
   });
 
   it('agrees on the eligible PRD population across windowTotal, the current trend point, and breakdown', () => {
+    // One captured instant for all three issues: independent `new Date()`
+    // calls microseconds apart can straddle a 1-day trend bucket boundary in
+    // CI, splitting the population across buckets and flaking the assertion.
+    const base = makeIssue(0, 'created');
+    const created = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
     const issues = [
-      makeIssue(2, 'created'),
-      makeIssue(2, 'none'),
-      { ...makeIssue(2, 'created'), status: 'No PR' },
+      { ...base, created, aiInvolvement: 'created' },
+      { ...base, created, aiInvolvement: 'none' },
+      { ...base, created, aiInvolvement: 'created', status: 'No PR' },
     ];
 
     const result = computeAllMetrics(issues, 'week', { trendThresholdPp: 2 });
