@@ -130,6 +130,27 @@ module.exports = function registerRoutes(router, context) {
    *         description: RFE dataset with metrics, trend data, breakdown, and pipeline friction
    */
   router.get('/rfe-data', requireScope('ai-impact:read'), function(req, res) {
+    const projectEnvelope = readProjectArtifactData(req, 'sources/ep-review/rfe-data.json');
+    if (projectEnvelope) {
+      const projectTimeWindow = VALID_TIME_WINDOWS.includes(req.query.timeWindow)
+        ? req.query.timeWindow
+        : 'month';
+      const config = getConfig(readFromStorage);
+      const projectIssues = projectEnvelope.data.issues || [];
+      const computed = computeAllMetrics(projectIssues, projectTimeWindow, config);
+      return res.json({
+        projectId: projectEnvelope.projectId,
+        state: projectEnvelope.state,
+        freshness: projectEnvelope.freshness,
+        fetchedAt: projectEnvelope.generatedAt,
+        jiraHost: JIRA_HOST,
+        metrics: computed.metrics,
+        trendData: computed.trendData,
+        breakdown: computed.breakdown,
+        pipelineFriction: computed.pipelineFriction,
+        issues: projectIssues
+      });
+    }
     if (osacOnlyDataGuard(req, res)) return;
     const timeWindow = VALID_TIME_WINDOWS.includes(req.query.timeWindow)
       ? req.query.timeWindow
