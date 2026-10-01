@@ -217,6 +217,48 @@ describe('execution routes', () => {
       expect(res._json.features).toHaveLength(1)
       expect(res._json.features[0].key).toBe('OSAC-9')
     })
+
+    it('serves a truthful empty envelope for a non-OSAC project instead of OSAC features', () => {
+      storage = makeStorage({
+        'releases/execution/index.json': {
+          fetchedAt: '2026-08-01T00:00:00Z',
+          features: [{ key: 'OSAC-1', summary: 'OSAC feature', status: 'New', statusCategory: 'To Do' }]
+        }
+      })
+      router = makeRouter()
+      registerExecutionRoutes(router, { ...context, storage })
+
+      const handler = router._routes.get['/features'].at(-1)
+      const res = makeRes()
+      handler({ query: { projectId: 'flightctl' } }, res)
+
+      expect(res._status).toBe(200)
+      expect(res._json.projectId).toBe('flightctl')
+      expect(res._json.state).toBe('empty')
+      expect(res._json.featureCount).toBe(0)
+      expect(res._json.features).toEqual([])
+    })
+
+    it('still serves OSAC features with and without an explicit osac projectId', () => {
+      storage = makeStorage({
+        'releases/execution/index.json': {
+          fetchedAt: '2026-08-01T00:00:00Z',
+          features: [{ key: 'OSAC-1', summary: 'OSAC feature', status: 'New', statusCategory: 'To Do' }]
+        }
+      })
+      router = makeRouter()
+      registerExecutionRoutes(router, { ...context, storage })
+
+      const handler = router._routes.get['/features'].at(-1)
+      const unscoped = makeRes()
+      handler({ query: {} }, unscoped)
+      expect(unscoped._json.features).toHaveLength(1)
+
+      const osac = makeRes()
+      handler({ query: { projectId: 'osac' } }, osac)
+      expect(osac._json.features).toHaveLength(1)
+      expect(osac._json.features[0].key).toBe('OSAC-1')
+    })
   })
 
   describe('GET /features/:key', () => {
@@ -267,6 +309,24 @@ describe('execution routes', () => {
       expect(epicWithoutIssues.doneExecutionIssueCount).toBeNull()
 
       expect(res._json.metrics.executionCoverageReason).toBeNull()
+    })
+
+    it('returns 404 for a non-OSAC project instead of serving OSAC feature detail', () => {
+      storage = makeStorage({
+        'releases/execution/features/OSAC-100.json': {
+          key: 'OSAC-100', summary: 'Add streaming inference endpoint', status: 'In Progress',
+          statusCategory: 'In Progress', epics: [], metrics: {}
+        }
+      })
+      router = makeRouter()
+      registerExecutionRoutes(router, { ...context, storage })
+
+      const handler = router._routes.get['/features/:key'].at(-1)
+      const res = makeRes()
+      handler({ params: { key: 'OSAC-100' }, query: { projectId: 'flightctl' } }, res)
+
+      expect(res._status).toBe(404)
+      expect(res._json.error).toContain('flightctl')
     })
 
     it('leaves an old/missing payload feature detail visible without the new fields', () => {

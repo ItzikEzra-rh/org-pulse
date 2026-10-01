@@ -212,6 +212,21 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /features — list all features with summary metrics
   router.get('/features', requireAuth, requireScope('releases:read'), function(req, res) {
+    // The legacy feature list is an OSAC-only data source: a non-OSAC project
+    // never receives OSAC features. Serve a truthful empty envelope until a
+    // project-qualified feature list is collected for the project.
+    const projectId = req.query?.projectId;
+    if (projectId && projectId !== 'osac') {
+      return res.json({
+        projectId,
+        state: 'empty',
+        freshness: 'unknown',
+        fetchedAt: null,
+        featureCount: 0,
+        features: [],
+        message: 'No project-qualified feature list collected for this project.'
+      });
+    }
     const index = readDataFile('index.json');
     if (!index || !index.features) {
       return res.json({
@@ -265,6 +280,12 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /features/:key — full feature detail
   router.get('/features/:key', requireAuth, requireScope('releases:read'), function(req, res) {
+    // OSAC-only data source: a non-OSAC project never receives OSAC feature
+    // detail. 404 truthfully until a project-qualified feature list exists.
+    const projectId = req.query?.projectId;
+    if (projectId && projectId !== 'osac') {
+      return res.status(404).json({ error: `No project-qualified feature detail for ${projectId}` });
+    }
     const key = req.params.key.toUpperCase();
 
     // Validate key format (RHAISTRAT in production, TEST* in demo mode)
