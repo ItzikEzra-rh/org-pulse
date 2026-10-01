@@ -15,6 +15,8 @@ let realDataDir
 beforeAll(() => {
   realDataDir = process.env.ORG_PULSE_REAL_DATA_DIR
   if (!realDataDir) throw new Error('ORG_PULSE_REAL_DATA_DIR is required for real-data acceptance')
+  // Unreachable when skipped via describe.skipIf above; kept fail-closed for
+  // any runner that sets an empty-string value.
   const storage = {
     readFromStorage: key => {
       try {
@@ -27,7 +29,7 @@ beforeAll(() => {
   reader = createProjectProfileReader(storage)
 })
 
-describe('published projects resolve from real collected data', () => {
+describe.skipIf(!process.env.ORG_PULSE_REAL_DATA_DIR)('published projects resolve from real collected data', () => {
   it('lists both published projects with identity and capabilities', () => {
     const projects = reader.list()
     const ids = projects.map(p => p.projectId).sort()

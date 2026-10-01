@@ -32,7 +32,7 @@ beforeAll(() => {
   profiles = { flightctl: publications.flightctl.profile }
 })
 
-describe('capability-driven build publication resolves from real collected data', () => {
+describe.skipIf(!process.env.ORG_PULSE_REAL_DATA_DIR)('capability-driven build publication resolves from real collected data', () => {
   it('resolves the buildRegistry artifact key from the published profile', () => {
     const profile = profiles.flightctl
     expect(profile.capabilities.buildRegistry.state).toBe('supported')

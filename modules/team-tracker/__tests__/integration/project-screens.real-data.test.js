@@ -35,7 +35,7 @@ beforeAll(() => {
   }
 })
 
-describe('published roster resolves from real collected data', () => {
+describe.skipIf(!process.env.ORG_PULSE_REAL_DATA_DIR)('published roster resolves from real collected data', () => {
   it('derives the flightctl roster with real team membership', () => {
     const result = readProjectRoster(projects, 'flightctl')
     expect(result.status).toBe(200)

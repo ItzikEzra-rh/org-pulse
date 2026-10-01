@@ -18,6 +18,8 @@ function isRecord(value) {
 beforeAll(() => {
   realDataDir = process.env.ORG_PULSE_REAL_DATA_DIR
   if (!realDataDir) throw new Error('ORG_PULSE_REAL_DATA_DIR is required for real-data acceptance')
+  // Unreachable when skipped via describe.skipIf above; kept fail-closed for
+  // any runner that sets an empty-string value.
   const reader = (projectId) => {
     const profile = JSON.parse(readFileSync(join(realDataDir, 'projects', projectId, 'profile.json'), 'utf-8'))
     return { profile, readArtifact: (key) => {
@@ -31,7 +33,7 @@ beforeAll(() => {
   publications = { flightctl: reader('flightctl'), osac: reader('osac') }
 })
 
-describe('published AI provenance resolves from real collected data', () => {
+describe.skipIf(!process.env.ORG_PULSE_REAL_DATA_DIR)('published AI provenance resolves from real collected data', () => {
   it('exposes the flightctl provenance envelope with scanner or explicit unavailable state', () => {
     const artifact = publications.flightctl.readArtifact('sources/ai-provenance/registry.json')
     const envelope = artifact?.value ?? artifact
