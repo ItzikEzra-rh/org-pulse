@@ -805,7 +805,7 @@ test.describe('AI Impact Views @ai-impact', () => {
     const mainContentVisible = await mainContentIsVisible(page);
     expect(mainContentVisible).toBe(true);
 
-    const iframe = page.locator('iframe[title="AI Commits Scanner — OSAC"]');
+    const iframe = page.locator('iframe[title="AI Commits Scanner"]');
     await expect(iframe).toBeVisible();
 
     expect(page.errors).toHaveLength(0);
