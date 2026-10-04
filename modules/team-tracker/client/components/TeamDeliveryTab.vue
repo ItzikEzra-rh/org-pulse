@@ -19,6 +19,8 @@
         label="In Progress"
         :value="teamMetrics?.aggregate?.inProgressCount"
         :warning="teamMetrics?.aggregate?.inProgressCount != null && teamMetrics.aggregate.inProgressCount > uniqueCount"
+        clickable
+        @click="showInProgressIssues = true"
       />
       <MetricCard
         label="Avg Cycle Time"
@@ -84,6 +86,14 @@
       @view-history="openPersonHistory"
     />
 
+    <!-- In-Progress Issues Modal -->
+    <InProgressIssuesModal
+      v-if="showInProgressIssues"
+      :title="`${teamDisplayName} — In-Progress Issues`"
+      :issues="teamMetrics?.inProgressIssues || []"
+      @close="showInProgressIssues = false"
+    />
+
     <!-- Resolved Issues Modal -->
     <ResolvedIssuesModal
       v-if="showResolvedIssues"
@@ -108,6 +118,7 @@ import { computed, ref } from 'vue'
 import PersonTable from './PersonTable.vue'
 import MetricCard from './MetricCard.vue'
 import ResolvedIssuesModal from './ResolvedIssuesModal.vue'
+import InProgressIssuesModal from './InProgressIssuesModal.vue'
 import SnapshotHistoryModal from './SnapshotHistoryModal.vue'
 import { useRoster } from '@shared/client/composables/useRoster'
 import { useGithubStats } from '@shared/client/composables/useGithubStats'
@@ -127,6 +138,7 @@ const { getContributions } = useGithubStats()
 const { getContributions: getGitlabContributions } = useGitlabStats()
 
 const showResolvedIssues = ref(false)
+const showInProgressIssues = ref(false)
 const showSnapshotHistory = ref(false)
 const snapshotHistoryData = ref([])
 const snapshotHistoryLoading = ref(false)
