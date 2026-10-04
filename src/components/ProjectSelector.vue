@@ -27,6 +27,30 @@ const projects = ref([])
 const selectedProjectId = ref('')
 const updating = ref(false)
 const unknownProjectId = ref('')
+const PROJECT_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+function validateProjectsResponse(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)
+      || !Array.isArray(data.projects) || data.projects.length === 0) {
+    throw new Error('Published project list is missing or empty')
+  }
+
+  const projectIds = new Set()
+  return data.projects.map(project => {
+    if (!project || typeof project !== 'object' || Array.isArray(project)
+        || typeof project.projectId !== 'string'
+        || !PROJECT_ID_PATTERN.test(project.projectId)
+        || typeof project.displayName !== 'string'
+        || project.displayName.trim() === '') {
+      throw new Error('Published project list contains an invalid entry')
+    }
+    if (projectIds.has(project.projectId)) {
+      throw new Error(`Published project list contains a duplicate ID: ${project.projectId}`)
+    }
+    projectIds.add(project.projectId)
+    return { projectId: project.projectId, displayName: project.displayName.trim() }
+  })
+}
 
 function readProjectIdFromHash() {
   const query = (window.location.hash || '#/').split('?').slice(1).join('?')
@@ -63,7 +87,7 @@ function resolveProjectContext(projectId = currentProjectId()) {
 
   if (projects.value.length === 0) {
     selectedProjectId.value = ''
-    setContextState('ready')
+    setContextState('unavailable')
     return
   }
 
@@ -84,7 +108,7 @@ onMounted(async () => {
   setContextState('loading')
   try {
     const data = await apiRequest('/projects')
-    projects.value = Array.isArray(data.projects) ? data.projects : []
+    projects.value = validateProjectsResponse(data)
     resolveProjectContext()
   } catch (error) {
     console.error('Failed to load projects:', error)

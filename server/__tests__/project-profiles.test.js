@@ -4,7 +4,7 @@ const createProjectProfiles = require('../project-profiles')
 
 const OSAC = {
   schemaVersion: 1,
-  profileRevision: 'osac-real-1',
+  profileRevision: '1ba4e768d512d277',
   projectId: 'osac',
   displayName: 'OSAC',
   jiraProjectKey: 'OSAC',
@@ -17,7 +17,7 @@ const OSAC = {
 
 const FLIGHTCTL = {
   schemaVersion: 1,
-  profileRevision: 'flightctl-real-1',
+  profileRevision: 'd773101e2e07c378',
   projectId: 'flightctl',
   displayName: 'Flight Control',
   jiraProjectKey: 'EDM',
@@ -43,17 +43,28 @@ const FLIGHTCTL = {
   }
 }
 
-function makeStorage() {
+function makeStorage(overrides = {}) {
   const data = {
     'projects/index.json': {
       schemaVersion: 1,
       projects: [
-        { projectId: 'osac', profileRevision: OSAC.profileRevision },
-        { projectId: 'flightctl', profileRevision: FLIGHTCTL.profileRevision }
+        {
+          projectId: 'osac',
+          displayName: OSAC.displayName,
+          profileRevision: OSAC.profileRevision,
+          profileKey: 'projects/osac/profile.json'
+        },
+        {
+          projectId: 'flightctl',
+          displayName: FLIGHTCTL.displayName,
+          profileRevision: FLIGHTCTL.profileRevision,
+          profileKey: 'projects/flightctl/profile.json'
+        }
       ]
     },
     'projects/osac/profile.json': OSAC,
-    'projects/flightctl/profile.json': FLIGHTCTL
+    'projects/flightctl/profile.json': FLIGHTCTL,
+    ...overrides
   }
   return { readFromStorage: key => Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null }
 }
@@ -73,6 +84,30 @@ describe('server project profiles', () => {
   it('does not use the profile reader as an access-control decision', () => {
     const projectProfiles = createProjectProfiles(makeStorage())
     expect(projectProfiles.get('flightctl').capabilities.accessRestrictions).toBeNull()
+  })
+
+  it('preserves a valid single-project OSAC deployment', () => {
+    const projectProfiles = createProjectProfiles(makeStorage({
+      'projects/index.json': {
+        schemaVersion: 1,
+        projects: [{
+          projectId: 'osac',
+          displayName: OSAC.displayName,
+          profileRevision: OSAC.profileRevision,
+          profileKey: 'projects/osac/profile.json'
+        }]
+      },
+      'projects/flightctl/profile.json': null
+    }))
+    expect(projectProfiles.list().map(profile => profile.projectId)).toEqual(['osac'])
+  })
+
+  it('raises a discovery error when the published index is missing', () => {
+    const projectProfiles = createProjectProfiles({ readFromStorage: () => null })
+    expect(() => projectProfiles.list()).toThrow(expect.objectContaining({
+      name: 'ProjectProfileIndexError',
+      code: 'PROJECT_INDEX_MISSING'
+    }))
   })
 
   it('has no profile fallback for an unknown project', () => {

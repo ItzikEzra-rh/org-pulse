@@ -10,6 +10,7 @@ const JIRA_PROJECT_PATTERN = /^[A-Z][A-Z0-9_]*$/
 const REPOSITORY_PATTERN = /^[^/\s]+\/[^/\s]+$/
 const PROFILE_SCHEMA_VERSION = 1
 const PUBLICATION_SCHEMA_VERSION = 1
+const PROJECT_INDEX_SCHEMA_VERSION = 1
 const CAPABILITY_STATES = Object.freeze([
   'supported', 'unavailable', 'inaccessible', 'empty', 'inapplicable',
   'disabled', 'source-only', 'error'
@@ -41,6 +42,14 @@ function normalizeProjectId(projectId) {
     throw new Error(`projectId must be lowercase kebab-case: ${value}`)
   }
   return value
+}
+
+class ProjectProfileIndexError extends Error {
+  constructor(message, code = 'PROJECT_INDEX_INVALID') {
+    super(message)
+    this.name = 'ProjectProfileIndexError'
+    this.code = code
+  }
 }
 
 /**
@@ -263,16 +272,77 @@ function createProjectProfileReader(storage) {
   }
 
   function list() {
-    const index = readFromStorage('projects/index.json')
-    const entries = Array.isArray(index?.projects) ? index.projects : []
-    return entries.map(entry => {
-      try {
-        return get(entry.projectId)
-      } catch (error) {
-        console.warn(`[projects] ignoring invalid published profile ${entry.projectId}: ${error.message}`)
-        return null
+    let index
+    try {
+      index = readFromStorage('projects/index.json')
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new ProjectProfileIndexError('Published project index is malformed JSON')
       }
-    }).filter(Boolean)
+      throw error
+    }
+    if (index === null || index === undefined) {
+      throw new ProjectProfileIndexError('Published project index is missing: projects/index.json', 'PROJECT_INDEX_MISSING')
+    }
+    if (!index || typeof index !== 'object' || Array.isArray(index)) {
+      throw new ProjectProfileIndexError('Published project index must be an object')
+    }
+    if (index.schemaVersion !== PROJECT_INDEX_SCHEMA_VERSION) {
+      throw new ProjectProfileIndexError(`Published project index schemaVersion must be ${PROJECT_INDEX_SCHEMA_VERSION}`)
+    }
+    if (!Array.isArray(index.projects) || index.projects.length === 0) {
+      throw new ProjectProfileIndexError('Published project index must contain at least one project')
+    }
+
+    const seenProjectIds = new Set()
+    const entries = index.projects.map(entry => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new ProjectProfileIndexError('Published project index entries must be objects')
+      }
+
+      let projectId
+      try {
+        projectId = normalizeProjectId(entry.projectId)
+      } catch (error) {
+        throw new ProjectProfileIndexError(`Invalid project ID in published project index: ${error.message}`)
+      }
+      if (entry.projectId !== projectId) {
+        throw new ProjectProfileIndexError(`Project ID in published project index is not normalized: ${projectId}`)
+      }
+      if (typeof entry.displayName !== 'string' || entry.displayName.trim() === '' || entry.displayName !== entry.displayName.trim()) {
+        throw new ProjectProfileIndexError(`Published project index displayName is missing or invalid: ${projectId}`)
+      }
+      if (typeof entry.profileRevision !== 'string' || !/^[0-9a-f]{16}$/.test(entry.profileRevision)) {
+        throw new ProjectProfileIndexError(`Published project index profileRevision is missing or invalid: ${projectId}`)
+      }
+      if (entry.profileKey !== `projects/${projectId}/profile.json`) {
+        throw new ProjectProfileIndexError(`Published project index profileKey is invalid: ${projectId}`)
+      }
+      if (seenProjectIds.has(projectId)) {
+        throw new ProjectProfileIndexError(`Duplicate project ID in published project index: ${projectId}`)
+      }
+      seenProjectIds.add(projectId)
+      return { entry, projectId }
+    })
+
+    return entries.map(({ entry, projectId }) => {
+      let profile
+      try {
+        profile = get(projectId)
+      } catch (error) {
+        throw new ProjectProfileIndexError(`Published project profile ${projectId} is invalid: ${error.message}`, 'PROJECT_PROFILE_INVALID')
+      }
+      if (!profile) {
+        throw new ProjectProfileIndexError(`Published project profile is missing: ${projectId}`, 'PROJECT_PROFILE_MISSING')
+      }
+      if (entry.profileRevision !== profile.profileRevision) {
+        throw new ProjectProfileIndexError(`Published project profile revision does not match the index: ${projectId}`, 'PROJECT_PROFILE_REVISION_MISMATCH')
+      }
+      if (entry.displayName !== profile.displayName) {
+        throw new ProjectProfileIndexError(`Published project profile display name does not match the index: ${projectId}`, 'PROJECT_PROFILE_DISPLAY_NAME_MISMATCH')
+      }
+      return profile
+    })
   }
 
   function readArtifact(projectId, artifactKey) {
@@ -394,6 +464,7 @@ module.exports = {
   PUBLICATION_SCHEMA_VERSION,
   CAPABILITY_STATES,
   FRESHNESS_STATES,
+  ProjectProfileIndexError,
   normalizeArtifactKey,
   resolveProjectSelection,
   normalizeProjectProfile,

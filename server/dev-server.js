@@ -1747,9 +1747,34 @@ if (allocationStrategy) {
 const projectProfiles = createProjectProfiles(storageModule);
 
 /**
- * Published project profiles for the shell project selector.
- * Returns projectId + displayName per published profile; the server has no
- * source configuration of its own.
+ * @openapi
+ * /api/projects:
+ *   get:
+ *     tags: [Projects]
+ *     summary: List the validated published project profiles
+ *     responses:
+ *       200:
+ *         description: Published project IDs and display names
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [projects]
+ *               properties:
+ *                 projects:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     required: [projectId, displayName]
+ *                     properties:
+ *                       projectId:
+ *                         type: string
+ *                       displayName:
+ *                         type: string
+ *       503:
+ *         description: The published project index or one of its profiles is missing or invalid
+ *       500:
+ *         description: The published project list could not be read
  */
 app.get('/api/projects', authMiddleware, function (req, res) {
   try {
@@ -1759,7 +1784,11 @@ app.get('/api/projects', authMiddleware, function (req, res) {
     res.json({ projects });
   } catch (error) {
     console.error('[projects] Failed to list published projects:', error.message);
-    res.status(500).json({ error: 'Failed to list published projects' });
+    const discoveryUnavailable = error.name === 'ProjectProfileIndexError';
+    res.status(discoveryUnavailable ? 503 : 500).json({
+      error: 'Failed to list published projects',
+      code: discoveryUnavailable ? error.code : 'PROJECT_LIST_FAILED'
+    });
   }
 });
 

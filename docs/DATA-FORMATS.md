@@ -52,7 +52,16 @@ the new attempt.
 The data repository owns canonical profiles under
 `config/projects/{projectId}.json` and publishes sanitized projections under
 `projects/{projectId}/profile.json`. `projects/index.json` lists the published
-profiles. The app never maintains a second source registry.
+profiles. The index must use `schemaVersion: 1` and contain a non-empty
+`projects` array. Each entry requires a unique normalized `projectId`, a
+non-empty `displayName`, a 16-character lowercase hexadecimal
+`profileRevision`, and `profileKey` equal to
+`projects/{projectId}/profile.json`. Every entry must resolve to a valid
+published profile whose ID, display name, and revision match the index.
+Missing, empty, malformed, duplicate, or incomplete discovery data is reported
+as unavailable instead of being treated as a projectless single-project
+deployment. A valid one-entry OSAC index keeps the existing single-project
+behavior, with no selector. The app never maintains a second source registry.
 
 In a sidecar-managed volume, `projects/{projectId}/current.json` points to an
 immutable generation under `projects/{projectId}/generations/{generationId}/`.

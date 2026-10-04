@@ -6,7 +6,8 @@ const {
   normalizeProjectProfile,
   createPublicationEnvelope,
   createProjectProfileRegistry,
-  createProjectProfileReader
+  createProjectProfileReader,
+  ProjectProfileIndexError
 } = require('../project-profile')
 
 const FLIGHTCTL = {
@@ -20,6 +21,18 @@ const FLIGHTCTL = {
     { fullName: 'flightctl/design-docs', role: 'planning' }
   ],
   teamIds: ['team-a', 'team-b']
+}
+const FLIGHTCTL_INDEX_ENTRY = {
+  projectId: 'flightctl',
+  displayName: 'Flight Control',
+  profileRevision: 'd773101e2e07c378',
+  profileKey: 'projects/flightctl/profile.json'
+}
+const OSAC_INDEX_ENTRY = {
+  projectId: 'osac',
+  displayName: 'OSAC',
+  profileRevision: '1ba4e768d512d277',
+  profileKey: 'projects/osac/profile.json'
 }
 
 function makeStorage(initial = {}, write = null) {
@@ -37,10 +50,10 @@ function makeStorage(initial = {}, write = null) {
 describe('project-profile', () => {
   it('reads published profiles and artifacts from direct data-repo paths', () => {
     const data = {
-      'projects/index.json': { projects: [{ projectId: 'flightctl' }] },
+      'projects/index.json': { schemaVersion: 1, projects: [FLIGHTCTL_INDEX_ENTRY] },
       'projects/flightctl/profile.json': {
         schemaVersion: 1,
-        profileRevision: 'flightctl-published-1',
+        profileRevision: FLIGHTCTL_INDEX_ENTRY.profileRevision,
         projectId: 'flightctl',
         displayName: 'Flight Control',
         jiraProjectKey: 'EDM',
@@ -62,6 +75,77 @@ describe('project-profile', () => {
     expect(reader.list().map(profile => profile.projectId)).toEqual(['flightctl'])
     expect(reader.readArtifact('flightctl', 'releases/registry.json').value.projectId).toBe('flightctl')
     expect(reader.get('osac')).toBeNull()
+  })
+
+  it('preserves a valid single-project OSAC publication', () => {
+    const data = {
+      'projects/index.json': { schemaVersion: 1, projects: [OSAC_INDEX_ENTRY] },
+      'projects/osac/profile.json': {
+        schemaVersion: 1,
+        profileRevision: OSAC_INDEX_ENTRY.profileRevision,
+        projectId: 'osac',
+        displayName: 'OSAC',
+        jiraProjectKey: 'OSAC',
+        jiraProjectName: 'Open Source as a Cloud',
+        repositories: [],
+        capabilities: {}
+      }
+    }
+    const reader = createProjectProfileReader({
+      readFromStorage: key => Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null
+    })
+
+    expect(reader.list().map(profile => profile.projectId)).toEqual(['osac'])
+  })
+
+  it.each([
+    ['missing index', {}, 'PROJECT_INDEX_MISSING'],
+    ['non-object index', { 'projects/index.json': [] }, 'PROJECT_INDEX_INVALID'],
+    ['missing schemaVersion', { 'projects/index.json': { projects: [OSAC_INDEX_ENTRY] } }, 'PROJECT_INDEX_INVALID'],
+    ['unsupported schemaVersion', { 'projects/index.json': { schemaVersion: 2, projects: [OSAC_INDEX_ENTRY] } }, 'PROJECT_INDEX_INVALID'],
+    ['missing projects array', { 'projects/index.json': {} }, 'PROJECT_INDEX_INVALID'],
+    ['empty projects array', { 'projects/index.json': { projects: [] } }, 'PROJECT_INDEX_INVALID'],
+    ['invalid index entry', { 'projects/index.json': { projects: [{ projectId: 'Bad ID' }] } }, 'PROJECT_INDEX_INVALID'],
+    ['index entry without a display name', { 'projects/index.json': { schemaVersion: 1, projects: [{ ...OSAC_INDEX_ENTRY, displayName: '' }] } }, 'PROJECT_INDEX_INVALID'],
+    ['index entry without a valid revision', { 'projects/index.json': { schemaVersion: 1, projects: [{ ...OSAC_INDEX_ENTRY, profileRevision: 'old' }] } }, 'PROJECT_INDEX_INVALID'],
+    ['index entry with a mismatched profile key', { 'projects/index.json': { schemaVersion: 1, projects: [{ ...OSAC_INDEX_ENTRY, profileKey: 'projects/flightctl/profile.json' }] } }, 'PROJECT_INDEX_INVALID'],
+    ['duplicate project entries', { 'projects/index.json': { schemaVersion: 1, projects: [OSAC_INDEX_ENTRY, OSAC_INDEX_ENTRY] } }, 'PROJECT_INDEX_INVALID'],
+    ['missing published profile', { 'projects/index.json': { schemaVersion: 1, projects: [OSAC_INDEX_ENTRY] } }, 'PROJECT_PROFILE_MISSING'],
+    ['stale profile revision', {
+      'projects/index.json': { schemaVersion: 1, projects: [{ ...FLIGHTCTL_INDEX_ENTRY, profileRevision: '0000000000000000' }] },
+      'projects/flightctl/profile.json': FLIGHTCTL
+    }, 'PROJECT_PROFILE_REVISION_MISMATCH'],
+    ['mismatched profile display name', {
+      'projects/index.json': { schemaVersion: 1, projects: [{ ...FLIGHTCTL_INDEX_ENTRY, displayName: 'Flight Control Other' }] },
+      'projects/flightctl/profile.json': { ...FLIGHTCTL, profileRevision: FLIGHTCTL_INDEX_ENTRY.profileRevision }
+    }, 'PROJECT_PROFILE_DISPLAY_NAME_MISMATCH']
+  ])('rejects %s instead of hiding it as an empty project list', (_caseName, data, code) => {
+    const reader = createProjectProfileReader({
+      readFromStorage: key => Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null
+    })
+
+    let caught
+    try {
+      reader.list()
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(ProjectProfileIndexError)
+    expect(caught.code).toBe(code)
+  })
+
+  it('reports an unreadable JSON index as a discovery error', () => {
+    const reader = createProjectProfileReader({
+      readFromStorage: key => {
+        if (key === 'projects/index.json') throw new SyntaxError('Unexpected token')
+        return null
+      }
+    })
+
+    expect(() => reader.list()).toThrow(expect.objectContaining({
+      name: 'ProjectProfileIndexError',
+      code: 'PROJECT_INDEX_INVALID'
+    }))
   })
 
   it('resolves one immutable generation through the current pointer', () => {
