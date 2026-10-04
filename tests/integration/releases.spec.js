@@ -376,6 +376,27 @@ test.describe('Releases Feature List @releases', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('Assignee filter narrows List results to the Feature\'s own assignee', async ({ page }) => {
+    await openFeatureList(page);
+    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await page.waitForTimeout(500);
+
+    // TEST1-15 is the only fixture feature assigned to Frank Jansen; TEST1-1131 belongs to someone else.
+    await page.getByRole('button', { name: 'All assignees' }).click();
+    await page.locator('label', { hasText: 'Frank Jansen' }).locator('input[type="checkbox"]').check();
+    await page.waitForTimeout(500);
+
+    await expect(page.getByText(/TEST1-15\b/)).toBeVisible();
+    await expect(page.getByText('TEST1-1131')).toHaveCount(0);
+
+    const clearButton = page.locator('button', { hasText: 'Clear filters' });
+    await clearButton.click();
+    await page.waitForTimeout(500);
+    await expect(page.getByText('TEST1-1131')).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
   test('clicking a card opens the execution drawer without navigating away, and Escape closes it', async ({ page }) => {
     await openFeatureList(page);
 

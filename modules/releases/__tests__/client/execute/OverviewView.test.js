@@ -10,6 +10,11 @@ vi.mock('@shared/client/services/api', () => ({
   SESSION_CACHE_PREFIX: 'tt_cache:session:'
 }))
 
+const mockUser = ref({})
+vi.mock('@shared/client/composables/useAuth.js', () => ({
+  useAuth: () => ({ user: mockUser })
+}))
+
 // Index-entry shapes below mirror the producer contract (executionIssueCount /
 // doneExecutionIssueCount / executionState / executionCoverage /
 // executionCoverageReason / preparationReadiness), covering each of the four
@@ -86,6 +91,7 @@ describe('OverviewView (Feature List)', () => {
   beforeEach(() => {
     mockApiRequest.mockReset()
     sessionStorage.clear()
+    mockUser.value = {}
   })
 
   it('defaults to Board view with three execution columns plus a separate coverage total, losing no features', async () => {
@@ -523,6 +529,170 @@ describe('OverviewView (Feature List)', () => {
       expect(columns[2].text()).toContain('ZEROCOMPLETE-1')
       expect(columns[2].text()).toContain('0/0')
       expect(columns[2].text()).toContain('100%')
+    })
+  })
+
+  describe('Assignee filter', () => {
+    // The Feature's own direct assignee only — index.json already flattens it
+    // to a display-name string (or null), same shape as other Assignee filters.
+    const ASSIGNEE_FEATURES = [
+      { key: 'ASG-ALICE', summary: 'Alice feature', status: 'In Progress', statusCategory: 'In Progress',
+        fixVersions: [], components: ['Comp A'], labels: [], epicCount: 1, issueCount: 2, blockerCount: 0,
+        executionIssueCount: 2, doneExecutionIssueCount: 1, executionState: 'in-progress', executionCoverage: 'available',
+        executionCoverageReason: null, preparationReadiness: 'unknown', assignee: 'Alice' },
+      { key: 'ASG-BOB', summary: 'Bob feature', status: 'In Progress', statusCategory: 'In Progress',
+        fixVersions: [], components: ['Comp B'], labels: [], epicCount: 1, issueCount: 2, blockerCount: 0,
+        executionIssueCount: 2, doneExecutionIssueCount: 1, executionState: 'in-progress', executionCoverage: 'available',
+        executionCoverageReason: null, preparationReadiness: 'unknown', assignee: 'Bob' },
+      { key: 'ASG-UNASSIGNED', summary: 'Unassigned feature', status: 'In Progress', statusCategory: 'In Progress',
+        fixVersions: [], components: ['Comp A'], labels: [], epicCount: 1, issueCount: 2, blockerCount: 0,
+        executionIssueCount: 2, doneExecutionIssueCount: 1, executionState: 'in-progress', executionCoverage: 'available',
+        executionCoverageReason: null, preparationReadiness: 'unknown', assignee: null }
+    ]
+
+    async function mountWithAssigneeFeatures(features = ASSIGNEE_FEATURES) {
+      mockApiRequest.mockImplementation((url) => {
+        if (url.indexOf('/versions') !== -1) return Promise.resolve({ versions: [] })
+        return Promise.resolve({ features, fetchedAt: '2026-09-10T00:00:00Z', featureCount: features.length })
+      })
+      const wrapper = mount(OverviewView, { global: { provide: { moduleNav: mockNav() } } })
+      await flushPromises()
+      await wrapper.findAll('button').find(b => b.text() === 'List').trigger('click')
+      return wrapper
+    }
+
+    async function openAssigneeDropdown(wrapper) {
+      const button = wrapper.findAll('button').find(b => b.text().includes('All assignees'))
+      await button.trigger('click')
+    }
+
+    async function checkAssignee(wrapper, name) {
+      const option = wrapper.findAll('label').find(l => l.text() === name)
+      await option.find('input[type="checkbox"]').setValue(true)
+    }
+
+    it('builds Assignee options from feature.assignee, including Unassigned', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+
+      const optionLabels = wrapper.findAll('label').map(l => l.text())
+      expect(optionLabels).toContain('Alice')
+      expect(optionLabels).toContain('Bob')
+      expect(optionLabels).toContain('Unassigned')
+    })
+
+    it('shows every feature when no Assignee is selected (All)', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      expect(wrapper.findAll('tbody tr')).toHaveLength(3)
+    })
+
+    it('filters to a single selected Assignee', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      await checkAssignee(wrapper, 'Alice')
+
+      expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+      expect(wrapper.text()).toContain('ASG-ALICE')
+    })
+
+    it('matches multiple selected Assignees (OR semantics)', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      await checkAssignee(wrapper, 'Alice')
+      await checkAssignee(wrapper, 'Bob')
+
+      const rows = wrapper.findAll('tbody tr')
+      expect(rows).toHaveLength(2)
+      expect(wrapper.text()).toContain('ASG-ALICE')
+      expect(wrapper.text()).toContain('ASG-BOB')
+      expect(wrapper.text()).not.toContain('ASG-UNASSIGNED')
+    })
+
+    it('treats a missing assignee as Unassigned', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      await checkAssignee(wrapper, 'Unassigned')
+
+      expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+      expect(wrapper.text()).toContain('ASG-UNASSIGNED')
+    })
+
+    it('combines Assignee with an active Component filter (AND)', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      await checkAssignee(wrapper, 'Bob')
+
+      const componentButton = wrapper.findAll('button').find(b => b.text().includes('All components'))
+      await componentButton.trigger('click')
+      const compOption = wrapper.findAll('label').find(l => l.text() === 'Comp A')
+      await compOption.find('input[type="checkbox"]').setValue(true)
+
+      // Bob's feature is Comp B, not Comp A — fails the AND, leaving only the empty-state row.
+      expect(wrapper.text()).toContain('No features found matching the current filters.')
+      expect(wrapper.text()).not.toContain('ASG-')
+    })
+
+    it('search narrows the visible Assignee options without altering the selection', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      await checkAssignee(wrapper, 'Alice')
+      await wrapper.find('input[placeholder="Search assignees..."]').setValue('bob')
+
+      expect(wrapper.findAll('label').some(l => l.text() === 'Alice')).toBe(false)
+      expect(wrapper.findAll('label').some(l => l.text() === 'Bob')).toBe(true)
+      // Alice stays selected even though search hides her from the option list.
+      expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+      expect(wrapper.text()).toContain('ASG-ALICE')
+    })
+
+    it('shows a no-matches message when the Assignee search matches nothing', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      await wrapper.find('input[placeholder="Search assignees..."]').setValue('zzz')
+
+      expect(wrapper.text()).toContain('No matches for "zzz"')
+    })
+
+    it('hides "Assigned to me" when no jiraDisplayName is resolved', async () => {
+      mockUser.value = {}
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+
+      expect(wrapper.text()).not.toContain('Assigned to me')
+    })
+
+    it('"Assigned to me" sets the Assignee filter to exactly the current user\'s Jira display name', async () => {
+      mockUser.value = { jiraDisplayName: 'Bob' }
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      const meButton = wrapper.findAll('button').find(b => b.text() === 'Assigned to me')
+      await meButton.trigger('click')
+
+      expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+      expect(wrapper.text()).toContain('ASG-BOB')
+    })
+
+    it('clears the Assignee selection via Clear filters', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      await checkAssignee(wrapper, 'Alice')
+      expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+
+      const clearButton = wrapper.findAll('button').find(b => b.text() === 'Clear filters')
+      await clearButton.trigger('click')
+
+      expect(wrapper.findAll('tbody tr')).toHaveLength(3)
+    })
+
+    it('persists the Assignee selection across a remount via sessionStorage', async () => {
+      const wrapper = await mountWithAssigneeFeatures()
+      await openAssigneeDropdown(wrapper)
+      await checkAssignee(wrapper, 'Alice')
+      expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+
+      const wrapper2 = await mountWithAssigneeFeatures()
+      expect(wrapper2.findAll('tbody tr')).toHaveLength(1)
+      expect(wrapper2.text()).toContain('ASG-ALICE')
     })
   })
 })
