@@ -72,6 +72,7 @@ COPY modules/team-tracker/ ./modules/team-tracker/
 COPY fixtures/team-data/ ./fixtures/team-data/
 COPY fixtures/org-roster/ ./fixtures/org-roster/
 COPY fixtures/people/ ./fixtures/people/
+COPY fixtures/projects/ ./fixtures/projects/
 COPY fixtures/allocation-tracker/ ./fixtures/allocation-tracker/
 COPY fixtures/health-metrics/ ./fixtures/health-metrics/
 COPY fixtures/allowlist.json fixtures/api-tokens.json fixtures/audit-log.json ./fixtures/

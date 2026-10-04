@@ -32,7 +32,7 @@ const apiTokens = require('./api-tokens');
 
 const modulesConfig = require('./modules/config');
 const gitSync = require('./modules/git-sync');
-const createProjectProfiles = require('./project-profiles');
+const { createServerProjectProfiles, createProjectListHandler } = require('./project-profiles');
 const { createModuleStaticMiddleware, invalidateCache: invalidateStaticCache } = require('./modules/static-serve');
 const {
   getDiscoveredModules,
@@ -1744,24 +1744,39 @@ if (allocationStrategy) {
 } else {
   console.log('[platform] No allocation strategy found — allocation features will be hidden');
 }
-const projectProfiles = createProjectProfiles(storageModule);
+const projectProfiles = createServerProjectProfiles(storageModule);
 
 /**
- * Published project profiles for the shell project selector.
- * Returns projectId + displayName per published profile; the server has no
- * source configuration of its own.
+ * @openapi
+ * /api/projects:
+ *   get:
+ *     tags: [Projects]
+ *     summary: List the validated published project profiles
+ *     responses:
+ *       200:
+ *         description: Published project IDs and display names
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [projects]
+ *               properties:
+ *                 projects:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     required: [projectId, displayName]
+ *                     properties:
+ *                       projectId:
+ *                         type: string
+ *                       displayName:
+ *                         type: string
+ *       503:
+ *         description: The published project index or one of its profiles is missing or invalid
+ *       500:
+ *         description: The published project list could not be read
  */
-app.get('/api/projects', authMiddleware, function (req, res) {
-  try {
-    const projects = projectProfiles.list().map(function (profile) {
-      return { projectId: profile.projectId, displayName: profile.displayName };
-    });
-    res.json({ projects });
-  } catch (error) {
-    console.error('[projects] Failed to list published projects:', error.message);
-    res.status(500).json({ error: 'Failed to list published projects' });
-  }
-});
+app.get('/api/projects', authMiddleware, createProjectListHandler(projectProfiles));
 
 const coreServices = { storage: storageModule, requireAuth: authMiddleware, requireAdmin, requireTeamAdmin, requireRole, requireScope, roleStore, roleRegistry, scopeRegistry, secretRegistry, allocationStrategy, projects: projectProfiles };
 const registries = { diagnostics: diagnosticsRegistry, messages: messageRegistry, refresh: refreshRegistry, exports: exportRegistry };

@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { inject, onMounted, ref, watch } from 'vue'
+import { inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
 
 const emit = defineEmits(['context-state'])
@@ -27,6 +27,35 @@ const projects = ref([])
 const selectedProjectId = ref('')
 const updating = ref(false)
 const unknownProjectId = ref('')
+const PROJECT_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const PROJECT_DISCOVERY_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000]
+let isMounted = false
+let retryTimer = null
+let cancelRetryWait = null
+let discoveryAbortController = null
+
+function validateProjectsResponse(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)
+      || !Array.isArray(data.projects) || data.projects.length === 0) {
+    throw new Error('Published project list is missing or empty')
+  }
+
+  const projectIds = new Set()
+  return data.projects.map(project => {
+    if (!project || typeof project !== 'object' || Array.isArray(project)
+        || typeof project.projectId !== 'string'
+        || !PROJECT_ID_PATTERN.test(project.projectId)
+        || typeof project.displayName !== 'string'
+        || project.displayName.trim() === '') {
+      throw new Error('Published project list contains an invalid entry')
+    }
+    if (projectIds.has(project.projectId)) {
+      throw new Error(`Published project list contains a duplicate ID: ${project.projectId}`)
+    }
+    projectIds.add(project.projectId)
+    return { projectId: project.projectId, displayName: project.displayName.trim() }
+  })
+}
 
 function readProjectIdFromHash() {
   const query = (window.location.hash || '#/').split('?').slice(1).join('?')
@@ -63,7 +92,7 @@ function resolveProjectContext(projectId = currentProjectId()) {
 
   if (projects.value.length === 0) {
     selectedProjectId.value = ''
-    setContextState('ready')
+    setContextState('unavailable')
     return
   }
 
@@ -80,16 +109,68 @@ function resolveProjectContext(projectId = currentProjectId()) {
   setContextState('ready', defaultProject.projectId)
 }
 
-onMounted(async () => {
-  setContextState('loading')
-  try {
-    const data = await apiRequest('/projects')
-    projects.value = Array.isArray(data.projects) ? data.projects : []
-    resolveProjectContext()
-  } catch (error) {
-    console.error('Failed to load projects:', error)
-    setContextState('unavailable')
+function waitForRetry(delayMs) {
+  return new Promise(resolve => {
+    cancelRetryWait = resolve
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      cancelRetryWait = null
+      resolve(true)
+    }, delayMs)
+  })
+}
+
+function cancelPendingRetry() {
+  if (retryTimer !== null) clearTimeout(retryTimer)
+  retryTimer = null
+  if (cancelRetryWait) {
+    const resolve = cancelRetryWait
+    cancelRetryWait = null
+    resolve(false)
   }
+}
+
+async function loadProjects() {
+  let lastError
+  for (let attempt = 0; attempt <= PROJECT_DISCOVERY_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      discoveryAbortController = new AbortController()
+      const data = await apiRequest('/projects', { signal: discoveryAbortController.signal })
+      discoveryAbortController = null
+      if (!isMounted) return
+      projects.value = validateProjectsResponse(data)
+      // Read the route only after discovery completes so navigation during a
+      // retry resolves against the latest project ID.
+      resolveProjectContext()
+      return
+    } catch (error) {
+      discoveryAbortController = null
+      if (!isMounted) return
+
+      lastError = error
+      const retryDelayMs = PROJECT_DISCOVERY_RETRY_DELAYS_MS[attempt]
+      if (error?.status !== 503 || retryDelayMs === undefined) break
+      const shouldRetry = await waitForRetry(retryDelayMs)
+      if (!shouldRetry || !isMounted) return
+    }
+  }
+
+  if (!isMounted) return
+  console.error('Failed to load projects:', lastError)
+  setContextState('unavailable')
+}
+
+onMounted(() => {
+  isMounted = true
+  setContextState('loading')
+  void loadProjects()
+})
+
+onBeforeUnmount(() => {
+  isMounted = false
+  discoveryAbortController?.abort()
+  discoveryAbortController = null
+  cancelPendingRetry()
 })
 
 // Keep the selection and the app's project context aligned after navigation,

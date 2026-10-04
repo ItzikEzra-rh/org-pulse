@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "projects": [
+    {
+      "projectId": "osac",
+      "displayName": "OSAC",
+      "profileRevision": "a385b84453828321",
+      "profileKey": "projects/osac/profile.json"
+    }
+  ]
+}
