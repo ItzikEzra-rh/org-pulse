@@ -6,5 +6,6 @@ export const routes = {
   'ci-duty': defineAsyncComponent(() => import('./views/CiDutyView.vue')),
   'quality-analysis': defineAsyncComponent(() => import('./views/QualityAnalysisView.vue')),
   'component-maturity': defineAsyncComponent(() => import('./views/ComponentMaturityView.vue')),
-  'disconnected-repo-detail': defineAsyncComponent(() => import('./views/DisconnectedRepoDetailView.vue'))
+  'disconnected-repo-detail': defineAsyncComponent(() => import('./views/DisconnectedRepoDetailView.vue')),
+  'release-execution': defineAsyncComponent(() => import('./views/ReleaseExecutionView.vue'))
 }

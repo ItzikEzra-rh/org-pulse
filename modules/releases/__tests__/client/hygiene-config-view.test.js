@@ -48,6 +48,8 @@ function httpError(status, message) {
 describe('HygieneConfigView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.location.hash = '#/settings/releases?projectId=osac'
+    window.dispatchEvent(new Event('urlchange'))
   })
 
   it('calls the new read-only project-hygiene config endpoint', async () => {
@@ -55,7 +57,7 @@ describe('HygieneConfigView', () => {
     mount(HygieneConfigView)
     await flushPromises()
     expect(apiRequest.mock.calls.map(([path]) => path)).toEqual([
-      '/modules/releases/hygiene/project-hygiene/config'
+      '/modules/releases/hygiene/project-hygiene/config?projectId=osac'
     ])
   })
 

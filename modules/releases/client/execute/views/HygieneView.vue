@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 import { extractProduct } from '../../deliver/composables/release-utils.js'
 import KanbanBoard from '../components/hygiene/KanbanBoard.vue'
 import HygieneWelcomeModal from '../components/hygiene/HygieneWelcomeModal.vue'
@@ -8,6 +9,16 @@ import HygieneSelect from '../components/hygiene/HygieneSelect.vue'
 import { useHygieneFilters } from '../composables/useHygieneFilters.js'
 
 const nav = inject('moduleNav')
+const projectId = useProjectId()
+let versionsRequestId = 0
+let dataRequestId = 0
+
+function scopedUrl(path, params = {}) {
+  const query = new URLSearchParams(params)
+  if (projectId.value) query.set('projectId', projectId.value)
+  const serialized = query.toString()
+  return `${path}${serialized ? '?' + serialized : ''}`
+}
 
 // ── Version / product state ──
 
@@ -47,10 +58,16 @@ const hygieneFeatures = ref({})
 const executionFeatures = ref([])
 const summary = ref(null)
 const fetchedAt = ref(null)
+const unavailableMessage = ref('')
 
 async function loadVersions() {
+  const requestId = ++versionsRequestId
+  const requestedProjectId = projectId.value
+  allVersions.value = []
+  registryReleases.value = []
   try {
-    const data = await apiRequest('/modules/releases/registry')
+    const data = await apiRequest(`/modules/releases/registry${projectQuery(requestedProjectId)}`)
+    if (requestId !== versionsRequestId || projectId.value !== requestedProjectId) return
     const releases = (data.releases || []).filter(r => r.state !== 'archived')
     registryReleases.value = releases
     allVersions.value = releases.map(r => r.displayName).sort()
@@ -67,15 +84,27 @@ async function loadVersions() {
       loadData([])
     }
   } catch {
+    if (requestId !== versionsRequestId || projectId.value !== requestedProjectId) return
     allVersions.value = []
+    registryReleases.value = []
   }
 }
 
 async function loadData(versions) {
+  const requestId = ++dataRequestId
+  const requestedProjectId = projectId.value
   const effective = versions && versions.length > 0 ? versions : allVersions.value
-  if (effective.length === 0) return
+  if (effective.length === 0) {
+    hygieneFeatures.value = {}
+    executionFeatures.value = []
+    summary.value = null
+    fetchedAt.value = null
+    loading.value = false
+    return
+  }
   loading.value = true
   error.value = null
+  unavailableMessage.value = ''
 
   try {
     const mergedHygiene = {}
@@ -90,10 +119,17 @@ async function loadData(versions) {
         : version
 
       const [hygieneData, summaryData, execData] = await Promise.all([
-        apiRequest(`/modules/releases/hygiene/features?version=${encodeURIComponent(version)}`),
-        apiRequest(`/modules/releases/hygiene/summary?version=${encodeURIComponent(version)}`),
-        apiRequest(`/modules/releases/execution/features?version=${encodeURIComponent(execVersion)}`)
+        apiRequest(scopedUrl('/modules/releases/hygiene/features', { version })),
+        apiRequest(scopedUrl('/modules/releases/hygiene/summary', { version })),
+        apiRequest(scopedUrl('/modules/releases/execution/features', { version: execVersion }))
       ])
+
+      if (requestId !== dataRequestId || projectId.value !== requestedProjectId) return
+      const unavailable = [hygieneData, summaryData, execData].find(item => item?.state === 'unavailable')
+      if (unavailable) {
+        unavailableMessage.value = unavailable.message || unavailable.error || 'Release hygiene data is unavailable for this project.'
+        return
+      }
 
       Object.assign(mergedHygiene, hygieneData.features || {})
 
@@ -128,9 +164,10 @@ async function loadData(versions) {
     summary.value = mergedSummary
     executionFeatures.value = Object.values(execByKey)
   } catch (err) {
+    if (requestId !== dataRequestId || projectId.value !== requestedProjectId) return
     error.value = err.message
   } finally {
-    loading.value = false
+    if (requestId === dataRequestId && projectId.value === requestedProjectId) loading.value = false
   }
 }
 
@@ -190,6 +227,17 @@ watch(selectedVersions, (v) => {
   loadData(v)
 })
 
+watch(projectId, async () => {
+  selectedProducts.value = []
+  selectedVersions.value = []
+  hygieneFeatures.value = {}
+  executionFeatures.value = []
+  summary.value = null
+  fetchedAt.value = null
+  unavailableMessage.value = ''
+  await loadVersions()
+}, { flush: 'sync' })
+
 onMounted(() => {
   loadVersions()
 })
@@ -201,7 +249,7 @@ const hygieneRuleDetails = ref(null)
 
 async function loadRuleCategories() {
   try {
-    const data = await apiRequest('/modules/releases/hygiene/config')
+    const data = await apiRequest(`/modules/releases/hygiene/config${projectQuery(projectId.value)}`)
     if (data && data.ruleDefinitions) {
       const rulesConfig = (data.config && data.config.rules) || {}
       const detailMap = {}
@@ -295,7 +343,7 @@ const versionOptions = computed(() =>
 <template>
   <div>
     <!-- Filter bar -->
-    <div class="flex items-center gap-3 flex-wrap mb-4">
+    <div v-if="!unavailableMessage" class="flex items-center gap-3 flex-wrap mb-4">
       <HygieneSelect
         :modelValue="selectedProducts"
         :options="productOptions"
@@ -465,6 +513,14 @@ const versionOptions = computed(() =>
     <!-- Loading state -->
     <div v-if="loading" class="text-center py-12 text-gray-500 dark:text-gray-400">
       Loading feature data...
+    </div>
+
+    <div
+      v-else-if="unavailableMessage"
+      role="status"
+      class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 text-sm text-gray-600 dark:text-gray-300"
+    >
+      {{ unavailableMessage }}
     </div>
 
     <!-- Empty state -->

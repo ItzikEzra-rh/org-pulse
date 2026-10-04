@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('@shared/client/services/api.js', () => ({
-  apiRequest: vi.fn()
+  apiRequest: vi.fn(),
+  getRoster: vi.fn(projectId => Promise.resolve({ projectId, orgs: [], people: [] }))
 }))
 
 vi.mock('vue-chartjs', () => ({
@@ -82,6 +83,8 @@ function makeEnvelope(digestOverrides = {}, sourceOverrides = {}) {
 describe('CiDigestView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.location.hash = '#/'
+    window.dispatchEvent(new Event('hashchange'))
   })
 
   it('renders a loading state initially', () => {
@@ -110,6 +113,25 @@ describe('CiDigestView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('No CI digest report available')
     expect(wrapper.text()).not.toContain('Failed to load CI digest')
+  })
+
+  it('shows project-specific unavailable instead of the OSAC missing-report message', async () => {
+    window.location.hash = '#/system-health?projectId=flightctl'
+    window.dispatchEvent(new Event('hashchange'))
+    apiRequest.mockResolvedValue({
+      projectId: 'flightctl',
+      state: 'unavailable',
+      reason: 'osac-only-data-source',
+      data: null
+    })
+    const wrapper = mount(CiDigestView)
+    await flushPromises()
+    await flushPromises()
+
+    expect(apiRequest).toHaveBeenCalledWith('/modules/system-health/ci-digest?projectId=flightctl')
+    expect(wrapper.text()).toContain('CI digest unavailable for this project')
+    expect(wrapper.text()).toContain('does not apply to this project')
+    expect(wrapper.text()).not.toContain('Waiting for org-pulse-data')
   })
 
   it('renders an error state (not the empty state) on a non-404 failure', async () => {

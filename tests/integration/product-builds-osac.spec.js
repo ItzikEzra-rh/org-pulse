@@ -23,6 +23,12 @@ test.describe('Product Builds OSAC @product-builds-osac', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
+    const projectSelector = page.locator('#project-selector');
+    if (await projectSelector.count()) {
+      await projectSelector.selectOption('osac');
+      await page.waitForTimeout(500);
+    }
+
     const moduleHeader = page.locator('aside nav button').filter({ hasText: 'Product Builds' }).first();
     await expect(moduleHeader).toBeVisible();
     await moduleHeader.click();

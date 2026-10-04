@@ -4,7 +4,7 @@ import { ClockIcon, CalendarDaysIcon } from 'lucide-vue-next'
 import { useCiDuty, formatDutyDate, getInitials } from '../composables/useCiDuty.js'
 import WorkgroupBadge from '../components/ci-duty/WorkgroupBadge.vue'
 
-const { loading, error, notFound, load, currentEntry, nextEntry, rotation, workgroupColors } = useCiDuty()
+const { loading, error, notFound, inapplicable, unavailable, load, currentEntry, nextEntry, rotation, workgroupColors } = useCiDuty()
 
 onMounted(load)
 
@@ -42,6 +42,23 @@ function retry() {
         @click="retry"
         class="mt-4 px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline"
       >Try again</button>
+    </div>
+
+    <!-- Project disposition -->
+    <div
+      v-else-if="inapplicable"
+      class="text-center py-16 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+    >
+      <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">CI Duty is not applicable</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400">The CI Duty rotation is configured for OSAC.</p>
+    </div>
+
+    <div
+      v-else-if="unavailable"
+      class="text-center py-16 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+    >
+      <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">CI Duty unavailable</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400">Select a project from the top bar to load its CI Duty status.</p>
     </div>
 
     <!-- Missing data -->

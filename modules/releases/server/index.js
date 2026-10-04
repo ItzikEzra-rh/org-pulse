@@ -210,6 +210,7 @@ module.exports = function registerRoutes(router, context) {
   var executionRouter = express.Router();
   registerExecutionRoutes(executionRouter, {
     storage,
+    projects: context.projects || null,
     requireAuth,
     requireAdmin,
     requireScope,
@@ -221,6 +222,7 @@ module.exports = function registerRoutes(router, context) {
   });
   registerFeatureTrackingRoutes(executionRouter, {
     storage,
+    projects: context.projects || null,
     requireAuth,
     requireScope
   });
@@ -245,6 +247,7 @@ module.exports = function registerRoutes(router, context) {
   var hygieneRouter = express.Router();
   registerHygieneRoutes(hygieneRouter, {
     storage,
+    projects: context.projects || null,
     requireAuth,
     requireAdmin,
     requirePlanningManager,
@@ -286,7 +289,7 @@ module.exports = function registerRoutes(router, context) {
   router.use('/pm-hub', pmHubRouter);
 
   // Release Plan routes (top-level under /api/modules/releases/, no LLM call — pure storage passthrough)
-  registerReleasePlanRoutes(router, { storage, requireAuth, requireScope });
+  registerReleasePlanRoutes(router, { storage, requireAuth, requireScope, projects: context.projects || null });
 
   // ─── Unified Audit Routes ───
 

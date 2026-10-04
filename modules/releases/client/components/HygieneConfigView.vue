@@ -74,13 +74,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const loading = ref(true)
 const loadError = ref('')
 const notPublished = ref(false)
 const config = ref(null)
+const projectId = useProjectId()
+let latestRequestId = 0
 
 const projectEntries = computed(() => {
   const projects = config.value && config.value.projects
@@ -105,12 +108,18 @@ function groupRulesByCategory(rules) {
 }
 
 async function fetchConfig() {
+  const requestId = ++latestRequestId
+  const requestedProjectId = projectId.value
   loading.value = true
   loadError.value = ''
   notPublished.value = false
+  config.value = null
   try {
-    config.value = await apiRequest('/modules/releases/hygiene/project-hygiene/config')
+    const data = await apiRequest(`/modules/releases/hygiene/project-hygiene/config${projectQuery(requestedProjectId)}`)
+    if (requestId !== latestRequestId || projectId.value !== requestedProjectId) return
+    config.value = data
   } catch (e) {
+    if (requestId !== latestRequestId || projectId.value !== requestedProjectId) return
     config.value = null
     if (e.status === 404) {
       notPublished.value = true
@@ -119,9 +128,11 @@ async function fetchConfig() {
       loadError.value = e.message || 'Project hygiene configuration is currently unavailable.'
     }
   } finally {
-    loading.value = false
+    if (requestId === latestRequestId && projectId.value === requestedProjectId) loading.value = false
   }
 }
 
 onMounted(fetchConfig)
+
+watch(projectId, fetchConfig, { flush: 'sync' })
 </script>

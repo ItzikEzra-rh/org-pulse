@@ -10,6 +10,11 @@ const { evaluateHygiene, hygieneRules, RULE_CATEGORIES } = require('./hygiene-ru
 const { fetchHygieneFeatures } = require('./jira-fetch');
 const { logAudit } = require('../planning/audit-log');
 const { readRegistry } = require('../registry');
+const {
+  resolveReleaseProject,
+  sendProjectScopeError,
+  unavailableProjectData
+} = require('../project-scope');
 
 const DATA_PREFIX = 'releases/hygiene';
 const COOLDOWN_MS = 5 * 60 * 1000;
@@ -128,6 +133,26 @@ const refreshState = {
 
 module.exports = function registerHygieneRoutes(router, context) {
   const { storage, requireAuth, requirePlanningManager, requireScope, registerDiagnostics } = context;
+  const projects = context.projects || null;
+
+  function selectedProject(req, res) {
+    const selection = resolveReleaseProject(projects, req.query);
+    if (sendProjectScopeError(res, selection)) return null;
+    return selection;
+  }
+
+  function projectMessage(selection, template) {
+    const projectName = selection.profile?.displayName || selection.projectId;
+    return template.replace('{project}', projectName);
+  }
+
+  function sendUnavailable(res, selection, message, status = 200) {
+    const resolvedMessage = projectMessage(selection, message);
+    return res.status(status).json({
+      ...unavailableProjectData(selection.projectId, 'jira-hygiene', resolvedMessage),
+      error: resolvedMessage
+    });
+  }
 
   function storageKey(version) {
     return DATA_PREFIX + '/features-' + version + '.json';
@@ -276,9 +301,25 @@ module.exports = function registerHygieneRoutes(router, context) {
 
   // GET /features — hygiene features for a release version
   router.get('/features', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
     var version = req.query.version;
     if (!version) {
       return res.status(400).json({ error: 'version query parameter is required' });
+    }
+
+    if (selection.projectId !== 'osac') {
+      const message = projectMessage(selection, 'Jira Hygiene data has not been collected for {project}.');
+      return res.json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'jira-hygiene',
+          message
+        ),
+        error: message,
+        version,
+        features: {}
+      });
     }
 
     var data = storage.readFromStorage(storageKey(version));
@@ -300,9 +341,28 @@ module.exports = function registerHygieneRoutes(router, context) {
 
   // GET /summary — aggregate violation summary
   router.get('/summary', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
     var version = req.query.version;
     if (!version) {
       return res.status(400).json({ error: 'version query parameter is required' });
+    }
+
+    if (selection.projectId !== 'osac') {
+      const message = projectMessage(selection, 'Jira Hygiene data has not been collected for {project}.');
+      return res.json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'jira-hygiene',
+          message
+        ),
+        error: message,
+        version,
+        totalFeatures: 0,
+        featuresWithViolations: 0,
+        violationsByRule: {},
+        violationsByCategory: {}
+      });
     }
 
     var data = storage.readFromStorage(storageKey(version));
@@ -363,6 +423,16 @@ module.exports = function registerHygieneRoutes(router, context) {
    *         description: Refresh started, already running, or no versions
    */
   router.post('/refresh-all', requirePlanningManager, requireScope('releases:write'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return sendUnavailable(
+        res,
+        selection,
+        'Jira Hygiene refresh is not configured for {project}.',
+        409
+      );
+    }
     if (refreshState.running || (context.isRefreshRunning && context.isRefreshRunning())) {
       return res.json({ status: 'already_running' });
     }
@@ -392,6 +462,23 @@ module.exports = function registerHygieneRoutes(router, context) {
 
   // GET /refresh/status — current refresh state
   router.get('/refresh/status', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'jira-hygiene',
+          'Jira Hygiene refresh status is unavailable for this project.'
+        ),
+        running: false,
+        startedAt: null,
+        completedAt: null,
+        lastSuccessAt: null,
+        lastResult: null,
+        progress: null
+      });
+    }
     res.json({
       running: refreshState.running,
       startedAt: refreshState.startedAt,
@@ -404,6 +491,16 @@ module.exports = function registerHygieneRoutes(router, context) {
 
   // GET /config — hygiene rule configuration with rule definitions
   router.get('/config', requirePlanningManager, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return sendUnavailable(
+        res,
+        selection,
+        'Jira Hygiene rules have not been published for {project}.',
+        404
+      );
+    }
     var config = loadConfig(storage);
 
     var ruleDefinitions = [];
@@ -429,6 +526,20 @@ module.exports = function registerHygieneRoutes(router, context) {
 
   // GET /program-report — aggregate hygiene across all versions
   router.get('/program-report', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'jira-hygiene',
+          'Jira Hygiene program report has not been collected for this project.'
+        ),
+        versions: [],
+        totals: { totalFeatures: 0, featuresWithViolations: 0, violationsByRule: {}, violationsByTeam: {} },
+        ruleDefinitions: {}
+      });
+    }
     var registry = readRegistry(storage.readFromStorage);
     var registryReleases = registry.releases || [];
     var config = loadConfig(storage);
@@ -571,6 +682,16 @@ module.exports = function registerHygieneRoutes(router, context) {
 
   // GET /project-hygiene — OSAC-style project-wide Jira hygiene results (read-only, data-side owned)
   router.get('/project-hygiene', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return sendUnavailable(
+        res,
+        selection,
+        'Jira Hygiene results have not been collected for {project}.',
+        404
+      );
+    }
     readHygieneContract(
       res,
       DATA_PREFIX + '/project-hygiene-results.json',
@@ -580,6 +701,16 @@ module.exports = function registerHygieneRoutes(router, context) {
 
   // GET /project-hygiene/config — OSAC-style project-wide Jira hygiene rule config (read-only, data-side owned)
   router.get('/project-hygiene/config', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return sendUnavailable(
+        res,
+        selection,
+        'Jira Hygiene rules have not been published for {project}.',
+        404
+      );
+    }
     readHygieneContract(
       res,
       DATA_PREFIX + '/project-hygiene-config.json',

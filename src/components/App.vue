@@ -7,6 +7,7 @@
       :active-module="activeModule"
       :active-view-id="activeViewId"
       :route-params="routeParams"
+      :project-id="projectContextProjectId"
       :user="authUser"
       :is-admin="authIsAdmin"
       :is-team-admin="authIsTeamAdmin"
@@ -57,6 +58,7 @@
             >
               <MenuIcon :size="20" />
             </button>
+            <ProjectSelector @context-state="handleProjectContextState" />
             <div class="flex items-center gap-2">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ currentPageTitle }}</h2>
               <div v-if="activeModule === 'module-iframe' && activeModuleConfig?.description" class="relative group">
@@ -119,57 +121,71 @@
 
       <!-- Page content -->
       <main :class="activeModule === 'module-iframe' ? 'p-0' : 'px-6 lg:px-8 py-6'">
-        <!-- Landing Page -->
-        <LandingPage
-          v-if="activeModule === 'home'"
-          :built-in-manifests="builtInManifests"
-          :is-admin="authIsAdmin"
-          @navigate="handleSidebarNavigate"
-        />
+        <div v-if="projectContextStatus === 'loading'" class="flex items-center justify-center py-16 text-sm text-gray-500 dark:text-gray-400" role="status">
+          Loading project context…
+        </div>
+        <div v-else-if="projectContextStatus === 'unavailable'" class="mx-auto max-w-xl rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-6 text-center" role="alert">
+          <h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Project context unavailable</h1>
+          <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">Org Pulse could not load the published project list. Refresh the page to try again.</p>
+        </div>
+        <div v-else-if="projectContextStatus === 'not-found'" class="mx-auto max-w-xl rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 text-center" role="alert">
+          <p class="text-sm font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">404</p>
+          <h1 class="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">Project not found</h1>
+          <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">No published project matches “{{ projectContextProjectId }}”. Choose a project from the selector.</p>
+        </div>
+        <template v-else>
+          <!-- Landing Page -->
+          <LandingPage
+            v-if="activeModule === 'home'"
+            :built-in-manifests="builtInManifests"
+            :is-admin="authIsAdmin"
+            @navigate="handleSidebarNavigate"
+          />
 
-        <!-- Dynamic built-in module view -->
-        <component
-          v-else-if="activeComponent"
-          :is="activeComponent"
-          v-bind="activeComponentProps"
-        />
+          <!-- Dynamic built-in module view -->
+          <component
+            v-else-if="activeComponent"
+            :is="activeComponent"
+            v-bind="activeComponentProps"
+          />
 
-        <!-- Module iframe View (git-static) -->
-        <ModuleIframeView
-          v-else-if="activeModule === 'module-iframe'"
-          :slug="activeModuleSlug"
-          :module-name="activeModuleConfig?.name || activeModuleSlug"
-          :sync-status="activeModuleConfig?.lastSyncStatus || null"
-          :is-admin="authIsAdmin"
-          @trigger-sync="handleModuleSync"
-          @retry-sync="handleModuleSync"
-        />
+          <!-- Module iframe View (git-static) -->
+          <ModuleIframeView
+            v-else-if="activeModule === 'module-iframe'"
+            :slug="activeModuleSlug"
+            :module-name="activeModuleConfig?.name || activeModuleSlug"
+            :sync-status="activeModuleConfig?.lastSyncStatus || null"
+            :is-admin="authIsAdmin"
+            @trigger-sync="handleModuleSync"
+            @retry-sync="handleModuleSync"
+          />
 
-        <!-- API Tokens View -->
-        <ApiTokensView
-          v-else-if="activeModule === 'api-tokens'"
-          :is-admin="authIsAdmin"
-          @toast="({ message, type }) => showToast(message, type)"
-        />
+          <!-- API Tokens View -->
+          <ApiTokensView
+            v-else-if="activeModule === 'api-tokens'"
+            :is-admin="authIsAdmin"
+            @toast="({ message, type }) => showToast(message, type)"
+          />
 
-        <!-- Settings View -->
-        <SettingsView
-          v-else-if="activeModule === 'settings'"
-          :built-in-manifests="builtInManifests"
-          :initial-tab="settingsInitialTab"
-          @toast="({ message, type }) => showToast(message, type)"
-          @config-updated="(c) => { if (c.titlePrefix != null) titlePrefix = c.titlePrefix }"
-        />
+          <!-- Settings View -->
+          <SettingsView
+            v-else-if="activeModule === 'settings'"
+            :built-in-manifests="builtInManifests"
+            :initial-tab="settingsInitialTab"
+            @toast="({ message, type }) => showToast(message, type)"
+            @config-updated="(c) => { if (c.titlePrefix != null) titlePrefix = c.titlePrefix }"
+          />
 
-        <!-- About View (consolidated Docs + Help) -->
-        <AboutView
-          v-else-if="activeModule === 'about'"
-          :is-admin="authIsAdmin"
-          :initial-tab="aboutInitialTab"
-          :platform-about-tabs="platformAboutTabs"
-        />
+          <!-- About View (consolidated Docs + Help) -->
+          <AboutView
+            v-else-if="activeModule === 'about'"
+            :is-admin="authIsAdmin"
+            :initial-tab="aboutInitialTab"
+            :platform-about-tabs="platformAboutTabs"
+          />
 
-        <LoadingOverlay v-if="isLoading" />
+          <LoadingOverlay v-if="isLoading" />
+        </template>
       </main>
     </div>
 
@@ -198,10 +214,12 @@ import { Menu as MenuIcon, RefreshCw, ExternalLink as ExternalLinkIcon, Sun as S
 import LoadingOverlay from '@shared/client/components/LoadingOverlay.vue'
 import Toast from '@shared/client/components/Toast.vue'
 import RefreshModal from '@shared/client/components/RefreshModal.vue'
+import { useProjectId, projectParam } from '@shared/client/composables/useProjectId.js'
 import SettingsView from './SettingsView.vue'
 import AboutView from './AboutView.vue'
 import ApiTokensView from './ApiTokensView.vue'
 import AppSidebar from './AppSidebar.vue'
+import ProjectSelector from './ProjectSelector.vue'
 import LandingPage from './LandingPage.vue'
 import ModuleIframeView from './ModuleIframeView.vue'
 import BackendConnectivityModal from './BackendConnectivityModal.vue'
@@ -238,6 +256,7 @@ export default {
     AboutView,
     ApiTokensView,
     AppSidebar,
+    ProjectSelector,
     RefreshModal,
     LandingPage,
     ModuleIframeView,
@@ -370,10 +389,13 @@ export default {
       navigateTo(viewId, params = {}) {
         const slug = activeModuleSlugRef.value
         if (!slug) return
-        routeParams.value = params
+        // Preserve the shell project context across module navigation unless
+        // the caller explicitly passes a different projectId
+        const merged = { ...projectParam(useProjectId().value), ...params }
+        routeParams.value = merged
         // Build hash with query params
         let hash = `#/${slug}/${viewId}`
-        const qs = Object.entries(params)
+        const qs = Object.entries(merged)
           .filter(([, v]) => v !== undefined && v !== null)
           .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
           .join('&')
@@ -413,6 +435,9 @@ export default {
         routeParams.value = { ...params }
         const method = push ? 'pushState' : 'replaceState'
         history[method](null, '', newHash)
+        // history writes do not fire hashchange; hash-query listeners
+        // (useProjectId) rely on this signal to pick up the new params
+        window.dispatchEvent(new Event('urlchange'))
       },
       goBack() {
         history.back()
@@ -493,7 +518,11 @@ export default {
       mobileMenuOpen: false,
       settingsInitialTab: null,
       aboutInitialTab: null,
-      toasts: []
+      toasts: [],
+      projectContextStatus: 'loading',
+      projectContextProjectId: null,
+      shellInitialized: false,
+      initialDataStarted: false
     }
   },
   computed: {
@@ -525,7 +554,7 @@ export default {
   watch: {
     authUser(newUser, oldUser) {
       if (newUser && !oldUser) {
-        this.loadInitialData()
+        this.startInitialDataIfReady()
       }
     }
   },
@@ -534,9 +563,8 @@ export default {
     window.addEventListener('popstate', this.onPopState)
     window.addEventListener('keydown', this.onKeyDown)
     await this.loadBuiltInManifestsFromApi()
-    if (this.authUser) {
-      await this.loadInitialData()
-    }
+    this.shellInitialized = true
+    this.startInitialDataIfReady()
   },
   beforeUnmount() {
     window.removeEventListener('hashchange', this.onHashChange)
@@ -544,6 +572,20 @@ export default {
     window.removeEventListener('keydown', this.onKeyDown)
   },
   methods: {
+    handleProjectContextState(context) {
+      this.projectContextStatus = context?.state || 'unavailable'
+      this.projectContextProjectId = context?.projectId || null
+      if (this.projectContextStatus === 'ready') {
+        this.startInitialDataIfReady()
+      }
+    },
+
+    startInitialDataIfReady() {
+      if (!this.authUser || !this.shellInitialized || this.projectContextStatus !== 'ready' || this.initialDataStarted) return
+      this.initialDataStarted = true
+      this.loadInitialData()
+    },
+
     onKeyDown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
         e.preventDefault()
@@ -827,16 +869,21 @@ export default {
         this.activeModuleSlugRef = manifest.slug
         this.activeModule = manifest.slug
         this.activeViewId = resolvedViewId
-        this.routeParams = {}
-        window.location.hash = `#/${manifest.slug}/${resolvedViewId}`
+        // Preserve the project context across module navigation: dropping it
+        // would make hash-query listeners (useProjectId) read a stale or
+        // empty projectId and refetch screens for the wrong project.
+        const preservedProjectId = this.routeParams?.projectId
+        this.routeParams = preservedProjectId ? { projectId: preservedProjectId } : {}
+        window.location.hash = `#/${manifest.slug}/${resolvedViewId}${preservedProjectId ? `?projectId=${encodeURIComponent(preservedProjectId)}` : ''}`
         return
       }
 
       // Fallback: treat as a view within the active module
       if (this.activeModule && this.builtInManifests.find(m => m.slug === this.activeModule)) {
         this.activeViewId = target
-        this.routeParams = {}
-        window.location.hash = `#/${this.activeModule}/${target}`
+        const preservedProjectId = this.routeParams?.projectId
+        this.routeParams = preservedProjectId ? { projectId: preservedProjectId } : {}
+        window.location.hash = `#/${this.activeModule}/${target}${preservedProjectId ? `?projectId=${encodeURIComponent(preservedProjectId)}` : ''}`
       }
     },
 

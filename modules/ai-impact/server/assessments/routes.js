@@ -26,9 +26,41 @@ const BULK_CAP = 5000;
  * @param {import('express').Router} router
  * @param {object} context - Module context with storage and auth middleware
  */
-module.exports = function registerAssessmentRoutes(router, context) {
+module.exports = function registerAssessmentRoutes(router, context, osacOnlyDataGuard) {
   const { storage, requireAdmin, requireScope } = context;
   const { readFromStorage, writeToStorageAtomic } = storage;
+
+  const ARTIFACT_KEY = 'sources/ep-review/assessments.json';
+
+  function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  // Read the published project-qualified EP-review artifact for a non-OSAC
+  // project. Returns the envelope only when the identity fully matches;
+  // never an OSAC fallback, never a guess.
+  function readProjectAssessmentEnvelope(req) {
+    const projectId = req.query?.projectId;
+    if (!projectId || projectId === 'osac') return null;
+    const projects = context.projects;
+    if (!projects || typeof projects.readArtifact !== 'function') return null;
+    let artifact;
+    try {
+      artifact = projects.readArtifact(projectId, ARTIFACT_KEY);
+    } catch {
+      return null;
+    }
+    if (!artifact || !isPlainObject(artifact.value)) return null;
+    const envelope = artifact.value;
+    if (envelope.schemaVersion !== 1
+        || envelope.projectId !== projectId
+        || envelope.artifactKey !== ARTIFACT_KEY
+        || !isPlainObject(envelope.data)
+        || envelope.data.projectId !== projectId) {
+      return null;
+    }
+    return envelope;
+  }
 
   // ─── 1. Static routes FIRST ───
 
@@ -101,6 +133,16 @@ module.exports = function registerAssessmentRoutes(router, context) {
 
   // GET /assessments — list all latest assessments (slim projection)
   router.get('/assessments', requireScope('ai-impact:read'), function(req, res) {
+    const projectEnvelope = readProjectAssessmentEnvelope(req);
+    if (projectEnvelope) {
+      return res.json({
+        ...getLatestProjection(projectEnvelope.data),
+        projectId: projectEnvelope.projectId,
+        state: projectEnvelope.state,
+        freshness: projectEnvelope.freshness
+      });
+    }
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readAssessments(readFromStorage);
     res.json(getLatestProjection(data));
   });
@@ -109,6 +151,21 @@ module.exports = function registerAssessmentRoutes(router, context) {
 
   // GET /assessments/:key — single RFE assessment + history
   router.get('/assessments/:key', requireScope('ai-impact:read'), function(req, res) {
+    const projectEnvelope = readProjectAssessmentEnvelope(req);
+    if (projectEnvelope) {
+      const projectEntry = (projectEnvelope.data.assessments || {})[req.params.key];
+      if (!projectEntry) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      return res.json({
+        latest: projectEntry.latest,
+        history: projectEntry.history,
+        projectId: projectEnvelope.projectId,
+        state: projectEnvelope.state,
+        freshness: projectEnvelope.freshness
+      });
+    }
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readAssessments(readFromStorage);
     const entry = data.assessments[req.params.key];
     if (!entry) {

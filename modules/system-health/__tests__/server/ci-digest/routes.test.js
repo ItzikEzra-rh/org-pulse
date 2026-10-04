@@ -58,7 +58,10 @@ describe('ci-digest routes', () => {
     context = {
       storage,
       requireAuth: vi.fn(),
-      requireScope: () => (req, res, next) => next()
+      requireScope: () => (req, res, next) => next(),
+      projects: {
+        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null
+      }
     }
     registerCiDigestRoutes(router, context)
   })
@@ -117,5 +120,29 @@ describe('ci-digest routes', () => {
 
     expect(res._status).toBe(200)
     expect(res._json.source.runConclusion).toBe('failure')
+  })
+
+  it('returns 404 for unknown project IDs and unavailable for known non-OSAC projects', () => {
+    const handler = router._routes.get['/ci-digest'].at(-1)
+    const unknownRes = makeRes()
+    handler({ query: { projectId: 'unknown' } }, unknownRes)
+    expect(unknownRes._status).toBe(404)
+    expect(unknownRes._json).toEqual({ error: 'Unknown project' })
+
+    const flightctlRes = makeRes()
+    handler({ query: { projectId: 'flightctl' } }, flightctlRes)
+    expect(flightctlRes._json).toEqual({
+      projectId: 'flightctl',
+      state: 'unavailable',
+      reason: 'osac-only-data-source',
+      data: null
+    })
+  })
+
+  it('rejects an explicit empty project ID rather than serving the OSAC digest', () => {
+    const handler = router._routes.get['/ci-digest'].at(-1)
+    const res = makeRes()
+    handler({ query: { projectId: '' } }, res)
+    expect(res._status).toBe(400)
   })
 })

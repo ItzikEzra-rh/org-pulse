@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 import ExecutionSettings from '../execute/components/ExecutionSettings.vue'
 import DeliverySettings from '../deliver/components/DeliverySettings.vue'
 
@@ -15,6 +16,11 @@ const refreshing = ref({ execution: false, delivery: false, hygiene: false })
 const refreshResult = ref({ execution: null, delivery: null, hygiene: null })
 const statusData = ref({ execution: null, delivery: null, hygiene: null })
 const pollTimers = {}
+const projectId = useProjectId()
+
+function scopedUrl(url) {
+  return `${url}${projectQuery(projectId.value)}`
+}
 
 const allSelected = computed({
   get: () => domains.every(d => selected.value[d.id]),
@@ -50,7 +56,7 @@ function getStaleness(ts) {
 
 async function loadStatus(domainId) {
   try {
-    statusData.value[domainId] = await apiRequest(domains.find(d => d.id === domainId).statusUrl)
+    statusData.value[domainId] = await apiRequest(scopedUrl(domains.find(d => d.id === domainId).statusUrl))
   } catch {
     // ignore
   }
@@ -61,7 +67,7 @@ function startPolling(domainId) {
   pollTimers[domainId] = setInterval(async () => {
     try {
       const domain = domains.find(d => d.id === domainId)
-      const status = await apiRequest(domain.statusUrl)
+      const status = await apiRequest(scopedUrl(domain.statusUrl))
       statusData.value[domainId] = status
       if (status.progress) {
         refreshResult.value[domainId] = { status: 'running', message: status.progress.message }
@@ -90,7 +96,7 @@ async function triggerRefresh(domainId) {
   refreshing.value[domainId] = true
   refreshResult.value[domainId] = null
   try {
-    const result = await apiRequest(domain.refreshUrl, { method: 'POST' })
+    const result = await apiRequest(scopedUrl(domain.refreshUrl), { method: 'POST' })
     refreshResult.value[domainId] = result
     if (domain.async && (result.status === 'started' || result.status === 'already_running')) {
       startPolling(domainId)
@@ -115,6 +121,14 @@ async function refreshSelected() {
 onMounted(() => {
   domains.forEach(d => loadStatus(d.id))
 })
+
+watch(projectId, () => {
+  domains.forEach(stopPolling)
+  statusData.value = { execution: null, delivery: null, hygiene: null }
+  refreshResult.value = { execution: null, delivery: null, hygiene: null }
+  refreshing.value = { execution: false, delivery: false, hygiene: false }
+  domains.forEach(d => loadStatus(d.id))
+}, { flush: 'sync' })
 
 onUnmounted(() => {
   domains.forEach(d => stopPolling(d.id))

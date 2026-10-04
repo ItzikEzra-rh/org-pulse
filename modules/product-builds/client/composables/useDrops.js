@@ -1,5 +1,6 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const BASE = '/modules/product-builds'
 
@@ -27,8 +28,12 @@ export function useDrops() {
   const drops = ref([])
   const loading = ref(false)
   const error = ref(null)
+  let lastProductKey = null
+  let lastFilters = {}
 
   async function loadDrops(productKey, filters = {}) {
+    lastProductKey = productKey
+    lastFilters = filters
     loading.value = true
     error.value = null
 
@@ -41,7 +46,8 @@ export function useDrops() {
     if (filters.offset) params.set('offset', filters.offset)
 
     try {
-      const data = await apiRequest(`${BASE}/drops?${params}`)
+      const projectSuffix = projectQuery(useProjectId().value)
+      const data = await apiRequest(`${BASE}/drops?${params}${projectSuffix ? `&${projectSuffix.slice(1)}` : ''}`)
       drops.value = Array.isArray(data) ? data : []
     } catch (err) {
       error.value = err.message
@@ -49,6 +55,10 @@ export function useDrops() {
       loading.value = false
     }
   }
+
+  watch(useProjectId(), () => {
+    if (lastProductKey) loadDrops(lastProductKey, lastFilters)
+  })
 
   return { drops, loading, error, loadDrops }
 }
@@ -59,12 +69,14 @@ export function useDropDetail() {
   const metrics = ref(null)
   const loading = ref(false)
   const error = ref(null)
+  let lastKey = null
 
   async function loadDrop(key) {
+    lastKey = key
     loading.value = true
     error.value = null
     try {
-      drop.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}`)
+      drop.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}${projectQuery(useProjectId().value)}`)
     } catch (err) {
       error.value = err.message
     } finally {
@@ -73,12 +85,20 @@ export function useDropDetail() {
   }
 
   async function loadChangelog(key) {
+    lastKey = key
     try {
-      changelog.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}/changelog`)
+      changelog.value = await apiRequest(`${BASE}/drops/${encodeURIComponent(key)}/changelog${projectQuery(useProjectId().value)}`)
     } catch {
       changelog.value = null
     }
   }
+
+  watch(useProjectId(), () => {
+    if (lastKey) {
+      loadDrop(lastKey)
+      loadChangelog(lastKey)
+    }
+  })
 
   async function loadMetrics(key) {
     try {

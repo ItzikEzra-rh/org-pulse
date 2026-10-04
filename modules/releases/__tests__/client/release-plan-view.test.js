@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('@shared/client/services/api.js', () => ({
-  apiRequest: vi.fn()
+  apiRequest: vi.fn(),
+  getRoster: vi.fn(projectId => Promise.resolve({ projectId, orgs: [], people: [] }))
 }))
 
 import { apiRequest } from '@shared/client/services/api.js'
@@ -60,6 +61,8 @@ function makeIndexEntry(version, overrides = {}) {
 describe('ReleasePlanView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.location.hash = '#/'
+    window.dispatchEvent(new Event('hashchange'))
   })
 
   it('renders loading state initially', () => {
@@ -138,6 +141,39 @@ describe('ReleasePlanView', () => {
     expect(calledPaths.some((p) => p.includes('[object Object]'))).toBe(false)
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/release-plan?version=0.3')
     expect(wrapper.find('#release-plan-version option').text()).toBe('0.3')
+  })
+
+  it('uses a separate projectId parameter and reloads the same version after a project switch', async () => {
+    window.location.hash = '#/releases?projectId=flightctl'
+    window.dispatchEvent(new Event('hashchange'))
+    apiRequest.mockImplementation((path) => {
+      if (path === '/modules/releases/release-plans?projectId=flightctl'
+          || path === '/modules/releases/release-plans?projectId=osac') {
+        return Promise.resolve({ versions: [makeIndexEntry('0.3')] })
+      }
+      if (path === '/modules/releases/release-plan?version=0.3&projectId=flightctl') {
+        return Promise.resolve(makePlan({ vision: { summary: 'Flight Control plan.', metrics: [] } }))
+      }
+      if (path === '/modules/releases/release-plan?version=0.3&projectId=osac') {
+        return Promise.resolve(makePlan({ vision: { summary: 'OSAC plan.', metrics: [] } }))
+      }
+      return Promise.reject(new Error(`unexpected path: ${path}`))
+    })
+
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Flight Control plan.')
+
+    window.location.hash = '#/releases?projectId=osac'
+    window.dispatchEvent(new Event('hashchange'))
+    await flushPromises()
+    await flushPromises()
+
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/release-plan?version=0.3&projectId=flightctl')
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/release-plan?version=0.3&projectId=osac')
+    expect(wrapper.text()).toContain('OSAC plan.')
+    expect(wrapper.text()).not.toContain('Flight Control plan.')
   })
 
   it('refetches the plan when the version picker changes', async () => {

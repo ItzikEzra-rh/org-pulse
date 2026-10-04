@@ -91,8 +91,9 @@ export async function getLastRefreshed() {
 
 // ─── Roster & Person Metrics ───
 
-export async function getRoster() {
-  return apiRequest('/roster')
+export async function getRoster(projectId) {
+  const suffix = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+  return apiRequest(`/roster${suffix}`)
 }
 
 export async function getAllPeopleMetrics() {

@@ -252,6 +252,7 @@ const props = defineProps({
   activeModule: String,
   activeViewId: String,
   routeParams: { type: Object, default: () => ({}) },
+  projectId: { type: String, default: '' },
   user: Object,
   isAdmin: Boolean,
   isTeamAdmin: { type: Boolean, default: false },
@@ -342,13 +343,20 @@ const navSections = computed(() => {
           if (item.requireRole === 'team-admin' && props.isTeamAdmin) return true
           return false
         })
-        .map(item => ({
-          id: `${manifest.slug}::${item.id}`,
-          label: item.label,
-          icon: resolveIcon(item.icon),
-          disabled: item.disabled || false,
-          separatorBefore: item.separatorBefore || false
-        }))
+        .map(item => {
+          const selectedProjectId = props.projectId || props.routeParams.projectId
+          const isProjectBuildsItem = manifest.slug === 'product-builds'
+            && item.id === 'osac'
+            && selectedProjectId
+            && selectedProjectId !== 'osac'
+          return {
+            id: `${manifest.slug}::${item.id}`,
+            label: isProjectBuildsItem ? 'Build Registry' : item.label,
+            icon: resolveIcon(item.icon),
+            disabled: item.disabled || false,
+            separatorBefore: item.separatorBefore || false
+          }
+        })
     })
   }
 

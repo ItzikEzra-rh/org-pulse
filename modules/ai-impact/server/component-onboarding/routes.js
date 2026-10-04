@@ -16,7 +16,7 @@ const BULK_CAP = 5000;
  * Register component onboarding routes on the module router.
  * Static routes BEFORE parameterized routes.
  */
-module.exports = function registerComponentOnboardingRoutes(router, context) {
+module.exports = function registerComponentOnboardingRoutes(router, context, osacOnlyDataGuard) {
   const { storage, requireAdmin, requireScope } = context;
   const { readFromStorage, writeToStorageAtomic } = storage;
 
@@ -129,6 +129,7 @@ module.exports = function registerComponentOnboardingRoutes(router, context) {
    *         description: All component onboarding data with latest projections
    */
   router.get('/component-onboarding', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readComponentOnboarding(readFromStorage);
     res.json(getLatestProjection(data));
   });
@@ -154,6 +155,7 @@ module.exports = function registerComponentOnboardingRoutes(router, context) {
    *         description: Component not found
    */
   router.get('/component-onboarding/:key', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readComponentOnboarding(readFromStorage);
     const entry = data.components[req.params.key];
     if (!entry) {

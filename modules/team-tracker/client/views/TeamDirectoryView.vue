@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, inject, watch } from 'vue'
 import { useOrgRoster } from '../composables/useOrgRoster'
 import { useRoster } from '@shared/client/composables/useRoster'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { usePermissions } from '@shared/client/composables/usePermissions'
 import { useFieldDefinitions } from '@shared/client/composables/useFieldDefinitions'
 import { useFieldFilters } from '../composables/useFieldFilters'
@@ -10,16 +11,61 @@ import TeamCard from '../components/TeamCard.vue'
 import FieldFilterPanel from '../components/FieldFilterPanel.vue'
 
 const nav = inject('moduleNav')
-const { orgs, selectedOrg, loading, searchQuery, sortBy, filteredTeams, totalPeople, unassigned, loadTeams, loadOrgs } = useOrgRoster()
-const { rosterData } = useRoster()
+const projectId = useProjectId()
+const {
+  orgs,
+  selectedOrg,
+  loading: orgLoading,
+  searchQuery,
+  sortBy,
+  filteredTeams,
+  totalPeople: orgTotalPeople,
+  unassigned,
+  loadTeams,
+  loadOrgs
+} = useOrgRoster()
+const {
+  rosterData,
+  loading: projectRosterLoading,
+  error: projectRosterError,
+  uniqueMemberCount,
+  loadRoster
+} = useRoster()
 const { isAdmin } = usePermissions()
 const unassignedExpanded = ref(false)
-const isInAppMode = computed(() => rosterData.value?.teamDataSource === 'in-app')
+const expandedTeamKeys = ref(new Set())
+const isProjectRoster = computed(() => Boolean(projectId.value) && projectId.value !== 'osac')
+const loading = computed(() => isProjectRoster.value ? projectRosterLoading.value : orgLoading.value)
+const isInAppMode = computed(() => !isProjectRoster.value && rosterData.value?.teamDataSource === 'in-app')
+const displayedPeopleCount = computed(() => isProjectRoster.value ? uniqueMemberCount.value : orgTotalPeople.value)
+const projectRosterStatus = computed(() => {
+  const availability = rosterData.value?.availability
+  if (availability === 'available') return 'Supported'
+  if (availability === 'empty') return 'Empty'
+  if (availability === 'unavailable') return 'Unavailable'
+  return ''
+})
+const projectRosterUpdatedAt = computed(() => rosterData.value?.publication?.generatedAt || null)
+const projectTeams = computed(() => {
+  if (!isProjectRoster.value || !Array.isArray(rosterData.value?.orgs)) return []
+  return rosterData.value.orgs.flatMap(org =>
+    Object.entries(org.teams || {}).map(([key, team]) => ({
+      key: `${org.key}::${key}`,
+      name: team.displayName || key,
+      org: org.displayName || projectId.value,
+      memberCount: Array.isArray(team.members) ? team.members.length : 0,
+      members: Array.isArray(team.members) ? team.members : [],
+      metadata: team.metadata || {}
+    }))
+  )
+})
 
 const { definitions, fetchDefinitions } = useFieldDefinitions()
 
 const teamFieldDefs = computed(() =>
-  (definitions.value.teamFields || []).filter(f => f.visible && !f.deleted && f.type === 'constrained')
+  isProjectRoster.value
+    ? []
+    : (definitions.value.teamFields || []).filter(f => f.visible && !f.deleted && f.type === 'constrained')
 )
 
 const {
@@ -37,7 +83,40 @@ const {
 
 const displayedTeams = computed(() => teamFieldFiltered.value)
 
+const visibleTeams = computed(() => {
+  if (!isProjectRoster.value) return displayedTeams.value
+
+  const query = searchQuery.value.trim().toLowerCase()
+  let result = projectTeams.value.filter(team => {
+    if (!query) return true
+    return team.name.toLowerCase().includes(query)
+      || team.members.some(member => (member.jiraDisplayName || member.name || '').toLowerCase().includes(query))
+  })
+
+  if (sortBy.value === 'headcount') {
+    result = [...result].sort((a, b) => b.memberCount - a.memberCount || a.name.localeCompare(b.name))
+  } else if (sortBy.value === 'rfe') {
+    result = [...result].sort((a, b) => a.name.localeCompare(b.name))
+  } else {
+    result = [...result].sort((a, b) => a.name.localeCompare(b.name))
+  }
+  return result
+})
+
+const projectRosterUnavailable = computed(() =>
+  isProjectRoster.value
+  && !loading.value
+  && (Boolean(projectRosterError.value) || rosterData.value?.availability === 'unavailable')
+)
+
 function openTeam(team) {
+  if (isProjectRoster.value) {
+    const expanded = new Set(expandedTeamKeys.value)
+    if (expanded.has(team.key)) expanded.delete(team.key)
+    else expanded.add(team.key)
+    expandedTeamKeys.value = expanded
+    return
+  }
   nav.navigateTo('team-detail', { teamKey: `${team.org}::${team.name}` })
 }
 
@@ -46,13 +125,27 @@ function selectOrg(org) {
   loadTeams(org)
 }
 
-onMounted(async () => {
+async function loadDirectoryData() {
+  if (isProjectRoster.value) {
+    await loadRoster()
+    return
+  }
+
   const orgParam = nav.params.value?.org || selectedOrg.value
   await Promise.all([loadTeams(orgParam || undefined), loadOrgs(), fetchDefinitions()])
 
   if (nav.params.value?.org) {
     selectedOrg.value = nav.params.value.org
   }
+}
+
+onMounted(loadDirectoryData)
+watch(projectId, () => {
+  if (isProjectRoster.value) {
+    sortBy.value = 'name'
+    expandedTeamKeys.value = new Set()
+  }
+  loadDirectoryData()
 })
 </script>
 
@@ -61,7 +154,11 @@ onMounted(async () => {
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
       <div>
         <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">Team Directory</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ displayedTeams.length }} teams · {{ totalPeople }} people</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ visibleTeams.length }} teams · {{ displayedPeopleCount }} people</p>
+        <p v-if="isProjectRoster" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+          {{ projectRosterStatus || (projectRosterError ? 'Unavailable' : 'Loading') }}
+          <span v-if="projectRosterUpdatedAt"> · Updated {{ new Date(projectRosterUpdatedAt).toLocaleString() }}</span>
+        </p>
       </div>
       <div class="flex items-center gap-3">
         <div class="relative">
@@ -75,13 +172,13 @@ onMounted(async () => {
         <select v-model="sortBy" class="h-[38px] border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
           <option value="name">A–Z</option>
           <option value="headcount">Headcount</option>
-          <option value="rfe">PRD Count</option>
+          <option v-if="!isProjectRoster" value="rfe">PRD Count</option>
         </select>
       </div>
     </div>
 
     <OrgSelector
-      v-if="orgs.length > 1"
+      v-if="!isProjectRoster && orgs.length > 1"
       :orgs="orgs"
       :model-value="selectedOrg"
       @select="selectOrg"
@@ -89,7 +186,7 @@ onMounted(async () => {
     />
 
     <!-- Team field filters -->
-    <div v-if="teamFieldDefs.length > 0 && !loading" class="mb-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+    <div v-if="!isProjectRoster && teamFieldDefs.length > 0 && !loading" class="mb-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
       <FieldFilterPanel
         :field-definitions="teamFieldDefs"
         :active-filters="teamActiveFilters"
@@ -101,7 +198,7 @@ onMounted(async () => {
     </div>
 
     <!-- Unassigned people banner -->
-    <div v-if="unassigned.length > 0 && !loading" class="mb-6 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-lg">
+    <div v-if="!isProjectRoster && unassigned.length > 0 && !loading" class="mb-6 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-lg">
       <button
         @click="unassignedExpanded = !unassignedExpanded"
         class="w-full flex items-center justify-between px-4 py-3 text-left"
@@ -151,18 +248,34 @@ onMounted(async () => {
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
     </div>
 
-    <div v-else-if="displayedTeams.length === 0" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+    <div v-else-if="projectRosterUnavailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center" role="status">
+      <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">Team roster unavailable</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{{ projectRosterError || rosterData?.reason || 'No current roster publication is available for this project.' }}</p>
+    </div>
+
+    <div v-else-if="visibleTeams.length === 0" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
       <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">No Teams Found</h3>
-      <p class="text-sm text-gray-500 dark:text-gray-400">Try a different search or org filter.</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">
+        {{ isProjectRoster ? 'The published roster has no teams or no team matches this search.' : 'Try a different search or org filter.' }}
+      </p>
     </div>
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <TeamCard
-        v-for="team in displayedTeams"
-        :key="`${team.org}::${team.name}`"
-        :team="team"
-        @click="openTeam(team)"
-      />
+      <div v-for="team in visibleTeams" :key="`${team.org}::${team.name}`">
+        <TeamCard
+          :team="team"
+          @select="openTeam(team)"
+        />
+        <div v-if="isProjectRoster && expandedTeamKeys.has(team.key)" class="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+          <h3 class="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Members</h3>
+          <ul v-if="team.members.length" class="space-y-1">
+            <li v-for="(member, index) in team.members" :key="`${member.jiraDisplayName || member.name}-${index}`" class="text-sm text-gray-600 dark:text-gray-300">
+              {{ member.jiraDisplayName || member.name }}
+            </li>
+          </ul>
+          <p v-else class="text-sm text-gray-500 dark:text-gray-400">No active members are published for this team.</p>
+        </div>
+      </div>
     </div>
   </div>
 </template>

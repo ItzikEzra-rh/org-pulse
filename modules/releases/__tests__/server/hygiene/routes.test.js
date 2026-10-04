@@ -46,9 +46,21 @@ function makeRes() {
   return res
 }
 
-function makeContext(storage) {
+function makeProjects(projectIds = ['osac', 'flightctl']) {
+  const profiles = projectIds.map(projectId => ({
+    projectId,
+    displayName: projectId === 'flightctl' ? 'Flight Control' : 'OSAC'
+  }))
+  return {
+    get: (projectId) => profiles.find(profile => profile.projectId === projectId) || null,
+    list: () => profiles
+  }
+}
+
+function makeContext(storage, projects = null) {
   return {
     storage,
+    projects,
     requireAuth: (req, res, next) => next(),
     requirePlanningManager: (req, res, next) => next(),
     requireScope: () => (req, res, next) => next(),
@@ -124,6 +136,39 @@ describe('hygiene routes — GET /project-hygiene', () => {
 
     expect(res._status).toBe(503)
     expect(res._json.error).toBeTruthy()
+  })
+
+  it('does not serve the OSAC report for Flight Control', () => {
+    const storage = makeStorage({ 'releases/hygiene/project-hygiene-results.json': SAMPLE_RESULTS })
+    const router = makeRouter()
+    registerHygieneRoutes(router, makeContext(storage, makeProjects()))
+
+    const handler = router._routes.get['/project-hygiene'].at(-1)
+    const res = makeRes()
+    handler({ query: { projectId: 'flightctl' } }, res)
+
+    expect(res._status).toBe(404)
+    expect(res._json).toMatchObject({
+      projectId: 'flightctl',
+      state: 'unavailable',
+      reason: 'not-collected'
+    })
+    expect(res._json.error).toContain('Flight Control')
+    expect(res._json.results).toBeUndefined()
+  })
+
+  it('requires project selection when multiple project profiles exist', () => {
+    const storage = makeStorage({ 'releases/hygiene/project-hygiene-results.json': SAMPLE_RESULTS })
+    const router = makeRouter()
+    registerHygieneRoutes(router, makeContext(storage, makeProjects()))
+
+    const handler = router._routes.get['/project-hygiene'].at(-1)
+    const res = makeRes()
+    handler({ query: {} }, res)
+
+    expect(res._status).toBe(400)
+    expect(res._json.reason).toBe('project-selection-required')
+    expect(res._json.results).toBeUndefined()
   })
 })
 
@@ -207,6 +252,30 @@ describe('hygiene routes — release-scoped endpoints outside this migration rem
 
     expect(res._json.features['OSAC-1']).toBeDefined()
     expect(res._json.version).toBe('0.2')
+  })
+
+  it('does not serve OSAC release hygiene features for Flight Control', () => {
+    const storage = makeStorage({
+      'releases/hygiene/features-0.2.json': {
+        version: '0.2',
+        fetchedAt: '2026-08-01T00:00:00Z',
+        features: { 'OSAC-1': { issueType: 'Feature' } }
+      }
+    })
+    const router = makeRouter()
+    registerHygieneRoutes(router, makeContext(storage, makeProjects()))
+
+    const handler = router._routes.get['/features'].at(-1)
+    const res = makeRes()
+    handler({ query: { projectId: 'flightctl', version: '0.2' } }, res)
+
+    expect(res._json).toMatchObject({
+      projectId: 'flightctl',
+      state: 'unavailable',
+      reason: 'not-collected',
+      features: {}
+    })
+    expect(res._json.message).toContain('Flight Control')
   })
 
   it('GET /config still serves the release-scoped RHAI rule config unaffected by the new routes', () => {

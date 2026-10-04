@@ -1,5 +1,6 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 // Plain YYYY-MM-DD string comparison keeps "today" timezone-safe: both sides
 // reduce to date strings before comparing, so no local/UTC boundary skew.
@@ -85,18 +86,25 @@ export function assignWorkgroupColors(workgroups) {
 }
 
 export function useCiDuty() {
+  const projectId = useProjectId()
   const roster = ref(null)
   const loading = ref(true)
   const error = ref(null)
   const notFound = ref(false)
+  let requestSequence = 0
 
   async function load() {
+    const requestedProjectId = projectId.value
+    const requestId = ++requestSequence
     loading.value = true
     error.value = null
     notFound.value = false
     try {
-      roster.value = await apiRequest('/modules/system-health/ci-duty')
+      const next = await apiRequest(`/modules/system-health/ci-duty${projectQuery(requestedProjectId)}`)
+      if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
+      roster.value = next
     } catch (e) {
+      if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
       if (e.status === 404) {
         notFound.value = true
       } else {
@@ -104,15 +112,21 @@ export function useCiDuty() {
       }
       roster.value = null
     } finally {
-      loading.value = false
+      if (requestId === requestSequence && projectId.value === requestedProjectId) {
+        loading.value = false
+      }
     }
   }
 
+  watch(projectId, () => load(), { flush: 'sync' })
+
   const entries = computed(() => roster.value?.entries || [])
+  const inapplicable = computed(() => roster.value?.state === 'inapplicable')
+  const unavailable = computed(() => roster.value?.state === 'unavailable')
   const currentEntry = computed(() => findCurrentEntry(entries.value, todayUtc()))
   const nextEntry = computed(() => findNextEntry(entries.value, todayUtc()))
   const rotation = computed(() => sortedRotation(entries.value))
   const workgroupColors = computed(() => assignWorkgroupColors(entries.value.map(e => e.workgroup)))
 
-  return { roster, loading, error, notFound, load, entries, currentEntry, nextEntry, rotation, workgroupColors }
+  return { roster, loading, error, notFound, inapplicable, unavailable, load, entries, currentEntry, nextEntry, rotation, workgroupColors }
 }

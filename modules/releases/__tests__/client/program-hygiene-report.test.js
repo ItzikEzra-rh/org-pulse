@@ -102,16 +102,22 @@ function findCardByName(wrapper, name) {
   return wrapper.findAll('button[title]').find(b => b.text().includes(name))
 }
 
+function setProjectId(projectId) {
+  window.location.hash = `#/releases/jira-hygiene?projectId=${projectId}`
+  window.dispatchEvent(new Event('urlchange'))
+}
+
 describe('ProgramHygieneReport (Jira Hygiene)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    setProjectId('osac')
   })
 
   it('fetches the project-hygiene results endpoint', async () => {
     apiRequest.mockResolvedValue(sampleResults())
     mount(ProgramHygieneReport)
     await flushPromises()
-    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/project-hygiene')
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/project-hygiene?projectId=osac')
     expect(apiRequest).not.toHaveBeenCalledWith(expect.stringContaining('/program-report'))
   })
 
@@ -134,6 +140,26 @@ describe('ProgramHygieneReport (Jira Hygiene)', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Project hygiene data is temporarily unavailable')
     expect(wrapper.find('button').exists()).toBe(true)
+  })
+
+  it('requests the selected project and clears the report when switching away from OSAC', async () => {
+    setProjectId('flightctl')
+    apiRequest.mockImplementation((url) => url.includes('projectId=flightctl')
+      ? Promise.reject(httpError(404, 'Jira Hygiene results have not been collected for Flight Control.'))
+      : Promise.resolve(sampleResults()))
+
+    const wrapper = mount(ProgramHygieneReport)
+    await flushPromises()
+
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/project-hygiene?projectId=flightctl')
+    expect(wrapper.text()).toContain('Jira Hygiene results have not been collected for Flight Control.')
+    expect(wrapper.text()).not.toContain('OSAC-1')
+
+    setProjectId('osac')
+    await flushPromises()
+
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/project-hygiene?projectId=osac')
+    expect(wrapper.text()).toContain('OSAC-1')
   })
 
   it('shows an empty state when no project results are published', async () => {

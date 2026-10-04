@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
 import { useModuleLink } from '@shared/client/composables/useModuleLink.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 defineProps({
   size: { type: String, default: 'half' }
@@ -18,7 +19,7 @@ async function fetchRegistry() {
   loading.value = true
   error.value = null
   try {
-    const data = await apiRequest('/modules/releases/registry')
+    const data = await apiRequest(`/modules/releases/registry${projectQuery(useProjectId().value)}`)
     releases.value = (data.releases || []).filter(r => r.state === 'active')
   } catch (e) {
     error.value = e.message || 'Failed to load'
@@ -26,6 +27,8 @@ async function fetchRegistry() {
     loading.value = false
   }
 }
+
+watch(useProjectId(), () => fetchRegistry())
 
 onMounted(fetchRegistry)
 

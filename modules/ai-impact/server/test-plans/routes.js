@@ -57,7 +57,7 @@ async function runSync(readFromStorage, writeToStorageAtomic) {
   }
 }
 
-module.exports = function registerTestPlanRoutes(router, context) {
+module.exports = function registerTestPlanRoutes(router, context, osacOnlyDataGuard) {
   const { storage, requireAdmin, requireScope } = context;
   const { readFromStorage, writeToStorageAtomic } = storage;
 
@@ -229,6 +229,7 @@ module.exports = function registerTestPlanRoutes(router, context) {
    *         description: All test plans with latest scores
    */
   router.get('/test-plans', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readTestPlans(readFromStorage);
     res.json(getLatestProjection(data));
   });
@@ -254,6 +255,7 @@ module.exports = function registerTestPlanRoutes(router, context) {
    *         description: Not found
    */
   router.get('/test-plans/:key', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readTestPlans(readFromStorage);
     const entry = data.testPlans[req.params.key];
     if (!entry) {

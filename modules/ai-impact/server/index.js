@@ -1,6 +1,68 @@
 module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage } = storage;
+  const { resolveProjectSelection } = require('../../../shared/server/project-profile');
+  const { readProjectProvenance } = require('./project-provenance');
+  const { readProjectDesignDocs } = require('./project-design-docs');
+  const {
+    resolveAiCommitsSource,
+    transformAiCommitsHtml,
+    renderAiCommitsStatePage
+  } = require('./ai-commits-source');
+
+  // The OSAC autofix/EP-review/doc pipeline routes are OSAC-only data sources
+  // when a project has no project-qualified artifact: a non-OSAC project never
+  // receives OSAC pipeline data. When the project's own pipeline published a
+  // project-qualified artifact (e.g. the profile-driven autofix or EP-review
+  // collectors), that data is served instead — never an OSAC fallback.
+  function osacOnlyDataGuard(req, res) {
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (!selection.provided) return false;
+    if (selection.status) {
+      res.status(selection.status).json({ error: selection.error });
+      return true;
+    }
+    if (selection.projectId !== 'osac') {
+      res.status(200).json({
+        projectId: selection.projectId,
+        state: 'unavailable',
+        reason: 'osac-only-data-source',
+        data: null
+      });
+      return true;
+    }
+    return false;
+  }
+
+  function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  // Read one published project-qualified artifact for a non-OSAC project.
+  // Returns the envelope only when the identity fully matches; never an
+  // OSAC fallback, never a guess.
+  function readProjectArtifactData(req, artifactKey) {
+    const projectId = req.query?.projectId;
+    if (!projectId || projectId === 'osac') return null;
+    const projects = context.projects;
+    if (!projects || typeof projects.readArtifact !== 'function') return null;
+    let artifact;
+    try {
+      artifact = projects.readArtifact(projectId, artifactKey);
+    } catch {
+      return null;
+    }
+    if (!artifact || !isPlainObject(artifact.value)) return null;
+    const envelope = artifact.value;
+    if (envelope.schemaVersion !== 1
+        || envelope.projectId !== projectId
+        || envelope.artifactKey !== artifactKey
+        || !isPlainObject(envelope.data)
+        || envelope.data.projectId !== projectId) {
+      return null;
+    }
+    return envelope;
+  }
 
   // Register module scopes
   context.registerScopes([
@@ -35,19 +97,19 @@ module.exports = function registerRoutes(router, context) {
 
   // Assessment routes (Phase 1: Storage + Ingest API)
   const registerAssessmentRoutes = require('./assessments/routes');
-  registerAssessmentRoutes(router, context);
+  registerAssessmentRoutes(router, context, osacOnlyDataGuard);
 
   // Feature review routes
   const registerFeatureRoutes = require('./features/routes');
-  registerFeatureRoutes(router, context);
+  registerFeatureRoutes(router, context, osacOnlyDataGuard);
 
-  // Test plan quality routes
+  // Test plan routes
   const registerTestPlanRoutes = require('./test-plans/routes');
-  registerTestPlanRoutes(router, context);
+  registerTestPlanRoutes(router, context, osacOnlyDataGuard);
 
-  // Component onboarding routes (Build & Release)
+  // Component onboarding routes
   const registerComponentOnboardingRoutes = require('./component-onboarding/routes');
-  registerComponentOnboardingRoutes(router, context);
+  registerComponentOnboardingRoutes(router, context, osacOnlyDataGuard);
 
   // ─── Refresh state (in-memory) ───
 
@@ -80,6 +142,28 @@ module.exports = function registerRoutes(router, context) {
    *         description: RFE dataset with metrics, trend data, breakdown, and pipeline friction
    */
   router.get('/rfe-data', requireScope('ai-impact:read'), function(req, res) {
+    const projectEnvelope = readProjectArtifactData(req, 'sources/ep-review/rfe-data.json');
+    if (projectEnvelope) {
+      const projectTimeWindow = VALID_TIME_WINDOWS.includes(req.query.timeWindow)
+        ? req.query.timeWindow
+        : 'month';
+      const config = getConfig(readFromStorage);
+      const projectIssues = projectEnvelope.data.issues || [];
+      const computed = computeAllMetrics(projectIssues, projectTimeWindow, config);
+      return res.json({
+        projectId: projectEnvelope.projectId,
+        state: projectEnvelope.state,
+        freshness: projectEnvelope.freshness,
+        fetchedAt: projectEnvelope.generatedAt,
+        jiraHost: JIRA_HOST,
+        metrics: computed.metrics,
+        trendData: computed.trendData,
+        breakdown: computed.breakdown,
+        pipelineFriction: computed.pipelineFriction,
+        issues: projectIssues
+      });
+    }
+    if (osacOnlyDataGuard(req, res)) return;
     const timeWindow = VALID_TIME_WINDOWS.includes(req.query.timeWindow)
       ? req.query.timeWindow
       : 'month';
@@ -169,6 +253,24 @@ module.exports = function registerRoutes(router, context) {
    *         description: Autofix dataset with metrics, trend data, and issues
    */
   router.get('/autofix-data', requireScope('ai-impact:read'), function(req, res) {
+    const projectEnvelope = readProjectArtifactData(req, 'sources/autofix/issues.json');
+    if (projectEnvelope) {
+      const projectIssues = projectEnvelope.data.issues || [];
+      const projectTimeWindow = VALID_AUTOFIX_TIME_WINDOWS.includes(req.query.timeWindow)
+        ? req.query.timeWindow
+        : 'month';
+      return res.json({
+        projectId: projectEnvelope.projectId,
+        state: projectEnvelope.state,
+        freshness: projectEnvelope.freshness,
+        fetchedAt: projectEnvelope.generatedAt,
+        jiraHost: JIRA_HOST,
+        metrics: computeAutofixMetrics(projectIssues, projectTimeWindow),
+        trendData: buildAutofixTrend(projectIssues, projectTimeWindow),
+        issues: projectIssues
+      });
+    }
+    if (osacOnlyDataGuard(req, res)) return;
     const timeWindow = VALID_AUTOFIX_TIME_WINDOWS.includes(req.query.timeWindow)
       ? req.query.timeWindow
       : 'month';
@@ -242,6 +344,7 @@ module.exports = function registerRoutes(router, context) {
   }
 
   router.get('/doc-data', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const rawData = readFromStorage('ai-impact/doc-data.json');
     if (!rawData || !rawData.issues) {
       return res.json({
@@ -280,6 +383,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: MR KPI data with merge request metrics
    */
   router.get('/doc-mr-kpi-data', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const data = readFromStorage('ai-impact/doc-mr-kpi-data.json');
     if (!data || !data.mergeRequests) {
       return res.json({ fetchedAt: null, mergeRequests: [] });
@@ -478,8 +582,7 @@ module.exports = function registerRoutes(router, context) {
 
   // --- AI Commits Scanner proxy ---
 
-  const AI_COMMITS_URL = 'https://ai-commits-scanner-fd01cc.pages.redhat.com/osac/index.html';
-  let aiCommitsCache = { html: null, fetchedAt: 0 };
+  const aiCommitsCache = new Map();
   const AI_COMMITS_TTL = 60 * 60 * 1000;
   const MAX_REDIRECTS = 5;
   const FETCH_TIMEOUT_MS = 15000;
@@ -516,55 +619,106 @@ module.exports = function registerRoutes(router, context) {
    * @openapi
    * /api/modules/ai-impact/ai-commits-proxy:
    *   get:
-   *     summary: Proxy the AI Commits Scanner report with modifications
+   *     summary: Proxy the selected project's AI Commits Scanner report
    *     tags: [ai-impact]
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: false
+   *         description: Required in multi-project deployments.
+   *         schema: { type: string }
    *     responses:
    *       200:
-   *         description: Modified HTML report
+   *         description: Project-qualified HTML report or explicit unavailable state
+   *       404:
+   *         description: Unknown project
    */
+  // Project-qualified AI provenance: real evidence per published project
+  // (scanner totals, source markers, provenance footers) from the data repo's
+  // collectors. Never falls back between projects.
+  router.get('/project-provenance', requireScope('ai-impact:read'), function(req, res) {
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (!selection.provided) return res.status(400).json({ error: 'projectId is required' });
+    if (selection.status) return res.status(selection.status).json({ error: selection.error });
+    try {
+      const result = readProjectProvenance(context.projects, selection.projectId);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.provenance);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Project-qualified design-docs presence: feature/artifact counts and
+  // design PRs from the data repo's design-docs collector. Never falls back
+  // between projects.
+  /**
+   * @openapi
+   * /api/modules/ai-impact/project-design-docs:
+   *   get:
+   *     tags: [AI Impact]
+   *     summary: Read published design-doc evidence for a project
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Project-qualified design-doc presence and PR evidence
+   *       400:
+   *         description: Missing or invalid project ID
+   *       404:
+   *         description: Unknown project or publication
+   */
+  router.get('/project-design-docs', requireScope('ai-impact:read'), function(req, res) {
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (!selection.provided) return res.status(400).json({ error: 'projectId is required' });
+    if (selection.status) return res.status(selection.status).json({ error: selection.error });
+    try {
+      const result = readProjectDesignDocs(context.projects, selection.projectId);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.designDocs);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   router.get('/ai-commits-proxy', requireScope('ai-impact:read'), async function(req, res) {
+    const source = resolveAiCommitsSource(context.projects, req.query);
+    if (source.status !== 200 || source.state === 'unavailable') {
+      const status = source.status === 200 ? 200 : source.status;
+      const message = source.reason || source.error || 'No AI Commits scanner is configured for this project.';
+      res.status(status);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      if (source.state) res.setHeader('X-OrgPulse-State', source.state);
+      return res.send(renderAiCommitsStatePage({
+        title: source.state === 'unavailable'
+          ? `AI Commits unavailable for ${source.displayName}`
+          : 'AI Commits project unavailable',
+        message
+      }));
+    }
+
+    const { url: aiCommitsUrl, projectId } = source;
     try {
       const now = Date.now();
-      if (!aiCommitsCache.html || now - aiCommitsCache.fetchedAt > AI_COMMITS_TTL) {
-        let html = await fetchPage(AI_COMMITS_URL);
-
-        // Inject <base> so relative paths (../vendor/apexcharts.min.js etc.)
-        // resolve against the original site, not the proxy URL.
-        const baseHref = AI_COMMITS_URL.replace(/\/[^/]*$/, '/');
-        html = html.replace(/<head([^>]*)>/, `<head$1><base href="${baseHref}">`);
-
-        // Make osac-project link open in a new tab
-        html = html.replace(
-          /(<a\s+href="https:\/\/github\.com\/osac-project")/g,
-          '$1 target="_blank" rel="noopener noreferrer"'
+      const cached = aiCommitsCache.get(aiCommitsUrl);
+      if (!cached || now - cached.fetchedAt > AI_COMMITS_TTL) {
+        const html = transformAiCommitsHtml(
+          await fetchPage(aiCommitsUrl),
+          aiCommitsUrl,
+          projectId
         );
-
-        // Remove rh-ecosystem-edge <details> block
-        html = html.replace(
-          /<details>\s*<summary><a[^>]*>rh-ecosystem-edge<\/a>[\s\S]*?<\/details>/g,
-          ''
-        );
-
-        // Remove "Monthly Trend — Red Hat" section (match from <section> to next </section>)
-        html = html.replace(
-          /<section><h2>Monthly Trend — Red Hat<\/h2>[\s\S]*?<\/section>/,
-          ''
-        );
-
-        // Remove rh-ecosystem-edge rows from tables
-        html = html.replace(
-          /<tr><td>(?:[^<](?!<\/td>))*rh-ecosystem-edge(?:[^<](?!<\/td>))*<\/td>(?:<td[^>]*>[^<]*<\/td>)*<\/tr>/g,
-          ''
-        );
-
-        aiCommitsCache = { html, fetchedAt: now };
+        aiCommitsCache.set(aiCommitsUrl, { html, fetchedAt: now });
       }
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' https:; frame-ancestors 'self'");
-      res.send(aiCommitsCache.html);
+      res.setHeader('X-OrgPulse-Project-Id', projectId);
+      res.send(aiCommitsCache.get(aiCommitsUrl).html);
     } catch (err) {
       console.error('[ai-commits-proxy]', err.message);
-      res.redirect(AI_COMMITS_URL);
+      res.redirect(aiCommitsUrl);
     }
   });
 };

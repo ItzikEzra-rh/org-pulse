@@ -117,8 +117,40 @@ function toAiReviewPayload(validated) {
  * @param {import('express').Router} router
  * @param {object} context - Module context with storage and auth middleware
  */
-module.exports = function registerFeatureRoutes(router, context) {
+module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGuard) {
   const { storage, requireAdmin, requireScope } = context;
+
+  const ARTIFACT_KEY = 'sources/ep-review/features.json';
+
+  function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  // Read the published project-qualified EP-review artifact for a non-OSAC
+  // project. Returns the envelope only when the identity fully matches;
+  // never an OSAC fallback, never a guess.
+  function readProjectFeatureEnvelope(req) {
+    const projectId = req.query?.projectId;
+    if (!projectId || projectId === 'osac') return null;
+    const projects = context.projects;
+    if (!projects || typeof projects.readArtifact !== 'function') return null;
+    let artifact;
+    try {
+      artifact = projects.readArtifact(projectId, ARTIFACT_KEY);
+    } catch {
+      return null;
+    }
+    if (!artifact || !isPlainObject(artifact.value)) return null;
+    const envelope = artifact.value;
+    if (envelope.schemaVersion !== 1
+        || envelope.projectId !== projectId
+        || envelope.artifactKey !== ARTIFACT_KEY
+        || !isPlainObject(envelope.data)
+        || envelope.data.projectId !== projectId) {
+      return null;
+    }
+    return envelope;
+  }
   const { readFromStorage } = storage;
 
   // ─── 1. Static routes FIRST ───
@@ -232,6 +264,37 @@ module.exports = function registerFeatureRoutes(router, context) {
 
   // GET /features — list all features (slim projection)
   router.get('/features', requireScope('ai-impact:read'), function(req, res) {
+    const projectEnvelope = readProjectFeatureEnvelope(req);
+    if (projectEnvelope) {
+      // The profile-driven EP-review collector publishes features as a list;
+      // project them into the legacy keyed shape so the Design Review view
+      // renders what exists. Fields the collector does not produce stay
+      // undefined rather than invented.
+      const projected = {};
+      for (const feature of projectEnvelope.data.features || []) {
+        if (!feature || !feature.key) continue;
+        const scores = feature.designScores || {};
+        projected[feature.key] = {
+          key: feature.key,
+          title: feature.summary,
+          status: feature.status,
+          prNumber: feature.prNumber,
+          scores: scores.scores,
+          total: scores.total,
+          passFail: scores.passFail,
+          verdict: scores.verdict,
+          assessedAt: scores.assessedAt,
+          humanReviewStatus: feature.humanReview
+        };
+      }
+      return res.json({
+        ...projected,
+        projectId: projectEnvelope.projectId,
+        state: projectEnvelope.state,
+        freshness: projectEnvelope.freshness
+      });
+    }
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readFeatures(readFromStorage);
     res.json(getLatestProjection(data));
   });
@@ -255,6 +318,7 @@ module.exports = function registerFeatureRoutes(router, context) {
    *         description: Trend points (daily for week/month, weekly for 3months) and an AI-involvement breakdown, matching the /rfe-data trend shape
    */
   router.get('/features/trend', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     // Normalize to a supported window, matching the sibling /rfe-data route
     // (unknown values fall back to 'month' rather than erroring).
     const timeWindow = ['week', 'month', '3months'].includes(req.query.timeWindow)
@@ -295,6 +359,7 @@ module.exports = function registerFeatureRoutes(router, context) {
 
   // GET /features/:key — single feature + history
   router.get('/features/:key', requireScope('ai-impact:read'), function(req, res) {
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readFeatures(readFromStorage);
     const entry = data.features[req.params.key];
     if (!entry) {

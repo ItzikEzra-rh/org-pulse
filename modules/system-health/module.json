@@ -1,43 +1,72 @@
 {
-  "name": "System Health",
-  "slug": "system-health",
-  "description": "Operational metrics for the OSAC delivery pipeline (PR cycle time, AI impact, system health)",
-  "icon": "hospital",
-  "order": 18,
-  "defaultEnabled": true,
-  "requires": [],
-  "client": {
-    "entry": "./client/index.js",
-    "navItems": [
-      { "id": "operational-metrics", "label": "Operational Metrics", "icon": "activity", "default": true },
-      { "id": "ci-digest", "label": "CI Daily Digest", "icon": "git-branch" },
-      { "id": "ci-duty", "label": "CI Duty", "icon": "shield-check" },
-      { "id": "component-maturity", "label": "Component maturity", "icon": "layers", "separatorBefore": true, "disabled": true }
-    ],
-    "sotuWidgets": [
-      {
-        "id": "ci-duty",
-        "name": "CI Duty",
-        "description": "Current and next CI Duty lead with workgroup and rotation dates",
-        "component": "./client/widgets/CiDutyWidget.vue",
-        "defaultSize": "half",
-        "icon": "ShieldCheck",
-        "category": "system-health"
-      }
-    ],
-    "hiddenRoutes": {
-      "disconnected-repo-detail": "component-maturity"
-    }
-  },
-  "server": {
-    "entry": "./server/index.js"
-  },
-  "secrets": {
-    "platform": ["github"]
-  },
-  "export": {
-    "files": [
-      { "path": "system-health/disconnected/reports.json", "notes": "Disconnected readiness reports with history for all tracked repos" }
-    ]
+ "name": "System Health",
+ "slug": "system-health",
+ "description": "Operational metrics for the OSAC delivery pipeline (PR cycle time, AI impact, system health)",
+ "icon": "hospital",
+ "order": 18,
+ "defaultEnabled": true,
+ "requires": [],
+ "client": {
+  "entry": "./client/index.js",
+  "navItems": [
+   {
+    "id": "operational-metrics",
+    "label": "Operational Metrics",
+    "icon": "activity",
+    "default": true
+   },
+   {
+    "id": "ci-digest",
+    "label": "CI Daily Digest",
+    "icon": "git-branch"
+   },
+   {
+    "id": "ci-duty",
+    "label": "CI Duty",
+    "icon": "shield-check"
+   },
+   {
+    "id": "component-maturity",
+    "label": "Component maturity",
+    "icon": "layers",
+    "separatorBefore": true,
+    "disabled": true
+   },
+   {
+    "id": "release-execution",
+    "label": "Release Execution",
+    "icon": "play-circle"
+   }
+  ],
+  "sotuWidgets": [
+   {
+    "id": "ci-duty",
+    "name": "CI Duty",
+    "description": "Current and next CI Duty lead with workgroup and rotation dates",
+    "component": "./client/widgets/CiDutyWidget.vue",
+    "defaultSize": "half",
+    "icon": "ShieldCheck",
+    "category": "system-health"
+   }
+  ],
+  "hiddenRoutes": {
+   "disconnected-repo-detail": "component-maturity"
   }
+ },
+ "server": {
+  "entry": "./server/index.js"
+ },
+ "secrets": {
+  "platform": [
+   "github"
+  ]
+ },
+ "export": {
+  "files": [
+   {
+    "path": "system-health/disconnected/reports.json",
+    "notes": "Disconnected readiness reports with history for all tracked repos"
+   }
+  ]
+ }
 }

@@ -51,7 +51,11 @@ describe('ci-duty routes', () => {
     context = {
       storage,
       requireAuth: vi.fn(),
-      requireScope: () => (req, res, next) => next()
+      requireScope: () => (req, res, next) => next(),
+      projects: {
+        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null,
+        list: () => [{ projectId: 'osac' }]
+      }
     }
     registerCiDutyRoutes(router, context)
   })
@@ -92,5 +96,76 @@ describe('ci-duty routes', () => {
 
     expect(res._status).toBe(404)
     expect(res._json).toEqual({ error: 'No CI Duty roster available yet' })
+  })
+
+  it('returns 404 for unknown projects and inapplicable for known non-OSAC projects', () => {
+    const handler = router._routes.get['/ci-duty'].at(-1)
+    const unknownRes = makeRes()
+    handler({ query: { projectId: 'unknown' } }, unknownRes)
+    expect(unknownRes._status).toBe(404)
+    expect(unknownRes._json).toEqual({ error: 'Unknown project' })
+
+    const flightctlRes = makeRes()
+    handler({ query: { projectId: 'flightctl' } }, flightctlRes)
+    expect(flightctlRes._json).toEqual({
+      projectId: 'flightctl',
+      state: 'inapplicable',
+      reason: 'user-approved-osac-only',
+      data: null
+    })
+  })
+
+  it('rejects an explicit empty project ID rather than serving the OSAC roster', () => {
+    const handler = router._routes.get['/ci-duty'].at(-1)
+    const res = makeRes()
+    handler({ query: { projectId: '' } }, res)
+    expect(res._status).toBe(400)
+  })
+
+  it('fails closed when a multi-project request omits projectId', () => {
+    const readFromStorage = vi.fn(() => makeRoster())
+    const r = makeRouter()
+    registerCiDutyRoutes(r, {
+      ...context,
+      storage: { readFromStorage },
+      projects: {
+        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null,
+        list: () => [{ projectId: 'flightctl' }, { projectId: 'osac' }]
+      }
+    })
+
+    const res = makeRes()
+    r._routes.get['/ci-duty'].at(-1)({}, res)
+
+    expect(res._json).toEqual({
+      projectId: null,
+      state: 'unavailable',
+      reason: 'project-selection-required',
+      data: null
+    })
+    expect(readFromStorage).not.toHaveBeenCalled()
+  })
+
+  it('treats an unqualified single Flightctl deployment as inapplicable', () => {
+    const readFromStorage = vi.fn(() => makeRoster())
+    const r = makeRouter()
+    registerCiDutyRoutes(r, {
+      ...context,
+      storage: { readFromStorage },
+      projects: {
+        get: projectId => projectId === 'flightctl' ? { projectId } : null,
+        list: () => [{ projectId: 'flightctl' }]
+      }
+    })
+
+    const res = makeRes()
+    r._routes.get['/ci-duty'].at(-1)({}, res)
+
+    expect(res._json).toMatchObject({
+      projectId: 'flightctl',
+      state: 'inapplicable',
+      reason: 'user-approved-osac-only'
+    })
+    expect(readFromStorage).not.toHaveBeenCalled()
   })
 })

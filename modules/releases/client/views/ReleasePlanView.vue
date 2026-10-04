@@ -1,69 +1,86 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const versions = ref([])
 const selectedVersion = ref('')
 const plan = ref(null)
 const loading = ref(true)
 const error = ref(null)
+const projectId = useProjectId()
 
 function jiraLink(key) {
   return `https://redhat.atlassian.net/browse/${key}`
 }
 
-async function loadVersions() {
-  try {
-    const data = await apiRequest('/modules/releases/release-plans')
-    // Index entries are version-metadata objects ({ version, generatedAt, ... }),
-    // not bare strings — normalize to the version string the picker/API need.
-    versions.value = (data.versions || [])
-      .map((v) => (typeof v === 'string' ? v : v?.version))
-      .filter(Boolean)
-  } catch (e) {
-    error.value = e.message || 'Failed to load release plan versions'
-    versions.value = []
-  }
-}
-
+let bootstrapRequestId = 0
 let planRequestId = 0
+let settingVersionFromBootstrap = false
 
-async function loadPlan(version) {
+async function loadPlan(version, requestedProjectId = projectId.value) {
   const requestId = ++planRequestId
   if (!version) {
     plan.value = null
+    loading.value = false
     return
   }
   loading.value = true
   error.value = null
+  plan.value = null
   try {
-    const nextPlan = await apiRequest(`/modules/releases/release-plan?version=${encodeURIComponent(version)}`)
-    if (requestId === planRequestId) plan.value = nextPlan
+    const params = new URLSearchParams({ version })
+    if (requestedProjectId) params.set('projectId', requestedProjectId)
+    const nextPlan = await apiRequest(`/modules/releases/release-plan?${params.toString()}`)
+    if (requestId === planRequestId && projectId.value === requestedProjectId) plan.value = nextPlan
   } catch (e) {
-    if (requestId === planRequestId) {
+    if (requestId === planRequestId && projectId.value === requestedProjectId) {
       error.value = e.message || 'Failed to load release plan'
       plan.value = null
     }
   } finally {
-    if (requestId === planRequestId) loading.value = false
+    if (requestId === planRequestId && projectId.value === requestedProjectId) loading.value = false
   }
 }
 
-watch(selectedVersion, (v) => {
-  loadPlan(v)
-})
+watch(selectedVersion, (version) => {
+  if (!settingVersionFromBootstrap) loadPlan(version, projectId.value)
+}, { flush: 'sync' })
 
 async function bootstrap() {
-  loading.value = true
+  const requestedProjectId = projectId.value
+  const requestId = ++bootstrapRequestId
+  planRequestId += 1
+  versions.value = []
+  plan.value = null
   error.value = null
-  await loadVersions()
-  if (error.value) {
-    loading.value = false
-    return
-  }
-  if (versions.value.length > 0) {
-    selectedVersion.value = versions.value[versions.value.length - 1]
-  } else {
+  settingVersionFromBootstrap = true
+  selectedVersion.value = ''
+  settingVersionFromBootstrap = false
+  loading.value = true
+  try {
+    const data = await apiRequest(`/modules/releases/release-plans${projectQuery(requestedProjectId)}`)
+    if (requestId !== bootstrapRequestId || projectId.value !== requestedProjectId) return
+    // Index entries are version-metadata objects ({ version, generatedAt, ...}),
+    // not bare strings — normalize to the version string the picker/API need.
+    versions.value = (data.versions || [])
+      .map((v) => (typeof v === 'string' ? v : v?.version))
+      .filter(Boolean)
+    if (versions.value.length === 0) {
+      loading.value = false
+      return
+    }
+
+    const latestVersion = versions.value[versions.value.length - 1]
+    settingVersionFromBootstrap = true
+    selectedVersion.value = latestVersion
+    settingVersionFromBootstrap = false
+    await loadPlan(latestVersion, requestedProjectId)
+  } catch (e) {
+    if (requestId !== bootstrapRequestId || projectId.value !== requestedProjectId) return
+    error.value = e.message || 'Failed to load release plan versions'
+    versions.value = []
+    plan.value = null
     loading.value = false
   }
 }
@@ -77,6 +94,9 @@ function retry() {
 }
 
 onMounted(bootstrap)
+
+// Re-bootstrap when the project context changes
+watch(projectId, () => bootstrap(), { flush: 'sync' })
 
 const matrixCells = computed(() => {
   if (!plan.value) return {}

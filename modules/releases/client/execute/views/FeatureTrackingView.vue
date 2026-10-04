@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { useFeatureTracking } from '../composables/useFeatureTracking.js'
 import {
   useComponentStatusFilter,
@@ -18,6 +19,8 @@ const {
   trackingData,
   loading,
   error,
+  state: trackingState,
+  message: trackingMessage,
   loadReleases,
   loadTrackingData
 } = useFeatureTracking()
@@ -34,6 +37,7 @@ const {
 
 const selectedReleaseId = ref(null)
 const activeFilter = ref(null)
+const projectId = useProjectId()
 
 const releaseNames = computed(() => {
   var map = {}
@@ -137,6 +141,14 @@ onMounted(async () => {
     selectedReleaseId.value = releases.value[0].releaseId
   }
 })
+
+watch(projectId, async () => {
+  selectedReleaseId.value = null
+  activeFilter.value = null
+  clearComponentStatusFilters()
+  await loadReleases()
+  if (releases.value.length > 0) selectedReleaseId.value = releases.value[0].releaseId
+}, { flush: 'sync' })
 </script>
 
 <template>
@@ -319,7 +331,7 @@ onMounted(async () => {
       <svg class="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
       </svg>
-      <p class="text-sm font-medium">No feature tracking data has been published yet.</p>
+      <p class="text-sm font-medium">{{ trackingState === 'unavailable' ? trackingMessage : 'No feature tracking data has been published yet.' }}</p>
     </div>
 
     <!-- Data table -->

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 import HygieneSelect from '../execute/components/hygiene/HygieneSelect.vue'
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000
@@ -17,26 +18,52 @@ const teamFilter = ref([])
 const componentFilter = ref([])
 const issueTypeFilter = ref([])
 const currentPage = ref(1)
+const projectId = useProjectId()
+let latestRequestId = 0
 
 async function fetchReport() {
+  const requestId = ++latestRequestId
+  const requestedProjectId = projectId.value
   loading.value = true
   loadError.value = ''
   notPublished.value = false
+  contract.value = null
   try {
-    contract.value = await apiRequest('/modules/releases/hygiene/project-hygiene')
+    const data = await apiRequest(`/modules/releases/hygiene/project-hygiene${projectQuery(requestedProjectId)}`)
+    if (requestId !== latestRequestId || projectId.value !== requestedProjectId) return
+    if (data?.projectId && requestedProjectId && data.projectId !== requestedProjectId) {
+      throw new Error('Jira Hygiene response project identity mismatch')
+    }
+    if (data?.state === 'unavailable') {
+      notPublished.value = true
+      loadError.value = data.message || 'Jira Hygiene data is unavailable for this project.'
+      return
+    }
+    contract.value = data
   } catch (e) {
+    if (requestId !== latestRequestId || projectId.value !== requestedProjectId) return
     contract.value = null
     if (e.status === 404) {
       notPublished.value = true
-      loadError.value = (e.data && e.data.error) || 'Project hygiene data has not been published yet.'
+      loadError.value = (e.data && e.data.error) || 'Jira Hygiene data has not been published for this project.'
     } else {
       loadError.value = e.message || 'Project hygiene data is currently unavailable.'
     }
   } finally {
-    loading.value = false
+    if (requestId === latestRequestId && projectId.value === requestedProjectId) loading.value = false
   }
 }
 onMounted(fetchReport)
+
+watch(projectId, () => {
+  activeTab.value = 'issues'
+  activeRuleFilter.value = null
+  teamFilter.value = []
+  componentFilter.value = []
+  issueTypeFilter.value = []
+  currentPage.value = 1
+  fetchReport()
+}, { flush: 'sync' })
 
 // ── Project selection (single-project rendering; no multi-project nav in this iteration) ──
 

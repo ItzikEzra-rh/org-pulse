@@ -43,6 +43,69 @@ function getConfig(readFromStorage) {
 module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin } = context;
   const { readFromStorage, writeToStorage } = storage;
+  const { readProjectPublication } = require('./project-publication');
+  const { resolveProjectSelection } = require('../../../shared/server/project-profile');
+
+  // The AIPCC Dashboard API is an OSAC-only source: a non-OSAC project never
+  // receives AIPCC data. Project build evidence is exposed through the
+  // capability-driven publication route instead.
+  function osacOnlyDataGuard(req, res) {
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (!selection.provided) return false;
+    if (selection.status) {
+      res.status(selection.status).json({ error: selection.error });
+      return true;
+    }
+    if (selection.projectId !== 'osac') {
+      res.status(200).json({
+        projectId: selection.projectId,
+        state: 'unavailable',
+        reason: 'osac-only-data-source',
+        data: null
+      });
+      return true;
+    }
+    return false;
+  }
+
+  // Project build evidence: artifact key from the published profile's
+  // capabilities block (every project configures its own build evidence).
+  /**
+   * @openapi
+   * /api/modules/product-builds/project-publication:
+   *   get:
+   *     tags: [Product Builds]
+   *     summary: Read the selected project's build registry publication
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: capability
+   *         required: false
+   *         schema: { type: string, default: buildRegistry }
+   *     responses:
+   *       200:
+   *         description: Project-qualified build registry publication
+   *       400:
+   *         description: Missing or invalid project ID
+   *       404:
+   *         description: Unknown project or publication
+   */
+  router.get('/project-publication', function(req, res) {
+    const selection = resolveProjectSelection(context.projects, req.query);
+    const capability = req.query?.capability || 'buildRegistry';
+    if (!selection.provided) return res.status(400).json({ error: 'projectId is required' });
+    if (selection.status) return res.status(selection.status).json({ error: selection.error });
+    try {
+      const result = readProjectPublication(context.projects, selection.projectId, capability);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.publication);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
 
   // OSAC routes are self-contained, with no AIPCC/proxy dependencies.
   registerOsacRoutes(router, { storage });
@@ -109,6 +172,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: Health status with latency
    */
   router.get('/health', async function(req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const { baseUrl } = getConfig(readFromStorage);
     if (!baseUrl) {
       return res.json({ status: 'not_configured' });
@@ -134,6 +198,7 @@ module.exports = function registerRoutes(router, context) {
   // --- Helper to get baseUrl for proxy ---
 
   function upstream(upstreamPath, req, res) {
+    if (osacOnlyDataGuard(req, res)) return;
     const { baseUrl } = getConfig(readFromStorage);
     return proxyGet(baseUrl, upstreamPath, req.query, res);
   }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 const {
   normalizeArtifactKey,
+  resolveProjectSelection,
   normalizeProjectProfile,
   createPublicationEnvelope,
   createProjectProfileRegistry,
@@ -127,6 +128,40 @@ describe('project-profile', () => {
       .toBe('projects/flightctl/release-plans/1.4.0.json')
     expect(registry.qualifyStorageKey('osac', 'release-plans/1.4.0.json'))
       .toBe('projects/osac/release-plans/1.4.0.json')
+  })
+
+  it('normalizes registry lookups and resolves optional project query selections', () => {
+    const registry = createProjectProfileRegistry([FLIGHTCTL])
+    expect(registry.get(' flightctl ')).toMatchObject({ projectId: 'flightctl' })
+
+    expect(resolveProjectSelection(registry, {})).toEqual({ provided: false })
+    expect(resolveProjectSelection(registry, { projectId: 'flightctl' })).toMatchObject({
+      provided: true,
+      projectId: 'flightctl',
+      profile: { projectId: 'flightctl' }
+    })
+    expect(resolveProjectSelection(registry, { projectId: ' flightctl ' })).toMatchObject({
+      provided: true,
+      status: 400
+    })
+    expect(resolveProjectSelection(registry, { projectId: 'missing' })).toMatchObject({
+      provided: true,
+      status: 404,
+      error: 'Unknown project'
+    })
+    expect(resolveProjectSelection(registry, { projectId: '' })).toMatchObject({
+      provided: true,
+      status: 400
+    })
+  })
+
+  it('reports unavailable readers and profile read errors without hiding them as unknown IDs', () => {
+    expect(resolveProjectSelection(null, { projectId: 'flightctl' })).toMatchObject({
+      provided: true,
+      status: 503
+    })
+    expect(resolveProjectSelection({ get() { throw new Error('storage unavailable') } }, { projectId: 'flightctl' }))
+      .toMatchObject({ provided: true, status: 500, error: 'storage unavailable' })
   })
 
   it('creates envelopes with project, source, freshness, and error metadata', () => {
