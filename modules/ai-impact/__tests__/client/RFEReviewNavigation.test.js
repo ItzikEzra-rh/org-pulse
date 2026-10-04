@@ -82,8 +82,8 @@ vi.mock('../../client/composables/useFeatures.js', () => ({
 const PhaseContentStub = defineComponent({
   name: 'PhaseContent',
   template: '<div class="phase-content"><slot /></div>',
-  props: ['phase', 'loading', 'error', 'rfeData', 'metrics', 'trendData', 'breakdown', 'filteredRFEs', 'windowedRFEs', 'timeWindow', 'filter', 'searchQuery', 'chartExpanded', 'assessments', 'filteredAssessments', 'sortBy', 'passFailFilter', 'priorityFilter', 'statusFilter', 'reviewStatusFilter', 'componentFilter', 'selectedRFE', 'rfeToFeature'],
-  emits: ['selectRFE', 'retry', 'update:timeWindow', 'update:filter', 'update:searchQuery', 'update:chartExpanded', 'update:sortBy', 'update:passFailFilter', 'update:priorityFilter', 'update:statusFilter', 'update:reviewStatusFilter', 'update:componentFilter']
+  props: ['phase', 'loading', 'error', 'rfeData', 'metrics', 'trendData', 'breakdown', 'filteredRFEs', 'windowedRFEs', 'timeWindow', 'filter', 'searchQuery', 'chartExpanded', 'assessments', 'filteredAssessments', 'sortBy', 'passFailFilter', 'priorityFilter', 'statusFilter', 'reviewStatusFilter', 'componentFilter', 'assigneeFilter', 'selectedRFE', 'rfeToFeature'],
+  emits: ['selectRFE', 'retry', 'update:timeWindow', 'update:filter', 'update:searchQuery', 'update:chartExpanded', 'update:sortBy', 'update:passFailFilter', 'update:priorityFilter', 'update:statusFilter', 'update:reviewStatusFilter', 'update:componentFilter', 'update:assigneeFilter']
 });
 
 describe('RFEReviewView navigation', () => {
@@ -197,6 +197,23 @@ describe('RFEReviewView navigation', () => {
     await nextTick();
 
     expect(wrapper.findComponent(PhaseContentStub).props('reviewStatusFilter')).toBe('approved');
+  });
+
+  it('updates assigneeFilter prop on PhaseContent when it emits update:assigneeFilter, and resets it on cross-module navigation', async () => {
+    const wrapper = mountView();
+    const phaseContent = wrapper.findComponent(PhaseContentStub);
+
+    expect(phaseContent.props('assigneeFilter')).toEqual([]);
+
+    phaseContent.vm.$emit('update:assigneeFilter', ['Alice']);
+    await nextTick();
+
+    expect(wrapper.findComponent(PhaseContentStub).props('assigneeFilter')).toEqual(['Alice']);
+
+    moduleNav.params.value = { select: 'RHAIRFE-2' };
+    await nextTick();
+
+    expect(wrapper.findComponent(PhaseContentStub).props('assigneeFilter')).toEqual([]);
   });
 
   it('scopes windowedRFEs to the selected time window, unlike the all-time filteredRFEs', async () => {

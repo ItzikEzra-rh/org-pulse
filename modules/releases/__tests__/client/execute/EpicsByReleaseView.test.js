@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const mockApiRequest = vi.fn()
 vi.mock('@shared/client/services/api.js', () => ({
   apiRequest: (...args) => mockApiRequest(...args)
+}))
+
+const mockUser = ref({})
+vi.mock('@shared/client/composables/useAuth.js', () => ({
+  useAuth: () => ({ user: mockUser })
 }))
 
 import EpicsByReleaseView from '../../../client/execute/views/EpicsByReleaseView.vue'
@@ -45,6 +51,7 @@ function epicsResponse(overrides = {}) {
 describe('EpicsByReleaseView', () => {
   beforeEach(() => {
     mockApiRequest.mockReset()
+    mockUser.value = {}
   })
 
   it('loads versions, defaults to the first one, and renders its Features and Epics', async () => {
@@ -400,6 +407,191 @@ describe('EpicsByReleaseView', () => {
       const button = wrapper.findAll('button[aria-haspopup="listbox"]').find(b => b.text().includes('teams'))
       expect(button.text()).toContain('All teams')
       expect(wrapper.text()).toContain('OSAC-200')
+    })
+  })
+
+  describe('Assignee filter', () => {
+    function assigneeFeatureResponse() {
+      return {
+        version: '0.4',
+        fetchedAt: '2026-08-11T10:33:00Z',
+        featureCount: 2,
+        features: [
+          {
+            key: 'OSAC-100', summary: 'Feature A', status: 'In Progress', statusCategory: 'In Progress',
+            fixVersions: ['0.4'], components: [],
+            epics: [
+              {
+                key: 'OSAC-101', summary: 'Epic 1', status: 'In Progress', statusCategory: 'In Progress',
+                fixVersions: ['0.4'], fixVersionSource: 'direct',
+                components: ['Comp A'], componentSource: 'direct', assignee: 'Alice',
+                parentFeatureKey: 'OSAC-100', blockerCount: 0, issueCount: 1, pct: 0, progress: 0, issues: []
+              },
+              {
+                key: 'OSAC-102', summary: 'Epic 2', status: 'To Do', statusCategory: 'To Do',
+                fixVersions: [], fixVersionSource: 'unknown',
+                components: [], componentSource: 'unknown', assignee: null,
+                parentFeatureKey: 'OSAC-100', blockerCount: 0, issueCount: 0, pct: 0, progress: 0, issues: []
+              }
+            ]
+          },
+          {
+            key: 'OSAC-200', summary: 'Feature B', status: 'Done', statusCategory: 'Done',
+            fixVersions: ['0.4'], components: [],
+            epics: [
+              {
+                key: 'OSAC-201', summary: 'Epic 3', status: 'Review', statusCategory: 'In Progress',
+                fixVersions: ['0.4'], fixVersionSource: 'direct',
+                components: ['Comp B'], componentSource: 'direct', assignee: 'Bob',
+                parentFeatureKey: 'OSAC-200', blockerCount: 0, issueCount: 1, pct: 0, progress: 0, issues: []
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+    async function mountWithAssigneeFilters() {
+      mockApiRequest.mockImplementation((url) => {
+        if (url.includes('/versions')) return Promise.resolve({ versions: ['0.4'] })
+        if (url.includes('/epics')) return Promise.resolve(assigneeFeatureResponse())
+        return Promise.reject(new Error('unexpected url ' + url))
+      })
+      const wrapper = mount(EpicsByReleaseView)
+      await flushPromises()
+      return wrapper
+    }
+
+    async function openDropdown(wrapper, currentLabel) {
+      const button = wrapper.findAll('button[aria-haspopup="listbox"]').find(b => b.text().includes(currentLabel))
+      await button.trigger('click')
+    }
+
+    async function checkOption(wrapper, optionText) {
+      const label = wrapper.findAll('label').find(l => l.text() === optionText)
+      await label.find('input[type="checkbox"]').setValue(true)
+    }
+
+    async function uncheckOption(wrapper, optionText) {
+      const label = wrapper.findAll('label').find(l => l.text() === optionText)
+      await label.find('input[type="checkbox"]').setValue(false)
+    }
+
+    it('shows every Epic when no Assignee is selected (All)', async () => {
+      const wrapper = await mountWithAssigneeFilters()
+
+      expect(wrapper.text()).toContain('OSAC-101')
+      expect(wrapper.text()).toContain('OSAC-102')
+      expect(wrapper.text()).toContain('OSAC-201')
+    })
+
+    it('narrows a surviving Feature to only the Epic matching a selected name and removes Features with none', async () => {
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      await checkOption(wrapper, 'Alice')
+
+      // Feature A survives via OSAC-101, but OSAC-102 (unassigned) is narrowed out of it.
+      expect(wrapper.text()).toContain('OSAC-100')
+      expect(wrapper.text()).toContain('OSAC-101')
+      expect(wrapper.text()).not.toContain('OSAC-102')
+      // Feature B has zero matching Epics (Bob isn't selected) and disappears entirely.
+      expect(wrapper.text()).not.toContain('OSAC-200')
+      expect(wrapper.text()).not.toContain('OSAC-201')
+    })
+
+    it('treats a missing assignee as Unassigned', async () => {
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      await checkOption(wrapper, 'Unassigned')
+
+      expect(wrapper.text()).toContain('OSAC-100')
+      expect(wrapper.text()).toContain('OSAC-102')
+      expect(wrapper.text()).not.toContain('OSAC-101')
+      expect(wrapper.text()).not.toContain('OSAC-200')
+    })
+
+    it('matches a named assignee selected together with Unassigned (OR)', async () => {
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      await checkOption(wrapper, 'Alice')
+      await checkOption(wrapper, 'Unassigned')
+
+      expect(wrapper.text()).toContain('OSAC-101')
+      expect(wrapper.text()).toContain('OSAC-102')
+      expect(wrapper.text()).not.toContain('OSAC-200')
+    })
+
+    it('combines Assignee with an active Component filter (AND)', async () => {
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      await checkOption(wrapper, 'Alice')
+      await openDropdown(wrapper, 'All components')
+      await checkOption(wrapper, 'Comp B')
+
+      // Alice's only Epic (OSAC-101) is Comp A, not Comp B — fails the AND, so Feature A drops out too.
+      expect(wrapper.text()).toContain('No Features match the current filters')
+    })
+
+    it('restores the full Epic list when the Assignee selection is cleared', async () => {
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      await checkOption(wrapper, 'Alice')
+      expect(wrapper.text()).not.toContain('OSAC-200')
+
+      await uncheckOption(wrapper, 'Alice')
+
+      expect(wrapper.text()).toContain('OSAC-101')
+      expect(wrapper.text()).toContain('OSAC-102')
+      expect(wrapper.text()).toContain('OSAC-201')
+    })
+
+    it('search narrows the visible Assignee options without altering the selection', async () => {
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      await checkOption(wrapper, 'Alice')
+      await wrapper.find('input[placeholder="Search assignees..."]').setValue('bob')
+
+      expect(wrapper.findAll('label').some(l => l.text() === 'Alice')).toBe(false)
+      expect(wrapper.findAll('label').some(l => l.text() === 'Bob')).toBe(true)
+      // Alice stays selected even though search hides her from the option list.
+      expect(wrapper.text()).toContain('OSAC-101')
+      expect(wrapper.text()).not.toContain('OSAC-201')
+    })
+
+    it('shows a no-results state when the Assignee search matches nothing', async () => {
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      await wrapper.find('input[placeholder="Search assignees..."]').setValue('zzz')
+
+      expect(wrapper.text()).toContain('No matches for "zzz"')
+    })
+
+    it('hides the "Assigned to me" shortcut when no jiraDisplayName is resolved', async () => {
+      mockUser.value = {}
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      expect(wrapper.text()).not.toContain('Assigned to me')
+    })
+
+    it('"Assigned to me" sets the Assignee filter to only the current user\'s Jira display name', async () => {
+      mockUser.value = { jiraDisplayName: 'Bob' }
+      const wrapper = await mountWithAssigneeFilters()
+
+      await openDropdown(wrapper, 'All assignees')
+      const meButton = wrapper.findAll('button').find(b => b.text() === 'Assigned to me')
+      await meButton.trigger('click')
+
+      expect(wrapper.text()).toContain('OSAC-201')
+      expect(wrapper.text()).not.toContain('OSAC-101')
+      expect(wrapper.text()).not.toContain('OSAC-102')
     })
   })
 })

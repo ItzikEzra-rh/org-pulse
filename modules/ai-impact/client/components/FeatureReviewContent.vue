@@ -25,6 +25,7 @@ const props = defineProps({
   componentFilter: { type: String, default: 'all' },
   artifactFilter: { type: String, default: 'all' },
   fixVersionFilter: { type: String, default: FIX_VERSION_FILTER_ALL },
+  assigneeFilter: { type: Array, default: () => [] },
   sortBy: { type: String, default: 'default' },
   selectedFeature: { type: Object, default: null }
 })
@@ -40,6 +41,7 @@ const emit = defineEmits([
   'update:componentFilter',
   'update:artifactFilter',
   'update:fixVersionFilter',
+  'update:assigneeFilter',
   'update:sortBy',
   'selectFeature',
   'retry'
@@ -124,6 +126,7 @@ const allTimeTotal = computed(() => Object.values(props.features).filter(f => f.
         :componentFilter="componentFilter"
         :artifactFilter="artifactFilter"
         :fixVersionFilter="fixVersionFilter"
+        :assigneeFilter="assigneeFilter"
         :sortBy="sortBy"
         @update:searchQuery="emit('update:searchQuery', $event)"
         @update:aiInvolvementFilter="emit('update:aiInvolvementFilter', $event)"
@@ -133,6 +136,7 @@ const allTimeTotal = computed(() => Object.values(props.features).filter(f => f.
         @update:componentFilter="emit('update:componentFilter', $event)"
         @update:artifactFilter="emit('update:artifactFilter', $event)"
         @update:fixVersionFilter="emit('update:fixVersionFilter', $event)"
+        @update:assigneeFilter="emit('update:assigneeFilter', $event)"
         @update:sortBy="emit('update:sortBy', $event)"
         @selectFeature="emit('selectFeature', $event)"
       />

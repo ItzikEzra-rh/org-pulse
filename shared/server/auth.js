@@ -15,6 +15,39 @@ function blockDuringImpersonation(req, res, next) {
   next();
 }
 
+const UNRESOLVED_IDENTITY = { jiraDisplayName: null, jiraAccountId: null };
+
+/**
+ * Resolve a roster person's verified Jira identity (display name + account id) for a given uid.
+ *
+ * team-tracker's writers always persist people/<slug>.json with jiraDisplayName set to the
+ * (unverified) roster name — the Jira-verified display name only survives in jira-name-map.json,
+ * keyed by that same roster name, alongside the accountId that resolved it. A verified identity
+ * therefore requires both: a people/<slug>.json entry confirming resolution succeeded (accountId
+ * present, no `_nameNotFound`) AND a jira-name-map.json entry for that same accountId, from which
+ * the verified display name is read. Any missing, legacy (non-object), or mismatched-accountId
+ * cache entry is treated as unresolved — an unverified or stale name is never returned.
+ */
+function resolveJiraIdentity(readFromStorage, uid) {
+  if (!uid) return UNRESOLVED_IDENTITY;
+  const registry = readFromStorage('team-data/registry.json');
+  const person = registry?.people?.[uid];
+  if (!person || !person.name) return UNRESOLVED_IDENTITY;
+  // Must match team-tracker's sanitizeFilename() convention for people/*.json cache keys.
+  const slug = person.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const metrics = readFromStorage(`people/${slug}.json`);
+  if (!metrics || metrics._nameNotFound || !metrics.jiraAccountId) return UNRESOLVED_IDENTITY;
+
+  const nameMap = readFromStorage('jira-name-map.json');
+  const cached = nameMap?.[person.name];
+  if (!cached || typeof cached !== 'object' || !cached.accountId || !cached.displayName) {
+    return UNRESOLVED_IDENTITY;
+  }
+  if (cached.accountId !== metrics.jiraAccountId) return UNRESOLVED_IDENTITY;
+
+  return { jiraDisplayName: cached.displayName, jiraAccountId: cached.accountId };
+}
+
 function createAuthMiddleware(readFromStorage, writeToStorage, options = {}) {
   const { tokenValidator, roleStore } = options;
 
@@ -308,4 +341,4 @@ function proxySecretGuard(req, res, next, options = {}) {
   return res.status(401).json({ error: 'Unauthorized' });
 }
 
-module.exports = { createAuthMiddleware, proxySecretGuard, blockDuringImpersonation }
+module.exports = { createAuthMiddleware, proxySecretGuard, blockDuringImpersonation, resolveJiraIdentity }

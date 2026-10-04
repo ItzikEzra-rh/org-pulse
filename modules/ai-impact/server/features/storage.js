@@ -42,6 +42,30 @@ function backfillFixVersionsFromIndex(legacy, indexFeatures) {
 }
 
 /**
+ * Normalizes the observed assignee shapes (null, `{displayName}`, bare string) to a plain string.
+ * @param {*} assignee - Raw assignee value from a feature detail file
+ * @returns {string|null}
+ */
+function extractAssignee(assignee) {
+  if (!assignee) return null;
+  return typeof assignee === 'string' ? assignee : (assignee.displayName || null);
+}
+
+/**
+ * Applies extractAssignee to every legacy record's assignee, matching the
+ * normalization the main path applies. Does not mutate the input.
+ * @param {object} legacy - The legacy features data object
+ * @returns {object} Legacy data with normalized assignee values
+ */
+function normalizeLegacyAssignees(legacy) {
+  const features = {};
+  for (const [key, record] of Object.entries(legacy.features)) {
+    features[key] = { ...record, latest: { ...record.latest, assignee: extractAssignee(record.latest.assignee) } };
+  }
+  return { ...legacy, features };
+}
+
+/**
  * Read features from the unified releases store and reshape into the
  * AI Impact format ({ features: { [key]: { latest, history } }, ... }).
  *
@@ -57,7 +81,7 @@ function readFeatures(readFromStorage) {
     // Fallback to legacy store
     const legacy = readFromStorage(LEGACY_STORAGE_KEY);
     if (legacy && typeof legacy === 'object' && legacy.features) {
-      return legacy;
+      return normalizeLegacyAssignees(legacy);
     }
     return { lastSyncedAt: null, totalFeatures: 0, features: {} };
   }
@@ -68,7 +92,7 @@ function readFeatures(readFromStorage) {
     // Check legacy store as fallback
     const legacy = readFromStorage(LEGACY_STORAGE_KEY);
     if (legacy && typeof legacy === 'object' && legacy.features && Object.keys(legacy.features).length > 0) {
-      return backfillFixVersionsFromIndex(legacy, index.features);
+      return normalizeLegacyAssignees(backfillFixVersionsFromIndex(legacy, index.features));
     }
     return { lastSyncedAt: null, totalFeatures: 0, features: {} };
   }
@@ -103,6 +127,8 @@ function readFeatures(readFromStorage) {
         scores: aiReview.scores || (entry.aiReview && entry.aiReview.scores) || null,
         reviewers: aiReview.reviewers || null,
         labels: entry.labels || [],
+        // From the per-feature detail file only — index.json's assignee is a different, unrelated field.
+        assignee: extractAssignee(featureFile && featureFile.assignee),
         components: components,
         reviewedAt: aiReview.reviewedAt || (entry.aiReview && entry.aiReview.reviewedAt) || null,
         // aiInvolvement/provenanceKind are only present once the design-provenance pipeline
@@ -160,6 +186,7 @@ function getLatestProjection(data) {
       scores: entry.latest.scores,
       reviewers: entry.latest.reviewers,
       reviewedAt: entry.latest.reviewedAt,
+      assignee: entry.latest.assignee || null,
       aiInvolvement: entry.latest.aiInvolvement || null,
       provenanceKind: entry.latest.provenanceKind || null,
       created: entry.latest.created || null,

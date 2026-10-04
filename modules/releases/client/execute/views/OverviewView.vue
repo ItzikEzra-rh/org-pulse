@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useProjectId } from '@shared/client/composables/useProjectId.js'
+import { useAuth } from '@shared/client/composables/useAuth.js'
 import { useFeatureTraffic, useFeatureDetail, useVersions } from '../composables/useFeatureTraffic'
 import StatusBadge from '../components/StatusBadge.vue'
 import AIInfoBubble from '../components/AIInfoBubble.vue'
@@ -9,9 +10,12 @@ import {
   useComponentStatusFilter,
   collectComponentOptions,
   collectStatusOptions,
+  collectAssigneeOptions,
   matchesComponents,
   matchesStatus,
-  componentDisplayLabel
+  matchesAssignee,
+  componentDisplayLabel,
+  assigneeDisplayLabel
 } from '../composables/useComponentStatusFilter'
 import {
   isValidProgressCount,
@@ -45,24 +49,37 @@ const {
 const {
   selectedComponents,
   selectedStatuses,
+  selectedAssignees,
   toggleComponent,
   toggleStatus,
+  toggleAssignee,
+  setAssignees,
   clearFilters: clearComponentStatusFilters,
   isFiltered: isComponentStatusFiltered
 } = useComponentStatusFilter()
+
+const { user } = useAuth()
+// Hidden when no reliable jiraDisplayName is resolved for the current user — never guessed client-side.
+const meAssignee = computed(() => user.value?.jiraDisplayName || null)
+
+function selectMeAssignee() {
+  if (meAssignee.value) setAssignees([meAssignee.value])
+}
 
 const selectedVersions = ref([])
 const selectedExecutionStates = ref([])
 const attentionBlockersOnly = ref(false)
 const searchQuery = ref('')
 const viewMode = ref('board') // 'board' or 'list'
+const assigneeSearch = ref('')
 
-const CLOSED_DROPDOWNS = { version: false, executionState: false, component: false, jiraStatus: false }
+const CLOSED_DROPDOWNS = { version: false, executionState: false, component: false, jiraStatus: false, assignee: false }
 const openDropdown = ref({ ...CLOSED_DROPDOWNS })
 
 function toggleDropdown(name) {
   const wasOpen = openDropdown.value[name]
   openDropdown.value = { ...CLOSED_DROPDOWNS, [name]: !wasOpen }
+  if (name === 'assignee' && !wasOpen) assigneeSearch.value = ''
 }
 
 function toggleVersion(v) {
@@ -90,6 +107,7 @@ function multiFilterLabel(selectedLabels, allLabel) {
 }
 const componentFilterLabel = computed(() => multiFilterLabel(selectedComponents.value.map(componentDisplayLabel), 'All components'))
 const jiraStatusFilterLabel = computed(() => multiFilterLabel(selectedStatuses.value, 'All statuses'))
+const assigneeFilterLabel = computed(() => multiFilterLabel(selectedAssignees.value.map(assigneeDisplayLabel), 'All assignees'))
 
 const EXECUTION_STATE_FILTER_OPTIONS = [
   { value: 'no-tracked-work', label: 'No Tracked Work' },
@@ -222,6 +240,7 @@ function saveOverviewFilters() {
         selectedExecutionStates: selectedExecutionStates.value,
         selectedComponents: selectedComponents.value,
         selectedStatuses: selectedStatuses.value,
+        selectedAssignees: selectedAssignees.value,
         attentionBlockersOnly: attentionBlockersOnly.value,
         searchQuery: searchQuery.value,
         viewMode: viewMode.value
@@ -253,6 +272,9 @@ function restoreOverviewFilters() {
     if (Array.isArray(o.selectedStatuses)) {
       selectedStatuses.value = o.selectedStatuses.filter(v => typeof v === 'string')
     }
+    if (Array.isArray(o.selectedAssignees)) {
+      selectedAssignees.value = o.selectedAssignees.filter(v => typeof v === 'string')
+    }
     if (typeof o.attentionBlockersOnly === 'boolean') {
       attentionBlockersOnly.value = o.attentionBlockersOnly
     }
@@ -268,7 +290,7 @@ function restoreOverviewFilters() {
 }
 
 watch(
-  [selectedVersions, selectedExecutionStates, selectedComponents, selectedStatuses, attentionBlockersOnly, searchQuery, viewMode],
+  [selectedVersions, selectedExecutionStates, selectedComponents, selectedStatuses, selectedAssignees, attentionBlockersOnly, searchQuery, viewMode],
   saveOverviewFilters,
   { deep: true }
 )
@@ -277,6 +299,14 @@ watch(
 // selection, so narrowing one dimension never hides options for another.
 const componentOptions = computed(() => collectComponentOptions(features.value, f => f.components))
 const jiraStatusOptions = computed(() => collectStatusOptions(features.value, f => f.statusCategory))
+const assigneeOptions = computed(() => collectAssigneeOptions(features.value, f => f.assignee))
+
+// Search only narrows what's rendered; selectedAssignees is never touched by it.
+const filteredAssigneeOptions = computed(() => {
+  const q = assigneeSearch.value.trim().toLowerCase()
+  if (!q) return assigneeOptions.value
+  return assigneeOptions.value.filter(a => assigneeDisplayLabel(a).toLowerCase().includes(q))
+})
 
 const isAnyFiltered = computed(() =>
   selectedVersions.value.length > 0 ||
@@ -312,7 +342,8 @@ const filteredFeatures = computed(() => {
   if (isComponentStatusFiltered.value) {
     list = list.filter(f =>
       matchesComponents(f.components, selectedComponents.value) &&
-      matchesStatus(f.statusCategory, selectedStatuses.value)
+      matchesStatus(f.statusCategory, selectedStatuses.value) &&
+      matchesAssignee(f.assignee, selectedAssignees.value)
     )
   }
   if (attentionBlockersOnly.value) {
@@ -643,6 +674,57 @@ onBeforeUnmount(() => {
               />
               <span class="truncate">{{ s }}</span>
             </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Multi-select: Assignee -->
+      <div v-if="assigneeOptions.length > 0" class="flex flex-col gap-0.5">
+        <label class="text-xs font-medium text-gray-600 dark:text-gray-400">Assignee</label>
+        <div class="relative multi-select-dropdown">
+          <button
+            @click.stop="toggleDropdown('assignee')"
+            class="bg-white dark:bg-gray-800 border rounded-md px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none flex items-center gap-1.5 min-w-[140px]"
+            :class="selectedAssignees.length > 0
+              ? 'border-primary-500 ring-1 ring-primary-500'
+              : 'border-gray-300 dark:border-gray-600'"
+          >
+            <span class="flex-1 text-left truncate">{{ assigneeFilterLabel }}</span>
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform" :class="{ 'rotate-180': openDropdown.assignee }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div
+            v-if="openDropdown.assignee"
+            class="absolute z-20 mt-1 w-60 max-h-72 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1"
+          >
+            <div class="px-2 pt-1 pb-1.5 sticky top-0 bg-white dark:bg-gray-800">
+              <input
+                v-model="assigneeSearch"
+                @click.stop
+                type="text"
+                placeholder="Search assignees..."
+                class="w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
+              />
+            </div>
+            <button
+              v-if="meAssignee"
+              type="button"
+              @click.stop="selectMeAssignee"
+              class="w-full text-left px-3 py-1.5 text-xs text-primary-600 dark:text-primary-400 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700"
+            >Assigned to me</button>
+            <label
+              v-for="a in filteredAssigneeOptions"
+              :key="a"
+              class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-900 dark:text-gray-100"
+            >
+              <input
+                type="checkbox"
+                :checked="selectedAssignees.includes(a)"
+                @change="toggleAssignee(a)"
+                class="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+              />
+              <span class="truncate">{{ assigneeDisplayLabel(a) }}</span>
+            </label>
+            <div v-if="filteredAssigneeOptions.length === 0" class="px-3 py-2 text-xs text-gray-400">No matches for "{{ assigneeSearch }}"</div>
           </div>
         </div>
       </div>

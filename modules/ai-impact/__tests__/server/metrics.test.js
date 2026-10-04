@@ -1,9 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { computeMetrics, buildTrendData, buildBreakdownData, computeAllMetrics } from '../../server/metrics.js';
 
+// Frozen because fixtures and production code call new Date() independently,
+// and integer-day offsets sit exactly on bucket boundaries.
+const FIXED_NOW = new Date('2024-06-15T12:00:00.000Z');
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(FIXED_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 function makeIssue(daysAgo, aiInvolvement = 'none', { createdLabelDate, revisedLabelDate } = {}) {
-  const created = new Date();
-  created.setDate(created.getDate() - daysAgo);
+  // Pure ms math to match production's window/bucket calculations exactly —
+  // local-calendar arithmetic skews across DST transitions.
+  const created = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
   return {
     key: `RFE-${Math.random().toString(36).slice(2, 6)}`,
     summary: 'Test',
@@ -314,7 +328,7 @@ describe('buildTrendData', () => {
   });
 
   it('buckets issues by day using created date', () => {
-    // Half a day off the bucket boundary to avoid flaking on ms drift against buildTrendData's own Date.now().
+    // Half a day off the bucket boundary, safely inside the most recent daily bucket.
     const recent = new Date(Date.now() - 0.5 * 24 * 60 * 60 * 1000).toISOString();
     const issues = [
       { ...makeIssue(0, 'created'), created: recent },
@@ -479,10 +493,7 @@ describe('computeAllMetrics', () => {
   });
 
   it('keeps revisedCount on the full population while Created-with-AI total/createdPct stay eligible-only', () => {
-    // Same fixed instant (half a day off an exact daily-bucket boundary, to
-    // avoid flaking on the ms of test-execution drift between this Date.now()
-    // and buildTrendData's own) so created-total and revisedCount are
-    // guaranteed to land in the same daily bucket under the 'week' window.
+    // Same instant for both fields so created-total and revisedCount land in one bucket.
     const sameInstant = new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000).toISOString();
     const issues = [
       { ...makeIssue(2, 'created'), created: sameInstant },

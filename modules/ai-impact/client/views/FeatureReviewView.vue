@@ -19,6 +19,7 @@ const humanReviewFilter = ref('all')
 const componentFilter = ref('all')
 const artifactFilter = ref('all')
 const fixVersionFilter = ref(FIX_VERSION_FILTER_ALL)
+const selectedAssignees = ref([])
 const sortBy = ref('default')
 const chartExpanded = ref(true)
 
@@ -98,6 +99,7 @@ watch(() => moduleNav.params.value, (params) => {
       componentFilter.value = 'all'
       artifactFilter.value = 'all'
       fixVersionFilter.value = FIX_VERSION_FILTER_ALL
+      selectedAssignees.value = []
       sortBy.value = 'default'
       selectedFeature.value = feature
     }
@@ -136,6 +138,7 @@ watch(() => Object.keys(features.value).length, () => {
       :componentFilter="componentFilter"
       :artifactFilter="artifactFilter"
       :fixVersionFilter="fixVersionFilter"
+      :assigneeFilter="selectedAssignees"
       :sortBy="sortBy"
       :selectedFeature="selectedFeature"
       @update:timeWindow="featureTimeWindow = $event"
@@ -148,6 +151,7 @@ watch(() => Object.keys(features.value).length, () => {
       @update:componentFilter="componentFilter = $event"
       @update:artifactFilter="artifactFilter = $event"
       @update:fixVersionFilter="fixVersionFilter = $event"
+      @update:assigneeFilter="selectedAssignees = $event"
       @update:sortBy="sortBy = $event"
       @selectFeature="handleSelectFeature"
       @retry="handleRetry"

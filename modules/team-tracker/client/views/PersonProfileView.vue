@@ -80,6 +80,92 @@ const error = ref(null)
 const showResolvedIssues = ref(true)
 const showInProgressIssues = ref(true)
 const editField = ref(null)
+
+// Sorting state for in-progress issues table
+const ipSortField = ref('key')
+const ipSortDir = ref('asc')
+
+const sortedInProgressIssues = computed(() => {
+  if (!jiraMetrics.value?.inProgress?.issues) return []
+  return [...jiraMetrics.value.inProgress.issues].sort((a, b) => {
+    const aRaw = a[ipSortField.value]
+    const bRaw = b[ipSortField.value]
+    // Nulls always sort last regardless of direction
+    if (aRaw == null && bRaw == null) return 0
+    if (aRaw == null) return 1
+    if (bRaw == null) return -1
+    let aVal = aRaw
+    let bVal = bRaw
+    if (typeof aVal === 'string') {
+      aVal = aVal.toLowerCase()
+      bVal = (bVal || '').toLowerCase()
+    }
+    if (ipSortDir.value === 'asc') return aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+    return aVal > bVal ? -1 : aVal < bVal ? 1 : 0
+  })
+})
+
+function toggleIpSort(field) {
+  if (ipSortField.value === field) {
+    ipSortDir.value = ipSortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    ipSortField.value = field
+    ipSortDir.value = field === 'storyPoints' ? 'desc' : 'asc'
+  }
+}
+
+function ipSortIcon(field) {
+  if (ipSortField.value !== field) return ''
+  return ipSortDir.value === 'asc' ? '▲' : '▼'
+}
+
+function ipAriaSort(field) {
+  if (ipSortField.value !== field) return 'none'
+  return ipSortDir.value === 'asc' ? 'ascending' : 'descending'
+}
+
+// Sorting state for resolved issues table
+const resSortField = ref('resolutionDate')
+const resSortDir = ref('desc')
+
+const sortedResolvedIssues = computed(() => {
+  if (!jiraMetrics.value?.resolved?.issues) return []
+  return [...jiraMetrics.value.resolved.issues].sort((a, b) => {
+    const aRaw = a[resSortField.value]
+    const bRaw = b[resSortField.value]
+    // Nulls always sort last regardless of direction
+    if (aRaw == null && bRaw == null) return 0
+    if (aRaw == null) return 1
+    if (bRaw == null) return -1
+    let aVal = aRaw
+    let bVal = bRaw
+    if (typeof aVal === 'string') {
+      aVal = aVal.toLowerCase()
+      bVal = (bVal || '').toLowerCase()
+    }
+    if (resSortDir.value === 'asc') return aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+    return aVal > bVal ? -1 : aVal < bVal ? 1 : 0
+  })
+})
+
+function toggleResSort(field) {
+  if (resSortField.value === field) {
+    resSortDir.value = resSortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    resSortField.value = field
+    resSortDir.value = field === 'storyPoints' || field === 'resolutionDate' || field === 'cycleTimeDays' ? 'desc' : 'asc'
+  }
+}
+
+function resSortIcon(field) {
+  if (resSortField.value !== field) return ''
+  return resSortDir.value === 'asc' ? '▲' : '▼'
+}
+
+function resAriaSort(field) {
+  if (resSortField.value !== field) return 'none'
+  return resSortDir.value === 'asc' ? 'ascending' : 'descending'
+}
 const editValue = ref('')
 const editSaving = ref(false)
 
@@ -405,15 +491,23 @@ onBeforeUnmount(() => {
               <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-800">
                   <tr>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Key</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="ipAriaSort('key')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleIpSort('key')">Key {{ ipSortIcon('key') }}</button>
+                    </th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Summary</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Points</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="ipAriaSort('issueType')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleIpSort('issueType')">Type {{ ipSortIcon('issueType') }}</button>
+                    </th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="ipAriaSort('status')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleIpSort('status')">Status {{ ipSortIcon('status') }}</button>
+                    </th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="ipAriaSort('storyPoints')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleIpSort('storyPoints')">Points {{ ipSortIcon('storyPoints') }}</button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                  <tr v-for="issue in jiraMetrics.inProgress.issues" :key="issue.key" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <tr v-for="issue in sortedInProgressIssues" :key="issue.key" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td class="px-4 py-2 text-sm">
                       <a :href="`https://redhat.atlassian.net/browse/${issue.key}`" target="_blank" class="text-primary-600 hover:underline">{{ issue.key }}</a>
                     </td>
@@ -448,16 +542,26 @@ onBeforeUnmount(() => {
               <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-800">
                   <tr>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Key</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="resAriaSort('key')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleResSort('key')">Key {{ resSortIcon('key') }}</button>
+                    </th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Summary</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Points</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cycle Time</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Resolved</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="resAriaSort('issueType')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleResSort('issueType')">Type {{ resSortIcon('issueType') }}</button>
+                    </th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="resAriaSort('storyPoints')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleResSort('storyPoints')">Points {{ resSortIcon('storyPoints') }}</button>
+                    </th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="resAriaSort('cycleTimeDays')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleResSort('cycleTimeDays')">Cycle Time {{ resSortIcon('cycleTimeDays') }}</button>
+                    </th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase" :aria-sort="resAriaSort('resolutionDate')">
+                      <button class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300" @click="toggleResSort('resolutionDate')">Resolved {{ resSortIcon('resolutionDate') }}</button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                  <tr v-for="issue in jiraMetrics.resolved.issues" :key="issue.key" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <tr v-for="issue in sortedResolvedIssues" :key="issue.key" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td class="px-4 py-2 text-sm">
                       <a :href="`https://redhat.atlassian.net/browse/${issue.key}`" target="_blank" class="text-primary-600 hover:underline">{{ issue.key }}</a>
                     </td>

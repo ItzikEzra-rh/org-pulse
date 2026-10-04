@@ -32,6 +32,7 @@ export function useAuth() {
   const roles = computed(() => user.value?.roles || [])
   const isManager = computed(() => user.value?.isManager === true)
   const apiBaseUrl = computed(() => user.value?.apiBaseUrl || window.location.origin)
+  const jiraDisplayName = computed(() => user.value?.jiraDisplayName || null)
 
   function hasRole(role) {
     return roles.value.includes(role)
@@ -46,6 +47,7 @@ export function useAuth() {
     roles,
     hasRole,
     apiBaseUrl,
+    jiraDisplayName,
     refresh
   }
 }

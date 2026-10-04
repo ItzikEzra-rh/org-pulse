@@ -3,12 +3,15 @@ import {
   UNASSIGNED_COMPONENT,
   UNKNOWN_STATUS,
   UNASSIGNED_TEAM,
+  UNASSIGNED_ASSIGNEE,
   collectComponentOptions,
   collectStatusOptions,
   collectTeamOptions,
+  collectAssigneeOptions,
   matchesComponents,
   matchesStatus,
   matchesTeam,
+  matchesAssignee,
   useComponentStatusFilter
 } from '../../../client/execute/composables/useComponentStatusFilter'
 
@@ -97,6 +100,39 @@ describe('matchesTeam', () => {
   })
 })
 
+describe('collectAssigneeOptions', () => {
+  it('sorts real assignee names and appends the Unassigned sentinel last', () => {
+    const items = [{ assignee: 'Dan Manor' }, { assignee: null }, { assignee: 'Alice' }]
+    expect(collectAssigneeOptions(items, i => i.assignee)).toEqual(['Alice', 'Dan Manor', UNASSIGNED_ASSIGNEE])
+  })
+
+  it('omits the sentinel when every item has an assignee', () => {
+    const items = [{ assignee: 'Alice' }]
+    expect(collectAssigneeOptions(items, i => i.assignee)).toEqual(['Alice'])
+  })
+})
+
+describe('matchesAssignee', () => {
+  it('matches when no filter is selected', () => {
+    expect(matchesAssignee('Alice', [])).toBe(true)
+  })
+
+  it('matches a missing assignee only via the Unassigned sentinel', () => {
+    expect(matchesAssignee(null, [UNASSIGNED_ASSIGNEE])).toBe(true)
+    expect(matchesAssignee(null, ['Alice'])).toBe(false)
+  })
+
+  it('matches named assignees (OR semantics) and rejects non-matches', () => {
+    expect(matchesAssignee('Alice', ['Alice', 'Bob'])).toBe(true)
+    expect(matchesAssignee('Carol', ['Alice', 'Bob'])).toBe(false)
+  })
+
+  it('matches a named assignee selected together with Unassigned', () => {
+    expect(matchesAssignee('Alice', ['Alice', UNASSIGNED_ASSIGNEE])).toBe(true)
+    expect(matchesAssignee(null, ['Alice', UNASSIGNED_ASSIGNEE])).toBe(true)
+  })
+})
+
 describe('useComponentStatusFilter', () => {
   it('toggles selections independently and reports isFiltered', () => {
     const f = useComponentStatusFilter()
@@ -129,5 +165,32 @@ describe('useComponentStatusFilter', () => {
     f.clearFilters()
     expect(f.selectedTeams.value).toEqual([])
     expect(f.isFiltered.value).toBe(false)
+  })
+
+  it('toggles Assignee selections and includes them in isFiltered/clearFilters', () => {
+    const f = useComponentStatusFilter()
+
+    f.toggleAssignee('Alice')
+    expect(f.selectedAssignees.value).toEqual(['Alice'])
+    expect(f.isFiltered.value).toBe(true)
+
+    f.toggleAssignee(UNASSIGNED_ASSIGNEE)
+    expect(f.selectedAssignees.value).toEqual(['Alice', UNASSIGNED_ASSIGNEE])
+
+    f.clearFilters()
+    expect(f.selectedAssignees.value).toEqual([])
+    expect(f.isFiltered.value).toBe(false)
+  })
+
+  it('setAssignees overwrites the Assignee selection outright ("Assigned to me" shortcut)', () => {
+    const f = useComponentStatusFilter()
+
+    f.toggleAssignee('Alice')
+    f.toggleAssignee('Bob')
+    expect(f.selectedAssignees.value).toEqual(['Alice', 'Bob'])
+
+    f.setAssignees(['Carol'])
+    expect(f.selectedAssignees.value).toEqual(['Carol'])
+    expect(f.selectedComponents.value).toEqual([])
   })
 })

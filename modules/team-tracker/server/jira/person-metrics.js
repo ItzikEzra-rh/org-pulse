@@ -203,6 +203,18 @@ async function tryEmailSearch(jiraRequest, email, rosterName) {
   }
 }
 
+// Rejects a mismatched accountId in the response rather than trusting it as a lookup failure.
+async function tryAccountIdLookup(jiraRequest, accountId) {
+  try {
+    const user = await jiraRequest(`/rest/api/2/user?accountId=${encodeURIComponent(accountId)}`);
+    if (!user || typeof user !== 'object' || !user.displayName) return null;
+    if (user.accountId !== accountId) return null;
+    return { accountId: user.accountId, displayName: user.displayName };
+  } catch {
+    return null;
+  }
+}
+
 async function tryUserSearch(jiraRequest, query, rosterName) {
   try {
     const users = await jiraRequest(`/rest/api/2/user/search?query=${encodeURIComponent(query)}`);
@@ -363,6 +375,17 @@ async function fetchPersonMetrics(jiraRequest, jiraDisplayName, options = {}) {
   if (options.jiraAccountId) {
     accountId = options.jiraAccountId;
     resolvedDisplayName = jiraDisplayName;
+
+    // Roster-provided accountIds skip name resolution, so cache the verified name here instead.
+    // Skip if already cached; a failed lookup isn't cached either, so it retries next refresh.
+    if (nameCache) {
+      const cached = nameCache[jiraDisplayName];
+      const hasVerifiedMapping = cached && typeof cached === 'object' && cached.accountId === accountId;
+      if (!hasVerifiedMapping) {
+        const verified = await tryAccountIdLookup(jiraRequest, accountId);
+        if (verified) nameCache[jiraDisplayName] = verified;
+      }
+    }
   } else {
     const resolved = await resolveJiraDisplayName(jiraRequest, jiraDisplayName, nameCache, email);
     accountId = resolved.accountId;

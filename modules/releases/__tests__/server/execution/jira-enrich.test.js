@@ -296,8 +296,48 @@ describe('enrichFeatures', () => {
 
     const result = await enrichFeatures(['RHAISTRAT-1'], mockJiraRequest, mockFetchAll)
     expect(result.get('RHAISTRAT-1').epics).toEqual([{
-      key: 'RHOAIENG-500', summary: 'Child epic', status: 'In Progress', statusCategory: null, updated: null
+      key: 'RHOAIENG-500', summary: 'Child epic', status: 'In Progress', statusCategory: null, updated: null, assignee: null
     }])
+  })
+
+  it('includes the direct Jira assignee displayName on discovered epics', async () => {
+    const mockJiraRequest = vi.fn()
+    const mockFetchAll = vi.fn()
+
+    mockFetchAll.mockResolvedValueOnce([makeJiraIssue('RHAISTRAT-1')])
+    mockFetchAll.mockResolvedValueOnce([{
+      key: 'RHOAIENG-504',
+      fields: {
+        summary: 'Assigned epic',
+        status: { name: 'In Progress' },
+        parent: { key: 'RHAISTRAT-1' },
+        customfield_10014: null,
+        assignee: { displayName: 'Alice', accountId: 'alice-123' }
+      }
+    }])
+
+    const result = await enrichFeatures(['RHAISTRAT-1'], mockJiraRequest, mockFetchAll)
+    expect(result.get('RHAISTRAT-1').epics[0].assignee).toBe('Alice')
+  })
+
+  it('normalizes a missing epic assignee to null (no creator/reporter fallback)', async () => {
+    const mockJiraRequest = vi.fn()
+    const mockFetchAll = vi.fn()
+
+    mockFetchAll.mockResolvedValueOnce([makeJiraIssue('RHAISTRAT-1')])
+    mockFetchAll.mockResolvedValueOnce([{
+      key: 'RHOAIENG-505',
+      fields: {
+        summary: 'Unassigned epic',
+        status: { name: 'New' },
+        parent: { key: 'RHAISTRAT-1' },
+        customfield_10014: null,
+        assignee: null
+      }
+    }])
+
+    const result = await enrichFeatures(['RHAISTRAT-1'], mockJiraRequest, mockFetchAll)
+    expect(result.get('RHAISTRAT-1').epics[0].assignee).toBeNull()
   })
 
   it('includes statusCategory on discovered epics, null when Jira has none (Epic reopened)', async () => {
@@ -326,10 +366,10 @@ describe('enrichFeatures', () => {
     const result = await enrichFeatures(['RHAISTRAT-1'], mockJiraRequest, mockFetchAll)
     const epics = result.get('RHAISTRAT-1').epics
     expect(epics.find(e => e.key === 'RHOAIENG-501')).toEqual({
-      key: 'RHOAIENG-501', summary: 'Closed epic', status: 'Closed', statusCategory: 'Done', updated: null
+      key: 'RHOAIENG-501', summary: 'Closed epic', status: 'Closed', statusCategory: 'Done', updated: null, assignee: null
     })
     expect(epics.find(e => e.key === 'RHOAIENG-502')).toEqual({
-      key: 'RHOAIENG-502', summary: 'Reopened epic', status: 'New', statusCategory: 'To Do', updated: null
+      key: 'RHOAIENG-502', summary: 'Reopened epic', status: 'New', statusCategory: 'To Do', updated: null, assignee: null
     })
   })
 

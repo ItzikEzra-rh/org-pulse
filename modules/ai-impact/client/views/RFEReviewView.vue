@@ -20,6 +20,7 @@ const priorityFilter = ref('all')
 const artifactFilter = ref('all')
 const reviewStatusFilter = ref('all')
 const componentFilter = ref('all')
+const selectedAssignees = ref([])
 
 const { rfeData, loading, error, load, timeWindow } = useAIImpact()
 const { assessments, loadAssessments, loadAssessmentDetail } = useAssessments()
@@ -147,6 +148,7 @@ watch([() => moduleNav.params.value, rfeData], ([params]) => {
       artifactFilter.value = 'all'
       reviewStatusFilter.value = 'all'
       componentFilter.value = 'all'
+      selectedAssignees.value = []
       selectedRFE.value = rfe
       notFoundRFE.value = null
     } else if (!rfe) {
@@ -190,6 +192,7 @@ watch([() => moduleNav.params.value, rfeData], ([params]) => {
       :artifactFilter="artifactFilter"
       :reviewStatusFilter="reviewStatusFilter"
       :componentFilter="componentFilter"
+      :assigneeFilter="selectedAssignees"
       :selectedRFE="selectedRFE"
       :rfeToFeature="rfeToFeature"
       :pipelineFriction="pipelineFriction"
@@ -203,6 +206,7 @@ watch([() => moduleNav.params.value, rfeData], ([params]) => {
       @update:artifactFilter="artifactFilter = $event"
       @update:reviewStatusFilter="reviewStatusFilter = $event"
       @update:componentFilter="componentFilter = $event"
+      @update:assigneeFilter="selectedAssignees = $event"
       @selectRFE="handleSelectRFE"
       @retry="handleRetry"
     />

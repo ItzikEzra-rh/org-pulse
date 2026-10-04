@@ -197,4 +197,43 @@ describe('FeatureReviewView', () => {
     const chartsFeatures = wrapper.findComponent(FeatureCharts).props('features');
     expect(Object.keys(chartsFeatures)).toEqual(['RHAISTRAT-1']);
   });
+
+  it('filters via Assignee (OR within category, Unassigned selectable) and combines with Component filter (AND)', async () => {
+    features.value = {
+      'RHAISTRAT-1': makeFeature({ key: 'RHAISTRAT-1', title: 'Core feature', components: ['Core'], assignee: 'Alice' }),
+      'RHAISTRAT-2': makeFeature({ key: 'RHAISTRAT-2', title: 'UI feature', components: ['UI'], assignee: 'Bob' }),
+      'RHAISTRAT-3': makeFeature({ key: 'RHAISTRAT-3', title: 'Unassigned feature', components: ['Core'], assignee: null })
+    };
+
+    const wrapper = mountView();
+    await nextTick();
+
+    const assigneeButton = wrapper.findAll('button').find(b => b.text() === 'All Assignees');
+    await assigneeButton.trigger('click');
+    const aliceLabel = wrapper.findAll('label').find(l => l.text() === 'Alice');
+    await aliceLabel.find('input[type="checkbox"]').setValue(true);
+
+    expect(wrapper.text()).toContain('Core feature');
+    expect(wrapper.text()).not.toContain('UI feature');
+    expect(wrapper.text()).not.toContain('Unassigned feature');
+
+    const unassignedLabel = wrapper.findAll('label').find(l => l.text() === 'Unassigned');
+    await unassignedLabel.find('input[type="checkbox"]').setValue(true);
+
+    expect(wrapper.text()).toContain('Core feature');
+    expect(wrapper.text()).toContain('Unassigned feature');
+    expect(wrapper.text()).not.toContain('UI feature');
+
+    // AND with Component: Alice's feature is Core, but the Unassigned one is also
+    // Core — selecting UI should exclude both, proving the categories AND together.
+    const componentSelect = wrapper.findAll('select').find(s => {
+      const opt = s.find('option[value="all"]');
+      return opt.exists() && opt.text() === 'All Components';
+    });
+    await componentSelect.setValue('UI');
+
+    expect(wrapper.text()).not.toContain('Core feature');
+    expect(wrapper.text()).not.toContain('Unassigned feature');
+    expect(wrapper.text()).not.toContain('UI feature');
+  });
 });

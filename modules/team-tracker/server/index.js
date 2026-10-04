@@ -2354,10 +2354,8 @@ module.exports = function registerRoutes(router, context) {
               projectKeys: jiraProjectKeys,
               jiraAccountId: member.jiraAccountId
             });
-            if (metrics._resolvedName) {
-              persistNameCache();
-              delete metrics._resolvedName;
-            }
+            if (metrics._resolvedName) delete metrics._resolvedName;
+            persistNameCache();
             writeToStorage(`people/${sanitizeFilename(member.jiraDisplayName)}.json`, metrics);
             result.jira = metrics;
           })());
@@ -2997,6 +2995,7 @@ module.exports = function registerRoutes(router, context) {
       let cycleTimesCount = 0;
       const members = [];
       const resolvedIssues = [];
+      const inProgressIssues = [];
 
       for (const member of uniqueMembers) {
         const key = sanitizeFilename(member.jiraDisplayName);
@@ -3024,6 +3023,11 @@ module.exports = function registerRoutes(router, context) {
               resolvedIssues.push({ ...issue, assignee: member.jiraDisplayName });
             }
           }
+          if (cached.inProgress?.issues) {
+            for (const issue of cached.inProgress.issues) {
+              inProgressIssues.push({ ...issue, assignee: member.jiraDisplayName });
+            }
+          }
           if (cached.cycleTime?.avgDays != null) {
             cycleTimesSum += cached.cycleTime.avgDays;
             cycleTimesCount++;
@@ -3044,7 +3048,8 @@ module.exports = function registerRoutes(router, context) {
           avgCycleTimeDays: cycleTimesCount > 0 ? +(cycleTimesSum / cycleTimesCount).toFixed(1) : null
         },
         members,
-        resolvedIssues
+        resolvedIssues,
+        inProgressIssues
       });
     } catch (error) {
       console.error(`Team metrics error (${req.params.teamKey}):`, error);

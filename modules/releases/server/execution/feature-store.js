@@ -159,7 +159,8 @@ function reconcileEpicClassifications(storedEpics, incomingEpics) {
  * A successful jiraEpics snapshot is authoritative for *membership* — an Epic
  * absent from it is no longer linked and is dropped (an empty array drops all).
  * For a key present in both, producer-owned fields (issues[], execution counts,
- * provenance) are preserved and only Jira-owned summary/status is refreshed.
+ * provenance) are preserved and only Jira-owned summary/status/assignee is refreshed.
+ * assignee/updated are skipped when the incoming snapshot is stale (see isEpicStale).
  * A key Jira discovered that the producer doesn't know about yet is added sparse.
  *
  * @param {object[]|undefined} baseEpics - Producer-owned Epics (richer shape)
@@ -178,7 +179,13 @@ function mergeEpics(baseEpics, jiraEpics) {
     const refreshed = Object.assign({}, epic, { summary: jiraEpic.summary, status: jiraEpic.status });
     // Never overwrite with undefined — an older caller's snapshot must not erase a producer-known value.
     if (jiraEpic.statusCategory !== undefined) refreshed.statusCategory = jiraEpic.statusCategory;
-    if (jiraEpic.updated !== undefined) refreshed.updated = jiraEpic.updated;
+
+    // Stale snapshots skip both fields — `updated` must not regress, or a repeat would look fresh.
+    if (!isEpicStale(epic, jiraEpic)) {
+      if (jiraEpic.updated !== undefined) refreshed.updated = jiraEpic.updated;
+      // Explicit null clears a prior assignment; undefined (older/sparse callers) preserves it.
+      if (jiraEpic.assignee !== undefined) refreshed.assignee = jiraEpic.assignee;
+    }
     merged.push(refreshed);
   }
 
