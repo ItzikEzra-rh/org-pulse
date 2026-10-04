@@ -1,6 +1,11 @@
 <script setup>
-const AI_COMMITS_ORIGINAL_URL = 'https://ai-commits-scanner-fd01cc.pages.redhat.com/osac/index.html'
-const AI_COMMITS_PROXY_URL = '/api/modules/ai-impact/ai-commits-proxy'
+import { computed } from 'vue'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
+
+const projectId = useProjectId()
+const aiCommitsProxyUrl = computed(() => (
+  `/api/modules/ai-impact/ai-commits-proxy${projectQuery(projectId.value)}`
+))
 </script>
 
 <template>
@@ -9,7 +14,7 @@ const AI_COMMITS_PROXY_URL = '/api/modules/ai-impact/ai-commits-proxy'
       <div class="flex items-center justify-between gap-4">
         <h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">AI Commits</h1>
         <a
-          :href="AI_COMMITS_ORIGINAL_URL"
+          :href="aiCommitsProxyUrl"
           target="_blank"
           rel="noopener noreferrer"
           class="shrink-0 text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline"
@@ -18,8 +23,8 @@ const AI_COMMITS_PROXY_URL = '/api/modules/ai-impact/ai-commits-proxy'
     </div>
 
     <iframe
-      :src="AI_COMMITS_PROXY_URL"
-      title="AI Commits Scanner — OSAC"
+      :src="aiCommitsProxyUrl"
+      title="AI Commits Scanner"
       sandbox="allow-scripts allow-same-origin"
       class="w-full flex-1 border-0 block min-h-0"
       style="height: calc(100vh - 9rem)"

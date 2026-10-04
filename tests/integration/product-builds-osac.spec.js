@@ -23,6 +23,12 @@ test.describe('Product Builds OSAC @product-builds-osac', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
+    const projectSelector = page.locator('#project-selector');
+    if (await projectSelector.count()) {
+      await projectSelector.selectOption('osac');
+      await page.waitForTimeout(500);
+    }
+
     const moduleHeader = page.locator('aside nav button').filter({ hasText: 'Product Builds' }).first();
     await expect(moduleHeader).toBeVisible();
     await moduleHeader.click();
@@ -38,7 +44,7 @@ test.describe('Product Builds OSAC @product-builds-osac', () => {
   });
 
   test('should show the latest published build from fixture data', async ({ page }) => {
-    await page.goto('/#/product-builds/osac');
+    await page.goto('/#/product-builds/osac?projectId=osac');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
@@ -52,7 +58,7 @@ test.describe('Product Builds OSAC @product-builds-osac', () => {
   });
 
   test('should expand a build history entry', async ({ page }) => {
-    await page.goto('/#/product-builds/osac');
+    await page.goto('/#/product-builds/osac?projectId=osac');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 

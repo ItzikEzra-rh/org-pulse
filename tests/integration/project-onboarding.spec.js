@@ -141,6 +141,62 @@ test.describe('Project onboarding @project-onboarding', () => {
     expect(page.url()).toContain(`projectId=${FLIGHTCTL}`);
   });
 
+  test('Flight Control Product Builds uses a project-neutral sidebar label', async ({ page }) => {
+    await page.goto(`/#/product-builds/osac?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.locator('#project-selector')).toHaveValue(FLIGHTCTL);
+    await expect(page.getByRole('heading', { name: 'Build Registry' })).toBeVisible();
+    await expect(page.locator('aside nav button[aria-label="Build Registry"]')).toBeVisible();
+    await expect(page.locator('aside nav button[aria-label="OSAC"]')).toHaveCount(0);
+  });
+
+  test('AI Commits proxies the selected Flight Control scanner', async ({ page }) => {
+    let scannerResponse = null;
+    page.on('response', async (response) => {
+      if (response.url().includes('/api/modules/ai-impact/ai-commits-proxy')) {
+        scannerResponse = {
+          status: response.status(),
+          url: response.url(),
+          projectId: response.headers()['x-orgpulse-project-id']
+        };
+      }
+    });
+
+    await page.goto(`/#/ai-impact/ai-commits?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(scannerResponse?.status).toBe(200);
+    expect(new URL(scannerResponse.url).searchParams.get('projectId')).toBe(FLIGHTCTL);
+    expect(scannerResponse.projectId).toBe(FLIGHTCTL);
+  });
+
+  test('CI Duty shows its Flight Control disposition instead of the OSAC roster', async ({ page }) => {
+    let dutyResponse = null;
+    page.on('response', async (response) => {
+      if (response.url().includes('/api/modules/system-health/ci-duty')) {
+        dutyResponse = { status: response.status(), body: await response.json() };
+      }
+    });
+
+    await page.goto(`/#/system-health/ci-duty?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(dutyResponse).toMatchObject({
+      status: 200,
+      body: {
+        projectId: FLIGHTCTL,
+        state: 'inapplicable',
+        reason: 'user-approved-osac-only',
+        data: null
+      }
+    });
+    await expect(page.getByRole('heading', { name: 'CI Duty is not applicable' })).toBeVisible();
+  });
+
   test('project evidence surfaces fill from collected artifacts', async ({ page }) => {
     const surfaces = [
       {

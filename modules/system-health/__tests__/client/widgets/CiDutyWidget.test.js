@@ -5,6 +5,15 @@ vi.mock('@shared/client/services/api.js', () => ({
   apiRequest: vi.fn()
 }))
 
+vi.mock('@shared/client/composables/useProjectId.js', async () => {
+  const { ref } = await import('vue')
+  const projectId = ref('flightctl')
+  return {
+    useProjectId: () => projectId,
+    projectQuery: value => value ? `?projectId=${encodeURIComponent(value)}` : ''
+  }
+})
+
 const mockNavigateTo = vi.fn()
 vi.mock('@shared/client/composables/useModuleLink.js', () => ({
   useModuleLink: () => ({
@@ -76,11 +85,25 @@ describe('CiDutyWidget', () => {
     ]))
     const wrapper = mount(CiDutyWidget, { props: { size: 'half' } })
     await flushPromises()
-    expect(apiRequest).toHaveBeenCalledWith('/modules/system-health/ci-duty')
+    expect(apiRequest).toHaveBeenCalledWith('/modules/system-health/ci-duty?projectId=flightctl')
     expect(wrapper.text()).toContain('Riccardo Piccoli')
     expect(wrapper.text()).toContain('RP')
     expect(wrapper.text()).toContain('CaaS')
     expect(wrapper.text()).toContain('Current')
+  })
+
+  it('shows an inapplicable message without rendering the OSAC duty roster', async () => {
+    apiRequest.mockResolvedValue({
+      projectId: 'flightctl',
+      state: 'inapplicable',
+      reason: 'user-approved-osac-only',
+      data: null
+    })
+    const wrapper = mount(CiDutyWidget, { props: { size: 'half' } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('CI Duty is not applicable to this project')
+    expect(wrapper.text()).not.toContain('Riccardo Piccoli')
   })
 
   it('renders the supporting copy alongside the current lead', async () => {

@@ -5,6 +5,15 @@ vi.mock('@shared/client/services/api.js', () => ({
   apiRequest: vi.fn()
 }))
 
+vi.mock('@shared/client/composables/useProjectId.js', async () => {
+  const { ref } = await import('vue')
+  const projectId = ref('flightctl')
+  return {
+    useProjectId: () => projectId,
+    projectQuery: value => value ? `?projectId=${encodeURIComponent(value)}` : ''
+  }
+})
+
 import { apiRequest } from '@shared/client/services/api.js'
 import CiDutyView from '../../client/views/CiDutyView.vue'
 
@@ -54,7 +63,7 @@ describe('CiDutyView', () => {
     await flushPromises()
     await flushPromises()
 
-    expect(apiRequest).toHaveBeenCalledWith('/modules/system-health/ci-duty')
+    expect(apiRequest).toHaveBeenCalledWith('/modules/system-health/ci-duty?projectId=flightctl')
     expect(wrapper.text()).toContain('Riccardo Piccoli')
     expect(wrapper.text()).toContain('RP')
     expect(wrapper.text()).toContain('CaaS')
@@ -62,6 +71,22 @@ describe('CiDutyView', () => {
     expect(wrapper.text()).toContain('Networking')
     expect(wrapper.text()).toContain('Current')
     expect(wrapper.text()).toContain('Up Next')
+  })
+
+  it('renders an explicit inapplicable state without OSAC roster data', async () => {
+    apiRequest.mockResolvedValue({
+      projectId: 'flightctl',
+      state: 'inapplicable',
+      reason: 'user-approved-osac-only',
+      data: null
+    })
+    const wrapper = mount(CiDutyView)
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('CI Duty is not applicable')
+    expect(wrapper.text()).not.toContain('Riccardo Piccoli')
+    expect(wrapper.text()).not.toContain('Upcoming Rotation')
   })
 
   it('shows "no current duty" state distinct from "no next duty"', async () => {

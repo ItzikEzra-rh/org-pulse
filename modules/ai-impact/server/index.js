@@ -4,6 +4,11 @@ module.exports = function registerRoutes(router, context) {
   const { resolveProjectSelection } = require('../../../shared/server/project-profile');
   const { readProjectProvenance } = require('./project-provenance');
   const { readProjectDesignDocs } = require('./project-design-docs');
+  const {
+    resolveAiCommitsSource,
+    transformAiCommitsHtml,
+    renderAiCommitsStatePage
+  } = require('./ai-commits-source');
 
   // The OSAC autofix/EP-review/doc pipeline routes are OSAC-only data sources
   // when a project has no project-qualified artifact: a non-OSAC project never
@@ -577,8 +582,7 @@ module.exports = function registerRoutes(router, context) {
 
   // --- AI Commits Scanner proxy ---
 
-  const AI_COMMITS_URL = 'https://ai-commits-scanner-fd01cc.pages.redhat.com/osac/index.html';
-  let aiCommitsCache = { html: null, fetchedAt: 0 };
+  const aiCommitsCache = new Map();
   const AI_COMMITS_TTL = 60 * 60 * 1000;
   const MAX_REDIRECTS = 5;
   const FETCH_TIMEOUT_MS = 15000;
@@ -615,11 +619,19 @@ module.exports = function registerRoutes(router, context) {
    * @openapi
    * /api/modules/ai-impact/ai-commits-proxy:
    *   get:
-   *     summary: Proxy the AI Commits Scanner report with modifications
+   *     summary: Proxy the selected project's AI Commits Scanner report
    *     tags: [ai-impact]
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: false
+   *         description: Required in multi-project deployments.
+   *         schema: { type: string }
    *     responses:
    *       200:
-   *         description: Modified HTML report
+   *         description: Project-qualified HTML report or explicit unavailable state
+   *       404:
+   *         description: Unknown project
    */
   // Project-qualified AI provenance: real evidence per published project
   // (scanner totals, source markers, provenance footers) from the data repo's
@@ -673,48 +685,40 @@ module.exports = function registerRoutes(router, context) {
   });
 
   router.get('/ai-commits-proxy', requireScope('ai-impact:read'), async function(req, res) {
+    const source = resolveAiCommitsSource(context.projects, req.query);
+    if (source.status !== 200 || source.state === 'unavailable') {
+      const status = source.status === 200 ? 200 : source.status;
+      const message = source.reason || source.error || 'No AI Commits scanner is configured for this project.';
+      res.status(status);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      if (source.state) res.setHeader('X-OrgPulse-State', source.state);
+      return res.send(renderAiCommitsStatePage({
+        title: source.state === 'unavailable'
+          ? `AI Commits unavailable for ${source.displayName}`
+          : 'AI Commits project unavailable',
+        message
+      }));
+    }
+
+    const { url: aiCommitsUrl, projectId } = source;
     try {
       const now = Date.now();
-      if (!aiCommitsCache.html || now - aiCommitsCache.fetchedAt > AI_COMMITS_TTL) {
-        let html = await fetchPage(AI_COMMITS_URL);
-
-        // Inject <base> so relative paths (../vendor/apexcharts.min.js etc.)
-        // resolve against the original site, not the proxy URL.
-        const baseHref = AI_COMMITS_URL.replace(/\/[^/]*$/, '/');
-        html = html.replace(/<head([^>]*)>/, `<head$1><base href="${baseHref}">`);
-
-        // Make osac-project link open in a new tab
-        html = html.replace(
-          /(<a\s+href="https:\/\/github\.com\/osac-project")/g,
-          '$1 target="_blank" rel="noopener noreferrer"'
+      const cached = aiCommitsCache.get(aiCommitsUrl);
+      if (!cached || now - cached.fetchedAt > AI_COMMITS_TTL) {
+        const html = transformAiCommitsHtml(
+          await fetchPage(aiCommitsUrl),
+          aiCommitsUrl,
+          projectId
         );
-
-        // Remove rh-ecosystem-edge <details> block
-        html = html.replace(
-          /<details>\s*<summary><a[^>]*>rh-ecosystem-edge<\/a>[\s\S]*?<\/details>/g,
-          ''
-        );
-
-        // Remove "Monthly Trend — Red Hat" section (match from <section> to next </section>)
-        html = html.replace(
-          /<section><h2>Monthly Trend — Red Hat<\/h2>[\s\S]*?<\/section>/,
-          ''
-        );
-
-        // Remove rh-ecosystem-edge rows from tables
-        html = html.replace(
-          /<tr><td>(?:[^<](?!<\/td>))*rh-ecosystem-edge(?:[^<](?!<\/td>))*<\/td>(?:<td[^>]*>[^<]*<\/td>)*<\/tr>/g,
-          ''
-        );
-
-        aiCommitsCache = { html, fetchedAt: now };
+        aiCommitsCache.set(aiCommitsUrl, { html, fetchedAt: now });
       }
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' https:; frame-ancestors 'self'");
-      res.send(aiCommitsCache.html);
+      res.setHeader('X-OrgPulse-Project-Id', projectId);
+      res.send(aiCommitsCache.get(aiCommitsUrl).html);
     } catch (err) {
       console.error('[ai-commits-proxy]', err.message);
-      res.redirect(AI_COMMITS_URL);
+      res.redirect(aiCommitsUrl);
     }
   });
 };

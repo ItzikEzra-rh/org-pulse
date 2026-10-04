@@ -53,7 +53,8 @@ describe('ci-duty routes', () => {
       requireAuth: vi.fn(),
       requireScope: () => (req, res, next) => next(),
       projects: {
-        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null
+        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null,
+        list: () => [{ projectId: 'osac' }]
       }
     }
     registerCiDutyRoutes(router, context)
@@ -119,5 +120,52 @@ describe('ci-duty routes', () => {
     const res = makeRes()
     handler({ query: { projectId: '' } }, res)
     expect(res._status).toBe(400)
+  })
+
+  it('fails closed when a multi-project request omits projectId', () => {
+    const readFromStorage = vi.fn(() => makeRoster())
+    const r = makeRouter()
+    registerCiDutyRoutes(r, {
+      ...context,
+      storage: { readFromStorage },
+      projects: {
+        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null,
+        list: () => [{ projectId: 'flightctl' }, { projectId: 'osac' }]
+      }
+    })
+
+    const res = makeRes()
+    r._routes.get['/ci-duty'].at(-1)({}, res)
+
+    expect(res._json).toEqual({
+      projectId: null,
+      state: 'unavailable',
+      reason: 'project-selection-required',
+      data: null
+    })
+    expect(readFromStorage).not.toHaveBeenCalled()
+  })
+
+  it('treats an unqualified single Flightctl deployment as inapplicable', () => {
+    const readFromStorage = vi.fn(() => makeRoster())
+    const r = makeRouter()
+    registerCiDutyRoutes(r, {
+      ...context,
+      storage: { readFromStorage },
+      projects: {
+        get: projectId => projectId === 'flightctl' ? { projectId } : null,
+        list: () => [{ projectId: 'flightctl' }]
+      }
+    })
+
+    const res = makeRes()
+    r._routes.get['/ci-duty'].at(-1)({}, res)
+
+    expect(res._json).toMatchObject({
+      projectId: 'flightctl',
+      state: 'inapplicable',
+      reason: 'user-approved-osac-only'
+    })
+    expect(readFromStorage).not.toHaveBeenCalled()
   })
 })

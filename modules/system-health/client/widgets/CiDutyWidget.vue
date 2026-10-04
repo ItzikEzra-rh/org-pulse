@@ -10,7 +10,7 @@ defineProps({
 })
 
 const { navigateTo } = useModuleLink()
-const { loading, error, notFound, load, currentEntry, nextEntry, workgroupColors } = useCiDuty()
+const { loading, error, notFound, inapplicable, unavailable, load, currentEntry, nextEntry, workgroupColors } = useCiDuty()
 
 onMounted(load)
 </script>
@@ -40,6 +40,14 @@ onMounted(load)
     <!-- Error / missing data -->
     <p v-else-if="error || notFound" class="text-sm text-gray-500 dark:text-gray-400 py-1">
       CI Duty roster unavailable.
+    </p>
+
+    <p v-else-if="inapplicable" class="text-sm text-gray-500 dark:text-gray-400 py-1">
+      CI Duty is not applicable to this project.
+    </p>
+
+    <p v-else-if="unavailable" class="text-sm text-gray-500 dark:text-gray-400 py-1">
+      Select a project to load CI Duty status.
     </p>
 
     <template v-else>

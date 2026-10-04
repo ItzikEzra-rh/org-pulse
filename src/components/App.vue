@@ -7,6 +7,7 @@
       :active-module="activeModule"
       :active-view-id="activeViewId"
       :route-params="routeParams"
+      :project-id="projectContextProjectId"
       :user="authUser"
       :is-admin="authIsAdmin"
       :is-team-admin="authIsTeamAdmin"
