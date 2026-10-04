@@ -52,6 +52,19 @@ describe('AI Commits scanner project selection', () => {
     })
   })
 
+  it('keeps the legacy OSAC scanner in a deployment with no published profiles', () => {
+    const projects = { get: () => null, list: () => [] }
+    expect(resolveAiCommitsSource(projects, {})).toMatchObject({
+      status: 200,
+      projectId: 'osac',
+      url: OSAC_URL
+    })
+    expect(resolveAiCommitsSource(projects, { projectId: 'flightctl' })).toMatchObject({
+      status: 404,
+      error: 'Unknown project'
+    })
+  })
+
   it('uses the only published profile when a single-project deployment omits projectId', () => {
     const projects = makeProjects()
     projects.list = () => [projects.get('flightctl')]

@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const config = ref(null)
 const loading = ref(true)
@@ -8,21 +9,37 @@ const saving = ref(false)
 const saveError = ref(null)
 const saveSuccess = ref(false)
 const statusData = ref(null)
+const configError = ref('')
+const projectId = useProjectId()
+let configRequestId = 0
+let statusRequestId = 0
 
 async function loadConfig() {
+  const requestId = ++configRequestId
+  const requestedProjectId = projectId.value
   loading.value = true
+  config.value = null
+  configError.value = ''
   try {
-    config.value = await apiRequest('/modules/releases/execution/config')
-  } catch {
+    const data = await apiRequest(`/modules/releases/execution/config${projectQuery(requestedProjectId)}`)
+    if (requestId !== configRequestId || projectId.value !== requestedProjectId) return
+    config.value = data
+  } catch (error) {
+    if (requestId !== configRequestId || projectId.value !== requestedProjectId) return
     config.value = null
+    configError.value = error.data?.error || error.message || 'Execution configuration is unavailable for this project.'
   } finally {
-    loading.value = false
+    if (requestId === configRequestId && projectId.value === requestedProjectId) loading.value = false
   }
 }
 
 async function loadStatus() {
+  const requestId = ++statusRequestId
+  const requestedProjectId = projectId.value
   try {
-    statusData.value = await apiRequest('/modules/releases/execution/status')
+    const data = await apiRequest(`/modules/releases/execution/status${projectQuery(requestedProjectId)}`)
+    if (requestId !== statusRequestId || projectId.value !== requestedProjectId) return
+    statusData.value = data
   } catch {
     // ignore
   }
@@ -42,7 +59,7 @@ async function saveConfig() {
       refreshIntervalHours: config.value.refreshIntervalHours,
       enabled: config.value.enabled
     }
-    const result = await apiRequest('/modules/releases/execution/config', {
+    const result = await apiRequest(`/modules/releases/execution/config${projectQuery(projectId.value)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toSave)
@@ -88,11 +105,21 @@ onMounted(() => {
   loadConfig()
   loadStatus()
 })
+
+watch(projectId, () => {
+  statusData.value = null
+  loadConfig()
+  loadStatus()
+}, { flush: 'sync' })
 </script>
 
 <template>
   <div class="space-y-6">
     <div v-if="loading" class="text-gray-500 dark:text-gray-400">Loading configuration...</div>
+
+    <div v-else-if="configError" role="status" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 text-sm text-gray-600 dark:text-gray-300">
+      {{ configError }}
+    </div>
 
     <template v-else-if="config">
       <!-- Connection Status -->

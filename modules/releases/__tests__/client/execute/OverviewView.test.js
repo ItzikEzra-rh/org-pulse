@@ -64,10 +64,15 @@ function mockNav() {
   return { navigateTo: vi.fn(), goBack: vi.fn(), updateParams: vi.fn(), params: ref({}) }
 }
 
+function setProjectId(projectId) {
+  window.location.hash = `#/releases/execute?projectId=${projectId}`
+  window.dispatchEvent(new Event('urlchange'))
+}
+
 async function mountWithData(detailsByKey = {}) {
   mockApiRequest.mockImplementation((url) => {
     if (url.indexOf('/versions') !== -1) return Promise.resolve({ versions: ['1.0', '2.0'] })
-    const detailMatch = url.match(/\/execution\/features\/([^/?]+)$/)
+    const detailMatch = url.match(/\/execution\/features\/([^/?]+)(?:\?.*)?$/)
     if (detailMatch) {
       const detail = detailsByKey[detailMatch[1]]
       return detail ? Promise.resolve(detail) : Promise.reject(new Error(`Feature ${detailMatch[1]} not found`))
@@ -86,6 +91,38 @@ describe('OverviewView (Feature List)', () => {
   beforeEach(() => {
     mockApiRequest.mockReset()
     sessionStorage.clear()
+    setProjectId('osac')
+  })
+
+  it('requests Flight Control execution data and shows unavailable instead of OSAC features', async () => {
+    setProjectId('flightctl')
+    mockApiRequest.mockImplementation((url) => {
+      if (url.includes('/versions')) {
+        return Promise.resolve({
+          projectId: 'flightctl',
+          state: 'unavailable',
+          message: 'Release execution versions have not been collected for this project.',
+          versions: []
+        })
+      }
+      return Promise.resolve({
+        projectId: 'flightctl',
+        state: 'unavailable',
+        message: 'Release execution features have not been collected for Flight Control.',
+        featureCount: 0,
+        features: []
+      })
+    })
+
+    const wrapper = mount(OverviewView, {
+      global: { provide: { moduleNav: mockNav() }, stubs: { Teleport: true, Transition: true } }
+    })
+    await flushPromises()
+
+    expect(mockApiRequest).toHaveBeenCalledWith('/modules/releases/execution/features?projectId=flightctl')
+    expect(mockApiRequest).toHaveBeenCalledWith('/modules/releases/execution/versions?projectId=flightctl')
+    expect(wrapper.text()).toContain('Release execution features have not been collected for Flight Control.')
+    expect(wrapper.text()).not.toMatch(/OSAC-\d+/)
   })
 
   it('defaults to Board view with three execution columns plus a separate coverage total, losing no features', async () => {
@@ -343,7 +380,7 @@ describe('OverviewView (Feature List)', () => {
     // Real focus/activeElement behavior requires the tree to be attached to the document.
     mockApiRequest.mockImplementation((url) => {
       if (url.indexOf('/versions') !== -1) return Promise.resolve({ versions: ['1.0', '2.0'] })
-      if (url.endsWith('/features/COMPLETE-1')) return Promise.resolve({ key: 'COMPLETE-1', epics: [] })
+      if (url.includes('/features/COMPLETE-1')) return Promise.resolve({ key: 'COMPLETE-1', epics: [] })
       return Promise.resolve({ features: FEATURES, fetchedAt: '2026-09-10T00:00:00Z', featureCount: FEATURES.length })
     })
     const wrapper = mount(OverviewView, {
@@ -414,8 +451,8 @@ describe('OverviewView (Feature List)', () => {
     }
     mockApiRequest.mockImplementation((url) => {
       if (url.indexOf('/versions') !== -1) return Promise.resolve({ versions: ['1.0', '2.0'] })
-      if (url.endsWith('/features/COMPLETE-1')) return Promise.resolve(detailsByKey['COMPLETE-1'])
-      if (url.endsWith('/features/NS-1')) return new Promise(resolve => { resolveNs = resolve })
+      if (url.includes('/features/COMPLETE-1')) return Promise.resolve(detailsByKey['COMPLETE-1'])
+      if (url.includes('/features/NS-1')) return new Promise(resolve => { resolveNs = resolve })
       return Promise.resolve({ features: FEATURES, fetchedAt: '2026-09-10T00:00:00Z', featureCount: FEATURES.length })
     })
     const wrapper = mount(OverviewView, {

@@ -19,6 +19,11 @@ const { logAudit } = require('../planning/audit-log');
 const { mergeAiReview } = require('./ai-review-merge');
 const { writeFeatures } = require('./feature-store');
 const { getInvalidPullRequestUrlFields } = require('../../../../shared/server/feature-links');
+const {
+  resolveReleaseProject,
+  sendProjectScopeError,
+  unavailableProjectData
+} = require('../project-scope');
 
 const DATA_PREFIX = 'releases/execution';
 const jsonLimit = express.json({ limit: '10mb' });
@@ -205,6 +210,13 @@ module.exports = function registerExecutionRoutes(router, context) {
   if (context.secrets) scheduler.init(context.secrets, jira);
 
   const { storage, requireAuth, requireScope } = context;
+  const projects = context.projects || null;
+
+  function selectedProject(req, res) {
+    const selection = resolveReleaseProject(projects, req.query);
+    if (sendProjectScopeError(res, selection)) return null;
+    return selection;
+  }
 
   function readDataFile(relativePath) {
     return storage.readFromStorage(`${DATA_PREFIX}/${relativePath}`);
@@ -212,19 +224,17 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /features — list all features with summary metrics
   router.get('/features', requireAuth, requireScope('releases:read'), function(req, res) {
-    // The legacy feature list is an OSAC-only data source: a non-OSAC project
-    // never receives OSAC features. Serve a truthful empty envelope until a
-    // project-qualified feature list is collected for the project.
-    const projectId = req.query?.projectId;
-    if (projectId && projectId !== 'osac') {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
       return res.json({
-        projectId,
-        state: 'empty',
-        freshness: 'unknown',
-        fetchedAt: null,
+        ...unavailableProjectData(
+          selection.projectId,
+          'release-execution',
+          'Release execution features have not been collected for this project.'
+        ),
         featureCount: 0,
-        features: [],
-        message: 'No project-qualified feature list collected for this project.'
+        features: []
       });
     }
     const index = readDataFile('index.json');
@@ -280,11 +290,17 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /features/:key — full feature detail
   router.get('/features/:key', requireAuth, requireScope('releases:read'), function(req, res) {
-    // OSAC-only data source: a non-OSAC project never receives OSAC feature
-    // detail. 404 truthfully until a project-qualified feature list exists.
-    const projectId = req.query?.projectId;
-    if (projectId && projectId !== 'osac') {
-      return res.status(404).json({ error: `No project-qualified feature detail for ${projectId}` });
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.status(404).json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'release-execution',
+          'Release execution feature details have not been collected for this project.'
+        ),
+        error: `No project-qualified feature detail for ${selection.projectId}`
+      });
     }
     const key = req.params.key.toUpperCase();
 
@@ -306,6 +322,18 @@ module.exports = function registerExecutionRoutes(router, context) {
   const PER_KEY_COOLDOWN_MS = 60 * 1000;
 
   router.post('/features/:key/refresh', requireAuth, requireScope('releases:read'), async function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.status(409).json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'release-execution',
+          'Release execution refresh is not configured for this project.'
+        ),
+        error: 'Release execution refresh is unavailable for this project'
+      });
+    }
     const key = req.params.key.toUpperCase();
 
     if (!/^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
@@ -348,6 +376,22 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /status — data freshness and sync info
   router.get('/status', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'release-execution',
+          'Release execution status is unavailable because this project has no execution collection.'
+        ),
+        dataAvailable: false,
+        schemaVersion: null,
+        featureCount: 0,
+        configured: false,
+        tokenSource: null
+      });
+    }
     const index = readDataFile('index.json');
     const lastFetch = readDataFile('last-fetch.json');
     const config = loadConfig(storage);
@@ -423,6 +467,18 @@ module.exports = function registerExecutionRoutes(router, context) {
   // milestones — see /epics), for consumers like Epics by Release that understand
   // Epic-level context membership.
   router.get('/versions', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'release-execution',
+          'Release execution versions have not been collected for this project.'
+        ),
+        versions: []
+      });
+    }
     const index = readDataFile('index.json');
     if (!index || !index.features) {
       return res.json({ versions: [] });
@@ -457,9 +513,24 @@ module.exports = function registerExecutionRoutes(router, context) {
   // the selected version — its true Fix Version is preserved (never relabeled), and only
   // the directly-matching Epic(s) are shown under it, not its full Epic list.
   router.get('/epics', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
     const version = req.query.version;
     if (!version) {
       return res.status(400).json({ error: 'version query parameter is required' });
+    }
+
+    if (selection.projectId !== 'osac') {
+      return res.json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'release-execution',
+          'Release execution epics have not been collected for this project.'
+        ),
+        version,
+        featureCount: 0,
+        features: []
+      });
     }
 
     const index = readDataFile('index.json');
@@ -521,6 +592,18 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // POST /refresh — trigger manual data refresh (admin only)
   router.post('/refresh', context.requireAdmin, requireScope('releases:write'), async function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.status(409).json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'release-execution',
+          'Release execution refresh is not configured for this project.'
+        ),
+        error: 'Release execution refresh is unavailable for this project'
+      });
+    }
     if (context.isRefreshRunning && context.isRefreshRunning()) {
       return res.status(409).json({ status: 'error', message: 'A global refresh is already in progress' });
     }
@@ -544,6 +627,15 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /config — get current fetch configuration (admin only)
   router.get('/config', context.requireAdmin, requireScope('releases:write'), function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.status(404).json(unavailableProjectData(
+        selection.projectId,
+        'release-execution',
+        'Release execution configuration is not defined for this project.'
+      ));
+    }
     const config = loadConfig(storage);
     res.json({
       ...config,
@@ -554,6 +646,18 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // POST /config — save fetch configuration (admin only)
   router.post('/config', context.requireAdmin, requireScope('releases:write'), async function(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return;
+    if (selection.projectId !== 'osac') {
+      return res.status(409).json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'release-execution',
+          'Release execution configuration is not defined for this project.'
+        ),
+        error: 'Release execution configuration is unavailable for this project'
+      });
+    }
     try {
       const result = await onConfigSave(storage, req.body);
       logAudit(storage.readFromStorage, storage.writeToStorage, {

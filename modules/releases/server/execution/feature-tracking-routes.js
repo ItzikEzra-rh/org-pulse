@@ -8,6 +8,11 @@
  */
 
 const { readRegistry } = require('../registry')
+const {
+  resolveReleaseProject,
+  sendProjectScopeError,
+  unavailableProjectData
+} = require('../project-scope')
 
 const TRACKING_DIR = 'releases/execution'
 const TRACKING_PREFIX = 'tracking-data-'
@@ -54,6 +59,13 @@ module.exports = function registerFeatureTrackingRoutes(router, context) {
   const storage = context.storage
   const requireAuth = context.requireAuth
   const requireScope = context.requireScope
+  const projects = context.projects || null
+
+  function selectedProject(req, res) {
+    const selection = resolveReleaseProject(projects, req.query)
+    if (sendProjectScopeError(res, selection)) return null
+    return selection
+  }
 
   /**
    * @openapi
@@ -64,8 +76,20 @@ module.exports = function registerFeatureTrackingRoutes(router, context) {
    *     responses:
    *       200:
    *         description: Array of release tracking summaries
-   */
+  */
   router.get('/tracking/releases', requireAuth, requireScope('releases:read'), function (req, res) {
+    const selection = selectedProject(req, res)
+    if (!selection) return
+    if (selection.projectId !== 'osac') {
+      return res.json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'feature-tracking',
+          'Feature tracking has not been collected for this project.'
+        ),
+        releases: []
+      })
+    }
     const registry = readRegistry(storage.readFromStorage)
     const releaseIds = orderReleaseIds(listTrackingReleaseIds(storage), registry)
 
@@ -113,8 +137,20 @@ module.exports = function registerFeatureTrackingRoutes(router, context) {
    *         description: Missing releaseId parameter
    *       404:
    *         description: No tracking data found for this release
-   */
+  */
   router.get('/tracking/data', requireAuth, requireScope('releases:read'), function (req, res) {
+    const selection = selectedProject(req, res)
+    if (!selection) return
+    if (selection.projectId !== 'osac') {
+      return res.status(404).json({
+        ...unavailableProjectData(
+          selection.projectId,
+          'feature-tracking',
+          'Feature tracking has not been collected for this project.'
+        ),
+        error: `No project-qualified feature tracking data for ${selection.projectId}`
+      })
+    }
     const releaseId = req.query.releaseId
     if (typeof releaseId !== 'string' || !VALID_RELEASE_ID.test(releaseId)) {
       return res.status(400).json({ error: 'releaseId query parameter must be a non-empty string' })

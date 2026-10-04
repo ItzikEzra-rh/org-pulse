@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { useFeatureTraffic, useFeatureDetail, useVersions } from '../composables/useFeatureTraffic'
 import StatusBadge from '../components/StatusBadge.vue'
 import AIInfoBubble from '../components/AIInfoBubble.vue'
@@ -24,7 +25,16 @@ import {
 } from '../utils/progress'
 import { preparationHelpText } from '../utils/readiness'
 
-const { features, fetchedAt, loading, error, loadFeatures } = useFeatureTraffic()
+const {
+  features,
+  fetchedAt,
+  loading,
+  error,
+  state: featureDataState,
+  message: featureDataMessage,
+  loadFeatures
+} = useFeatureTraffic()
+const projectId = useProjectId()
 const { versions, loadVersions } = useVersions()
 const {
   feature: detailFeature,
@@ -434,6 +444,12 @@ onMounted(() => {
   window.addEventListener('resize', updateContentWidth)
 })
 
+watch(projectId, () => {
+  closeDrawer()
+  loadFeatures()
+  loadVersions()
+}, { flush: 'sync' })
+
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick)
   window.removeEventListener('resize', updateContentWidth)
@@ -658,6 +674,14 @@ onBeforeUnmount(() => {
     <!-- Loading -->
     <div v-if="loading" class="text-center py-12 text-gray-500">
       Loading feature data...
+    </div>
+
+    <div
+      v-else-if="featureDataState === 'unavailable'"
+      role="status"
+      class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 text-sm text-gray-600 dark:text-gray-300"
+    >
+      {{ featureDataMessage || 'Release execution data has not been collected for this project.' }}
     </div>
 
     <template v-else>

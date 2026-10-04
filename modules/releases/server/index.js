@@ -210,6 +210,7 @@ module.exports = function registerRoutes(router, context) {
   var executionRouter = express.Router();
   registerExecutionRoutes(executionRouter, {
     storage,
+    projects: context.projects || null,
     requireAuth,
     requireAdmin,
     requireScope,
@@ -221,6 +222,7 @@ module.exports = function registerRoutes(router, context) {
   });
   registerFeatureTrackingRoutes(executionRouter, {
     storage,
+    projects: context.projects || null,
     requireAuth,
     requireScope
   });
@@ -245,6 +247,7 @@ module.exports = function registerRoutes(router, context) {
   var hygieneRouter = express.Router();
   registerHygieneRoutes(hygieneRouter, {
     storage,
+    projects: context.projects || null,
     requireAuth,
     requireAdmin,
     requirePlanningManager,

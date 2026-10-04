@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { useVersions, useEpicsByRelease } from '../composables/useFeatureTraffic'
 import {
   useComponentStatusFilter,
@@ -14,7 +15,8 @@ import StatusBadge from '../components/StatusBadge.vue'
 import EpicBreakdown from '../components/EpicBreakdown.vue'
 import ComponentStatusFilterBar from '../components/ComponentStatusFilterBar.vue'
 
-const { versions, loadVersions } = useVersions()
+const { versions, state: versionState, message: versionMessage, loadVersions } = useVersions()
+const projectId = useProjectId()
 const { features, fetchedAt, loading, error, loadEpicsByRelease } = useEpicsByRelease()
 const {
   selectedComponents,
@@ -96,10 +98,25 @@ onMounted(async () => {
     selectedVersion.value = versions.value[0]
   }
 })
+
+watch(projectId, async () => {
+  selectedVersion.value = ''
+  clearFilters()
+  await loadVersions('epics')
+  if (versions.value.length > 0) selectedVersion.value = versions.value[0]
+}, { flush: 'sync' })
 </script>
 
 <template>
   <div class="space-y-6">
+    <div
+      v-if="versionState === 'unavailable'"
+      role="status"
+      class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 text-sm text-gray-600 dark:text-gray-300"
+    >
+      {{ versionMessage || 'Release execution versions have not been collected for this project.' }}
+    </div>
+
     <!-- Header -->
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div>

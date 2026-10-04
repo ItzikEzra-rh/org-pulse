@@ -1,38 +1,61 @@
 import { ref } from 'vue'
 import { apiRequest } from '@shared/client/services/api'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const releases = ref([])
 const trackingData = ref(null)
 const loading = ref(false)
 const error = ref(null)
+const state = ref(null)
+const message = ref(null)
+const projectId = useProjectId()
+let releasesRequestId = 0
+let trackingRequestId = 0
 
 export function useFeatureTracking() {
   async function loadReleases() {
+    const requestId = ++releasesRequestId
+    const requestedProjectId = projectId.value
+    releases.value = []
+    trackingData.value = null
+    state.value = null
+    message.value = null
+    error.value = null
     try {
-      var data = await apiRequest('/modules/releases/execution/tracking/releases')
+      var data = await apiRequest(`/modules/releases/execution/tracking/releases${projectQuery(requestedProjectId)}`)
+      if (requestId !== releasesRequestId || projectId.value !== requestedProjectId) return
       releases.value = data.releases || []
-      error.value = null
+      state.value = data.state || 'supported'
+      message.value = data.message || data.error || null
     } catch (err) {
+      if (requestId !== releasesRequestId || projectId.value !== requestedProjectId) return
       releases.value = []
       error.value = err.message
     }
   }
 
   async function loadTrackingData(releaseId) {
+    const requestId = ++trackingRequestId
+    const requestedProjectId = projectId.value
     loading.value = true
     error.value = null
+    trackingData.value = null
 
     try {
-      var url = '/modules/releases/execution/tracking/data?releaseId=' + encodeURIComponent(releaseId)
+      var params = new URLSearchParams({ releaseId })
+      if (requestedProjectId) params.set('projectId', requestedProjectId)
+      var url = '/modules/releases/execution/tracking/data?' + params.toString()
       var data = await apiRequest(url)
+      if (requestId !== trackingRequestId || projectId.value !== requestedProjectId) return null
       trackingData.value = data
       return data
     } catch (err) {
+      if (requestId !== trackingRequestId || projectId.value !== requestedProjectId) return null
       error.value = err.message
       trackingData.value = null
       return null
     } finally {
-      loading.value = false
+      if (requestId === trackingRequestId && projectId.value === requestedProjectId) loading.value = false
     }
   }
 
@@ -41,6 +64,8 @@ export function useFeatureTracking() {
     trackingData,
     loading,
     error,
+    state,
+    message,
     loadReleases,
     loadTrackingData
   }

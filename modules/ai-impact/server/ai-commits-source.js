@@ -15,6 +15,17 @@ function resolveAiCommitsSource(projects, query) {
     } catch {
       return { status: 503, error: 'Project profiles are unavailable' }
     }
+    if (availableProjects.length === 0 && typeof projects?.list === 'function') {
+      // Preserve the legacy single-project OSAC deployment while no project
+      // profiles have been published. An explicit unknown project still fails
+      // closed in resolveProjectSelection above.
+      return {
+        status: 200,
+        projectId: 'osac',
+        displayName: 'OSAC',
+        url: LEGACY_OSAC_SCANNER_URL
+      }
+    }
     if (availableProjects.length !== 1) {
       return { status: 400, error: 'projectId is required' }
     }

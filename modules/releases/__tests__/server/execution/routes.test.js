@@ -48,6 +48,17 @@ function makeRes() {
   return res
 }
 
+function makeProjects(projectIds = ['osac', 'flightctl']) {
+  const profiles = projectIds.map(projectId => ({
+    projectId,
+    displayName: projectId === 'flightctl' ? 'Flight Control' : 'OSAC'
+  }))
+  return {
+    get: (projectId) => profiles.find(profile => profile.projectId === projectId) || null,
+    list: () => profiles
+  }
+}
+
 describe('execution routes', () => {
   let router, requireAdmin, context, storage
 
@@ -218,7 +229,7 @@ describe('execution routes', () => {
       expect(res._json.features[0].key).toBe('OSAC-9')
     })
 
-    it('serves a truthful empty envelope for a non-OSAC project instead of OSAC features', () => {
+    it('serves an unavailable envelope for a non-OSAC project instead of OSAC features', () => {
       storage = makeStorage({
         'releases/execution/index.json': {
           fetchedAt: '2026-08-01T00:00:00Z',
@@ -226,7 +237,7 @@ describe('execution routes', () => {
         }
       })
       router = makeRouter()
-      registerExecutionRoutes(router, { ...context, storage })
+      registerExecutionRoutes(router, { ...context, storage, projects: makeProjects() })
 
       const handler = router._routes.get['/features'].at(-1)
       const res = makeRes()
@@ -234,9 +245,29 @@ describe('execution routes', () => {
 
       expect(res._status).toBe(200)
       expect(res._json.projectId).toBe('flightctl')
-      expect(res._json.state).toBe('empty')
+      expect(res._json.state).toBe('unavailable')
+      expect(res._json.reason).toBe('not-collected')
       expect(res._json.featureCount).toBe(0)
       expect(res._json.features).toEqual([])
+    })
+
+    it('requires project selection in a multi-project deployment', () => {
+      storage = makeStorage({
+        'releases/execution/index.json': {
+          fetchedAt: '2026-08-01T00:00:00Z',
+          features: [{ key: 'OSAC-1', summary: 'OSAC feature', status: 'New', statusCategory: 'To Do' }]
+        }
+      })
+      router = makeRouter()
+      registerExecutionRoutes(router, { ...context, storage, projects: makeProjects() })
+
+      const handler = router._routes.get['/features'].at(-1)
+      const res = makeRes()
+      handler({ query: {} }, res)
+
+      expect(res._status).toBe(400)
+      expect(res._json.reason).toBe('project-selection-required')
+      expect(res._json.features).toBeUndefined()
     })
 
     it('still serves OSAC features with and without an explicit osac projectId', () => {
@@ -258,6 +289,52 @@ describe('execution routes', () => {
       handler({ query: { projectId: 'osac' } }, osac)
       expect(osac._json.features).toHaveLength(1)
       expect(osac._json.features[0].key).toBe('OSAC-1')
+    })
+
+    it('keeps legacy OSAC reads available before any project profiles are published', () => {
+      storage = makeStorage({
+        'releases/execution/index.json': {
+          fetchedAt: '2026-08-01T00:00:00Z',
+          features: [{ key: 'OSAC-1', summary: 'OSAC feature', status: 'New', statusCategory: 'To Do' }]
+        }
+      })
+      const noProfiles = { get: () => null, list: () => [] }
+      router = makeRouter()
+      registerExecutionRoutes(router, { ...context, storage, projects: noProfiles })
+
+      const handler = router._routes.get['/features'].at(-1)
+      const legacy = makeRes()
+      handler({ query: {} }, legacy)
+      expect(legacy._status).toBe(200)
+      expect(legacy._json.features[0].key).toBe('OSAC-1')
+
+      const unknownProject = makeRes()
+      handler({ query: { projectId: 'flightctl' } }, unknownProject)
+      expect(unknownProject._status).toBe(404)
+      expect(unknownProject._json.features).toBeUndefined()
+    })
+  })
+
+  describe('GET /versions', () => {
+    it('does not return OSAC release versions for Flight Control', () => {
+      storage = makeStorage({
+        'releases/execution/index.json': {
+          features: [{ key: 'OSAC-1', fixVersions: ['osac-0.4'] }]
+        }
+      })
+      router = makeRouter()
+      registerExecutionRoutes(router, { ...context, storage, projects: makeProjects() })
+
+      const handler = router._routes.get['/versions'].at(-1)
+      const res = makeRes()
+      handler({ query: { projectId: 'flightctl' } }, res)
+
+      expect(res._json).toMatchObject({
+        projectId: 'flightctl',
+        state: 'unavailable',
+        reason: 'not-collected',
+        versions: []
+      })
     })
   })
 
@@ -319,7 +396,7 @@ describe('execution routes', () => {
         }
       })
       router = makeRouter()
-      registerExecutionRoutes(router, { ...context, storage })
+      registerExecutionRoutes(router, { ...context, storage, projects: makeProjects() })
 
       const handler = router._routes.get['/features/:key'].at(-1)
       const res = makeRes()

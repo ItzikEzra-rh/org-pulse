@@ -94,6 +94,60 @@ test.describe('Project onboarding @project-onboarding', () => {
     expect((registryBody?.releases || []).some((release) => String(release.id || '').startsWith('flightctl-'))).toBe(true);
   });
 
+  test('Releases Execute serves an honest unavailable state for Flight Control', async ({ page }) => {
+    const responses = {};
+    page.on('response', async (response) => {
+      const url = new URL(response.url());
+      if (url.pathname.endsWith('/api/modules/releases/execution/features')
+          || url.pathname.endsWith('/api/modules/releases/execution/versions')) {
+        responses[url.pathname.endsWith('/features') ? 'features' : 'versions'] = {
+          status: response.status(),
+          projectId: url.searchParams.get('projectId'),
+          body: await response.json()
+        };
+      }
+    });
+
+    await page.goto(`/#/releases/execute?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(responses.features).toMatchObject({
+      status: 200,
+      projectId: FLIGHTCTL,
+      body: { projectId: FLIGHTCTL, state: 'unavailable', features: [] }
+    });
+    expect(responses.versions).toMatchObject({
+      status: 200,
+      projectId: FLIGHTCTL,
+      body: { projectId: FLIGHTCTL, state: 'unavailable', versions: [] }
+    });
+    await expect(page.getByText('Release execution features have not been collected for this project.')).toBeVisible();
+    expect(await page.locator('text=/OSAC-\\d+/').count()).toBe(0);
+  });
+
+  test('Jira Hygiene reports unavailable for Flight Control instead of showing OSAC data', async ({ page }) => {
+    let responseBody = null;
+    let responseStatus = null;
+    page.on('response', async (response) => {
+      const url = new URL(response.url());
+      if (url.pathname.endsWith('/api/modules/releases/hygiene/project-hygiene')) {
+        responseStatus = response.status();
+        responseBody = await response.json();
+        expect(url.searchParams.get('projectId')).toBe(FLIGHTCTL);
+      }
+    });
+
+    await page.goto(`/#/releases/jira-hygiene?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(responseStatus).toBe(404);
+    expect(responseBody).toMatchObject({ projectId: FLIGHTCTL, state: 'unavailable' });
+    await expect(page.getByText(/Jira Hygiene results have not been collected for Flight Control/)).toBeVisible();
+    expect(await page.locator('text=/OSAC-\\d+/').count()).toBe(0);
+  });
+
   test('AI pipeline screens serve the project-qualified envelope for Flight Control, never OSAC rows', async ({ page }) => {
     let rfeStatus = null;
     let rfeBody = null;

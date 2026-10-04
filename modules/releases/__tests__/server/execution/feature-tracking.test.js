@@ -45,6 +45,17 @@ function makeRes() {
   return res
 }
 
+function makeProjects() {
+  const profiles = [
+    { projectId: 'osac', displayName: 'OSAC' },
+    { projectId: 'flightctl', displayName: 'Flight Control' }
+  ]
+  return {
+    get: (projectId) => profiles.find(profile => profile.projectId === projectId) || null,
+    list: () => profiles
+  }
+}
+
 function makeTrackingData(overrides) {
   return Object.assign({
     schemaVersion: 1,
@@ -194,6 +205,36 @@ describe('registerFeatureTrackingRoutes', () => {
       expect(res._status).toBe(200)
       expect(res._json.releases.map(r => r.releaseId)).toEqual(['osac-0.1'])
     })
+
+    it('does not list OSAC tracking releases for Flight Control', () => {
+      context.storage = makeStorage({
+        'releases/execution/tracking-data-osac-0.2.json': makeTrackingData()
+      })
+      context.projects = makeProjects()
+      registerFeatureTrackingRoutes(router, context)
+      const handler = router._routes.get['/tracking/releases'].at(-1)
+      const res = makeRes()
+      handler({ query: { projectId: 'flightctl' } }, res)
+
+      expect(res._json).toMatchObject({
+        projectId: 'flightctl',
+        state: 'unavailable',
+        reason: 'not-collected',
+        releases: []
+      })
+    })
+
+    it('requires project selection when multiple profiles exist', () => {
+      context.projects = makeProjects()
+      registerFeatureTrackingRoutes(router, context)
+      const handler = router._routes.get['/tracking/releases'].at(-1)
+      const res = makeRes()
+      handler({ query: {} }, res)
+
+      expect(res._status).toBe(400)
+      expect(res._json.reason).toBe('project-selection-required')
+      expect(res._json.releases).toBeUndefined()
+    })
   })
 
   describe('GET /tracking/data', () => {
@@ -225,6 +266,22 @@ describe('registerFeatureTrackingRoutes', () => {
       const res = makeRes()
       handler({ query: { releaseId: 'osac-9.9' } }, res)
       expect(res._status).toBe(404)
+    })
+
+    it('does not serve an OSAC tracking detail for Flight Control', () => {
+      context.storage = makeStorage({
+        'releases/execution/tracking-data-osac-0.2.json': makeTrackingData()
+      })
+      context.projects = makeProjects()
+      registerFeatureTrackingRoutes(router, context)
+      const handler = router._routes.get['/tracking/data'].at(-1)
+      const res = makeRes()
+      handler({ query: { releaseId: 'osac-0.2', projectId: 'flightctl' } }, res)
+
+      expect(res._status).toBe(404)
+      expect(res._json.projectId).toBe('flightctl')
+      expect(res._json.state).toBe('unavailable')
+      expect(res._json.features).toBeUndefined()
     })
 
     it('rejects a path-traversal releaseId with 400', () => {

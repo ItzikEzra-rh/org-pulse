@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useFeatureDetail } from '../../../client/execute/composables/useFeatureTraffic'
+import { useFeatureDetail, useFeatureTraffic, useVersions } from '../../../client/execute/composables/useFeatureTraffic'
 
 const mockApiRequest = vi.fn()
 
@@ -16,6 +16,8 @@ function deferred() {
 describe('useFeatureDetail', () => {
   beforeEach(() => {
     mockApiRequest.mockReset()
+    window.location.hash = '#/releases/execute?projectId=osac'
+    window.dispatchEvent(new Event('urlchange'))
   })
 
   it('loads a feature and caches the successful response', async () => {
@@ -28,6 +30,7 @@ describe('useFeatureDetail', () => {
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
     expect(mockApiRequest).toHaveBeenCalledTimes(1)
+    expect(mockApiRequest).toHaveBeenCalledWith('/modules/releases/execution/features/A-1?projectId=osac')
   })
 
   it('reselecting a cached key returns cached data without a new request', async () => {
@@ -120,5 +123,25 @@ describe('useFeatureDetail', () => {
 
     expect(feature.value).toEqual({ key: 'B-1', epics: [] })
     expect(error.value).toBeNull()
+  })
+
+  it('qualifies feature and version requests with the selected project', async () => {
+    window.location.hash = '#/releases/execute?projectId=flightctl'
+    window.dispatchEvent(new Event('urlchange'))
+    mockApiRequest.mockImplementation((url) => {
+      if (url.includes('/versions')) return Promise.resolve({ projectId: 'flightctl', state: 'unavailable', versions: [] })
+      return Promise.resolve({ projectId: 'flightctl', state: 'unavailable', features: [], featureCount: 0 })
+    })
+
+    const traffic = useFeatureTraffic()
+    const versions = useVersions()
+    await Promise.all([traffic.loadFeatures(), versions.loadVersions()])
+
+    expect(mockApiRequest).toHaveBeenCalledWith('/modules/releases/execution/features?projectId=flightctl')
+    expect(mockApiRequest).toHaveBeenCalledWith('/modules/releases/execution/versions?projectId=flightctl')
+    expect(traffic.state.value).toBe('unavailable')
+    expect(versions.state.value).toBe('unavailable')
+    expect(traffic.features.value).toEqual([])
+    expect(versions.versions.value).toEqual([])
   })
 })
