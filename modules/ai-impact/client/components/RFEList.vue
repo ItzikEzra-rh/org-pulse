@@ -1,9 +1,12 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useAuth } from '@shared/client/composables/useAuth.js'
 import RFEListItem from './RFEListItem.vue'
+import ForYouMultiSelect from './ForYouMultiSelect.vue'
 import {
   getPrdSignOffStatus, AI_INVOLVEMENT_FILTER_OPTIONS, REVIEW_STATUS_FILTER_OPTIONS,
-  SORT_FILTER_OPTIONS, getArtifactFilterOptions
+  SORT_FILTER_OPTIONS, getArtifactFilterOptions,
+  ASSIGNEE_FILTER_UNASSIGNED, collectAssigneeOptions, matchesAssigneeFilter
 } from '../utils/feature-helpers.js'
 
 const artifactFilterOptions = getArtifactFilterOptions('PRD')
@@ -21,10 +24,11 @@ const props = defineProps({
   artifactFilter: { type: String, default: 'all' },
   reviewStatusFilter: { type: String, default: 'all' },
   componentFilter: { type: String, default: 'all' },
+  assigneeFilter: { type: Array, default: () => [] },
   rfeToFeature: { type: Object, default: () => ({}) }
 })
 
-const emit = defineEmits(['update:filter', 'update:searchQuery', 'update:sortBy', 'update:passFailFilter', 'update:priorityFilter', 'update:artifactFilter', 'update:reviewStatusFilter', 'update:componentFilter', 'selectRFE'])
+const emit = defineEmits(['update:filter', 'update:searchQuery', 'update:sortBy', 'update:passFailFilter', 'update:priorityFilter', 'update:artifactFilter', 'update:reviewStatusFilter', 'update:componentFilter', 'update:assigneeFilter', 'selectRFE'])
 
 function extractNumericId(key) {
   const match = /(\d+)$/.exec(key || '')
@@ -46,6 +50,21 @@ const availableComponents = computed(() => {
     for (const c of (rfe.components || [])) values.add(c)
   }
   return [...values].sort()
+})
+
+const hasUnassignedAssignee = computed(() => props.rfes.some(rfe => !rfe.jiraAssignee))
+
+const assigneeOptions = computed(() => {
+  const opts = collectAssigneeOptions(props.rfes, rfe => rfe.jiraAssignee).map(name => ({ value: name, label: name }))
+  if (hasUnassignedAssignee.value) opts.push({ value: ASSIGNEE_FILTER_UNASSIGNED, label: 'Unassigned' })
+  return opts
+})
+
+const { user } = useAuth()
+// Hidden when no reliable jiraDisplayName is resolved for the current user — never guessed client-side.
+const meAssigneeOption = computed(() => {
+  const name = user.value?.jiraDisplayName
+  return name ? { value: name, label: 'Assigned to me' } : null
 })
 
 const sortedAndFilteredRFEs = computed(() => {
@@ -83,6 +102,9 @@ const sortedAndFilteredRFEs = computed(() => {
   if (props.componentFilter !== 'all') {
     rfes = rfes.filter(rfe => (rfe.components || []).includes(props.componentFilter))
   }
+
+  // Apply assignee filter
+  rfes = rfes.filter(rfe => matchesAssigneeFilter(rfe.jiraAssignee, props.assigneeFilter))
 
   // Apply sort
   if (props.sortBy === 'score-asc') {
@@ -131,7 +153,7 @@ const paginatedRFEs = computed(() => {
 })
 
 watch(
-  () => [props.filter, props.searchQuery, props.sortBy, props.passFailFilter, props.priorityFilter, props.artifactFilter, props.reviewStatusFilter, props.componentFilter],
+  () => [props.filter, props.searchQuery, props.sortBy, props.passFailFilter, props.priorityFilter, props.artifactFilter, props.reviewStatusFilter, props.componentFilter, props.assigneeFilter],
   () => { currentPage.value = 1 }
 )
 
@@ -217,6 +239,13 @@ function handleSelectRFE(rfe) {
         <option value="all">All Components</option>
         <option v-for="c in availableComponents" :key="c" :value="c">{{ c }}</option>
       </select>
+      <ForYouMultiSelect
+        :modelValue="assigneeFilter"
+        :options="assigneeOptions"
+        :meOption="meAssigneeOption"
+        placeholder="All Assignees"
+        @update:modelValue="emit('update:assigneeFilter', $event)"
+      />
       <select
         :value="artifactFilter"
         @change="emit('update:artifactFilter', $event.target.value)"

@@ -172,3 +172,25 @@ export function getArtifactFilterOptions(noun) {
     { value: 'missing', label: `Missing ${noun}` }
   ]
 }
+
+// Non-colliding sentinel for "no assignee" (a displayName could collide with
+// a literal string); same `special:` convention as FIX_VERSION_FILTER_UNASSIGNED
+// in constants.js.
+export const ASSIGNEE_FILTER_UNASSIGNED = 'special:unassigned-assignee'
+
+// Distinct assignee display names, sorted, for a multiselect's options.
+export function collectAssigneeOptions(items, getAssignee) {
+  const values = new Set()
+  for (const item of items) {
+    const assignee = getAssignee(item)
+    if (assignee) values.add(assignee)
+  }
+  return [...values].sort()
+}
+
+// OR semantics within the Assignee filter category; empty selection = All.
+export function matchesAssigneeFilter(assignee, selected) {
+  if (selected.length === 0) return true
+  if (assignee) return selected.includes(assignee)
+  return selected.includes(ASSIGNEE_FILTER_UNASSIGNED)
+}

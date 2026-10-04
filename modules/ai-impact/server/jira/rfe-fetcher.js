@@ -65,6 +65,7 @@ function processIssue(issue, config) {
     created: issue.fields.created,
     creator: issue.fields.creator?.name || issue.fields.creator?.emailAddress || 'unknown',
     creatorDisplayName: issue.fields.creator?.displayName || 'Unknown',
+    jiraAssignee: issue.fields.assignee?.displayName || null,
     components: (issue.fields.components || []).map(c => c.name),
     labels,
     aiInvolvement,
@@ -112,7 +113,7 @@ async function fetchRFEData(jiraRequest, config) {
 
   jql += ' ORDER BY created DESC';
 
-  const fields = 'summary,status,priority,created,creator,labels,issuelinks,components';
+  const fields = 'summary,status,priority,created,creator,assignee,labels,issuelinks,components';
 
   // Use cursor-based pagination (same as person-metrics.js)
   const issues = await fetchAllJqlResults(jiraRequest, jql, fields, { expand: 'changelog' });

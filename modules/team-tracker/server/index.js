@@ -2352,10 +2352,8 @@ module.exports = function registerRoutes(router, context) {
               projectKeys: jiraProjectKeys,
               jiraAccountId: member.jiraAccountId
             });
-            if (metrics._resolvedName) {
-              persistNameCache();
-              delete metrics._resolvedName;
-            }
+            if (metrics._resolvedName) delete metrics._resolvedName;
+            persistNameCache();
             writeToStorage(`people/${sanitizeFilename(member.jiraDisplayName)}.json`, metrics);
             result.jira = metrics;
           })());

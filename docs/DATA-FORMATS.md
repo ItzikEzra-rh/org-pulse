@@ -620,6 +620,7 @@ Cached RFE issues fetched from Jira. The module's primary data file.
       "revisedLabelDate": "2026-03-27T09:15:00.000+0000",
       "creator": "schen",
       "creatorDisplayName": "Sarah Chen",
+      "jiraAssignee": "Sarah Chen",
       "components": ["Platform Core", "ML Models"],
       "labels": ["rfe-creator-auto-created", "rfe-creator-auto-revised", "customer-request"],
       "aiInvolvement": "both",
@@ -635,6 +636,7 @@ Cached RFE issues fetched from Jira. The module's primary data file.
 ```
 
 **Notes:**
+- `jiraAssignee` is the Jira assignee's display name, or `null` when unassigned. Used by the PRD Review Assignee filter.
 - `aiInvolvement` is one of: `"both"`, `"created"`, `"revised"`, `"none"` — derived from exact label matching at fetch time
 - `createdLabelDate`: ISO timestamp of the most recent changelog addition of the created label. Set only when `aiInvolvement` is `"created"` or `"both"`. Falls back to `created` if the label was present since issue creation (no changelog entry). `null` when the created label is not present.
 - `revisedLabelDate`: ISO timestamp of the most recent changelog addition of the revised label. Same logic as `createdLabelDate`. `null` when the revised label is not present.
@@ -1085,6 +1087,7 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
       "fixVersionSource": "direct",
       "components": ["Model Serving"],
       "componentSource": "direct",
+      "assignee": "Alice Smith",
       "parentFeatureKey": "OSAC-123",
       "issueCount": 12,
       "blockerCount": 1,
@@ -1128,7 +1131,7 @@ Unified per-feature file combining data from pipeline (GitLab CI), Jira enrichme
 ```
 
 **Notes:**
-- `assignee` is an object `{ displayName, accountId }` in the detail (flattened to string in the index)
+- `assignee` is an object `{ displayName, accountId }` in the detail (flattened to string in the index). Each epic's own `assignee` (under `epics[]`) is a separate field, already a plain string or `null`
 - `colorStatus` and `ownerStatusColor` are identical (backward compat alias during migration)
 - `_sources` timestamps indicate data freshness per source; features with only `pipeline` have not been Jira-enriched yet
 - `statusNotes` (pipeline) and `statusSummary` (Jira) are different fields with different formats

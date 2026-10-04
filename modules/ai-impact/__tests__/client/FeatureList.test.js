@@ -1,8 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ref } from 'vue';
 import { mount } from '@vue/test-utils';
+
+const mockUser = ref({});
+vi.mock('@shared/client/composables/useAuth.js', () => ({
+  useAuth: () => ({ user: mockUser })
+}));
+
 import FeatureList from '../../client/components/FeatureList.vue';
 import FeatureListItem from '../../client/components/FeatureListItem.vue';
+import ForYouMultiSelect from '../../client/components/ForYouMultiSelect.vue';
 import { FIX_VERSION_FILTER_UNASSIGNED, encodeFixVersionOption } from '../../client/constants.js';
+import { ASSIGNEE_FILTER_UNASSIGNED } from '../../client/utils/feature-helpers.js';
 
 function makeFeature(overrides = {}) {
   return {
@@ -257,6 +266,82 @@ describe('FeatureList sort (aligned with PRD Review)', () => {
     const wrapper = mount(FeatureList, { props: { features: groupedFeatures, sortBy: 'default' } });
 
     expect(renderedKeys(wrapper)).toEqual(['OSAC-4000', 'OSAC-100', 'OSAC-983', 'OSAC-63']);
+  });
+});
+
+describe('FeatureList Assignee filter', () => {
+  beforeEach(() => {
+    mockUser.value = {};
+  });
+
+  function renderedKeys(wrapper) {
+    return wrapper.findAllComponents(FeatureListItem).map(c => c.props('feature').key);
+  }
+
+  const features = {
+    A: makeFeature({ key: 'A', assignee: 'Dan Manor', priority: 'Major' }),
+    B: makeFeature({ key: 'B', assignee: 'Juan Hernandez', priority: 'Minor' }),
+    C: makeFeature({ key: 'C', assignee: null, priority: 'Major' })
+  };
+
+  it('empty selection (All) shows every feature regardless of assignee', () => {
+    const wrapper = mount(FeatureList, { props: { features } });
+    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'B', 'C']);
+  });
+
+  it('lists distinct assignees plus a trailing Unassigned option', () => {
+    const wrapper = mount(FeatureList, { props: { features } });
+    const multiSelect = wrapper.findComponent(ForYouMultiSelect);
+    expect(multiSelect.props('options')).toEqual([
+      { value: 'Dan Manor', label: 'Dan Manor' },
+      { value: 'Juan Hernandez', label: 'Juan Hernandez' },
+      { value: ASSIGNEE_FILTER_UNASSIGNED, label: 'Unassigned' }
+    ]);
+  });
+
+  it('a single named assignee matches only that feature', () => {
+    const wrapper = mount(FeatureList, { props: { features, assigneeFilter: ['Dan Manor'] } });
+    expect(renderedKeys(wrapper)).toEqual(['A']);
+  });
+
+  it('the Unassigned sentinel matches only features with no assignee', () => {
+    const wrapper = mount(FeatureList, { props: { features, assigneeFilter: [ASSIGNEE_FILTER_UNASSIGNED] } });
+    expect(renderedKeys(wrapper)).toEqual(['C']);
+  });
+
+  it('a named assignee plus Unassigned are OR-ed together', () => {
+    const wrapper = mount(FeatureList, {
+      props: { features, assigneeFilter: ['Dan Manor', ASSIGNEE_FILTER_UNASSIGNED] }
+    });
+    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'C']);
+  });
+
+  it('combines with an existing filter category using AND semantics', () => {
+    const wrapper = mount(FeatureList, {
+      props: { features, assigneeFilter: ['Dan Manor', ASSIGNEE_FILTER_UNASSIGNED], priorityFilter: 'Major' }
+    });
+    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'C']);
+  });
+
+  it('emits update:assigneeFilter when the multiselect changes', async () => {
+    const wrapper = mount(FeatureList, { props: { features } });
+    const multiSelect = wrapper.findComponent(ForYouMultiSelect);
+    multiSelect.vm.$emit('update:modelValue', ['Dan Manor']);
+    expect(wrapper.emitted('update:assigneeFilter')[0]).toEqual([['Dan Manor']]);
+  });
+
+  it('passes a meOption to the multiselect when the current user has a resolved jiraDisplayName', () => {
+    mockUser.value = { jiraDisplayName: 'Dan Manor' };
+    const wrapper = mount(FeatureList, { props: { features } });
+    const multiSelect = wrapper.findComponent(ForYouMultiSelect);
+    expect(multiSelect.props('meOption')).toEqual({ value: 'Dan Manor', label: 'Assigned to me' });
+  });
+
+  it('passes no meOption when the current user has no resolved jiraDisplayName', () => {
+    mockUser.value = {};
+    const wrapper = mount(FeatureList, { props: { features } });
+    const multiSelect = wrapper.findComponent(ForYouMultiSelect);
+    expect(multiSelect.props('meOption')).toBe(null);
   });
 });
 

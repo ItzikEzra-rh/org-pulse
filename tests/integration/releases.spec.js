@@ -896,6 +896,44 @@ test.describe('Releases Epics by Release @releases', () => {
 
     expect(page.errors).toHaveLength(0);
   });
+
+  /**
+   * Demo fixture: TEST1-1201 has one Epic assigned to "Person 217" (TEST2-46002)
+   * and one Unassigned sibling (TEST2-48333); TEST1-150's only Epic is assigned
+   * to a different person ("Person 241").
+   */
+  test('Assignee filter narrows to the matching Epic within a surviving Feature and drops Features with none', async ({ page }) => {
+    await page.goto('/#/releases/execute');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await page.locator('button', { hasText: 'Epics by Release' }).click();
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const releaseSelect = page.locator('#epics-by-release-version');
+    await releaseSelect.selectOption('rhoai-3.4');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    await expect(page.locator('text=TEST1-1201').first()).toBeVisible();
+    await expect(page.locator('text=TEST1-150').first()).toBeVisible();
+
+    await page.getByRole('button', { name: 'All assignees' }).click();
+    await page.locator('label', { hasText: 'Person 217' }).locator('input[type="checkbox"]').check();
+    await page.waitForTimeout(500);
+
+    // Feature survives via the matching Epic; its Unassigned sibling Epic is narrowed out.
+    await expect(page.locator('text=TEST1-1201').first()).toBeVisible();
+    await expect(page.locator('text=TEST2-46002').first()).toBeVisible();
+    await expect(page.locator('text=TEST2-48333')).toHaveCount(0);
+    // Feature with zero matching Epics disappears entirely.
+    await expect(page.locator('text=TEST1-150')).toHaveCount(0);
+
+    const clearButton = page.locator('button', { hasText: 'Clear filters' });
+    await clearButton.click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('text=TEST1-150').first()).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
 });
 
 /**

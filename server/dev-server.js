@@ -23,7 +23,7 @@ errorBuffer.install();
 const DEMO_MODE = process.env.DEMO_MODE === 'true';
 const storageModule = DEMO_MODE ? require('../shared/server/demo-storage') : require('../shared/server/storage');
 const { readFromStorage, writeToStorage } = storageModule;
-const { createAuthMiddleware, proxySecretGuard, blockDuringImpersonation } = require('../shared/server/auth');
+const { createAuthMiddleware, proxySecretGuard, blockDuringImpersonation, resolveJiraIdentity } = require('../shared/server/auth');
 const { createRoleStore } = require('../shared/server/role-store');
 const { createRoleRegistry } = require('../shared/server/role-registry');
 const { createScopeRegistry } = require('../shared/server/scope-registry');
@@ -398,6 +398,18 @@ app.use(authMiddleware);
  *                   format: email
  *                 displayName:
  *                   type: string
+ *                 uid:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Roster registry uid for the current user, or null if unresolved
+ *                 jiraDisplayName:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Jira display name for the current user, resolved via the roster registry, or null if unavailable
+ *                 jiraAccountId:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Jira Cloud account id for the current user, or null if unavailable
  *                 isAdmin:
  *                   type: boolean
  *                 isTeamAdmin:
@@ -433,9 +445,14 @@ app.get('/api/whoami', function(req, res) {
     displayName = preferred || user || email || req.userEmail;
   }
 
+  const jiraIdentity = resolveJiraIdentity(readFromStorage, req.userUid);
+
   const response = {
     email: req.userEmail,
     displayName,
+    uid: req.userUid || null,
+    jiraDisplayName: jiraIdentity.jiraDisplayName,
+    jiraAccountId: jiraIdentity.jiraAccountId,
     isAdmin: req.isAdmin,
     isTeamAdmin: req.isTeamAdmin || false,
     isManager: req.isManager || false,

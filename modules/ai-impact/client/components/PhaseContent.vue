@@ -29,6 +29,7 @@ const props = defineProps({
   artifactFilter: { type: String, default: 'all' },
   reviewStatusFilter: { type: String, default: 'all' },
   componentFilter: { type: String, default: 'all' },
+  assigneeFilter: { type: Array, default: () => [] },
   selectedRFE: { type: Object, default: null },
   rfeToFeature: { type: Object, default: () => ({}) },
   pipelineFriction: { type: Object, default: null }
@@ -45,6 +46,7 @@ const emit = defineEmits([
   'update:artifactFilter',
   'update:reviewStatusFilter',
   'update:componentFilter',
+  'update:assigneeFilter',
   'selectRFE',
   'retry'
 ])
@@ -137,6 +139,7 @@ const isEmpty = computed(() => !props.rfeData?.fetchedAt)
           :artifactFilter="artifactFilter"
           :reviewStatusFilter="reviewStatusFilter"
           :componentFilter="componentFilter"
+          :assigneeFilter="assigneeFilter"
           :selectedRFE="selectedRFE"
           :rfeToFeature="rfeToFeature"
           @update:filter="emit('update:filter', $event)"
@@ -147,6 +150,7 @@ const isEmpty = computed(() => !props.rfeData?.fetchedAt)
           @update:artifactFilter="emit('update:artifactFilter', $event)"
           @update:reviewStatusFilter="emit('update:reviewStatusFilter', $event)"
           @update:componentFilter="emit('update:componentFilter', $event)"
+          @update:assigneeFilter="emit('update:assigneeFilter', $event)"
           @selectRFE="emit('selectRFE', $event)"
         />
       </template>

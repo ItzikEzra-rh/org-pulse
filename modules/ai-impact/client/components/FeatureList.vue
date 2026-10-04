@@ -1,9 +1,12 @@
 <script setup>
 import { computed } from 'vue'
+import { useAuth } from '@shared/client/composables/useAuth.js'
 import FeatureListItem from './FeatureListItem.vue'
+import ForYouMultiSelect from './ForYouMultiSelect.vue'
 import {
   AI_INVOLVEMENT_FILTER_OPTIONS, REVIEW_STATUS_FILTER_OPTIONS,
-  SORT_FILTER_OPTIONS, getArtifactFilterOptions, getMeaningfulDesignReviewStatus
+  SORT_FILTER_OPTIONS, getArtifactFilterOptions, getMeaningfulDesignReviewStatus,
+  ASSIGNEE_FILTER_UNASSIGNED, collectAssigneeOptions, matchesAssigneeFilter
 } from '../utils/feature-helpers.js'
 import {
   FIX_VERSION_FILTER_ALL, FIX_VERSION_FILTER_UNASSIGNED,
@@ -28,6 +31,7 @@ const props = defineProps({
   componentFilter: { type: String, default: 'all' },
   artifactFilter: { type: String, default: 'all' },
   fixVersionFilter: { type: String, default: FIX_VERSION_FILTER_ALL },
+  assigneeFilter: { type: Array, default: () => [] },
   sortBy: { type: String, default: 'default' }
 })
 
@@ -40,6 +44,7 @@ const emit = defineEmits([
   'update:componentFilter',
   'update:artifactFilter',
   'update:fixVersionFilter',
+  'update:assigneeFilter',
   'update:sortBy',
   'selectFeature'
 ])
@@ -73,6 +78,21 @@ const availableFixVersions = computed(() => {
 const hasUnassignedFixVersion = computed(() =>
   featureList.value.some(f => (f.fixVersions || []).length === 0)
 )
+
+const hasUnassignedAssignee = computed(() => featureList.value.some(f => !f.assignee))
+
+const assigneeOptions = computed(() => {
+  const opts = collectAssigneeOptions(featureList.value, f => f.assignee).map(name => ({ value: name, label: name }))
+  if (hasUnassignedAssignee.value) opts.push({ value: ASSIGNEE_FILTER_UNASSIGNED, label: 'Unassigned' })
+  return opts
+})
+
+const { user } = useAuth()
+// Hidden when no reliable jiraDisplayName is resolved for the current user — never guessed client-side.
+const meAssigneeOption = computed(() => {
+  const name = user.value?.jiraDisplayName
+  return name ? { value: name, label: 'Assigned to me' } : null
+})
 
 const sortedAndFilteredFeatures = computed(() => {
   let items = [...featureList.value]
@@ -129,6 +149,9 @@ const sortedAndFilteredFeatures = computed(() => {
   } else if (props.artifactFilter === 'missing') {
     items = items.filter(f => f.designPrStatus == null)
   }
+
+  // Assignee filter
+  items = items.filter(f => matchesAssigneeFilter(f.assignee, props.assigneeFilter))
 
   // Fix version filter
   if (props.fixVersionFilter === FIX_VERSION_FILTER_UNASSIGNED) {
@@ -228,6 +251,14 @@ const sortedAndFilteredFeatures = computed(() => {
         <option value="all">All Components</option>
         <option v-for="c in availableComponents" :key="c" :value="c">{{ c }}</option>
       </select>
+
+      <ForYouMultiSelect
+        :modelValue="assigneeFilter"
+        :options="assigneeOptions"
+        :meOption="meAssigneeOption"
+        placeholder="All Assignees"
+        @update:modelValue="emit('update:assigneeFilter', $event)"
+      />
 
       <select
         :value="artifactFilter"

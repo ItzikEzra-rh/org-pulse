@@ -334,6 +334,72 @@ describe('readFeatures', () => {
     expect(result.features['RHAISTRAT-1168'].latest.designReviewState).toBeNull();
   });
 
+  it('passes through a bare-string assignee from the feature detail file', () => {
+    const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' } };
+    const featureFile = makeFeatureFile();
+    featureFile.assignee = 'dmanor@redhat.com';
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return makeReleasesIndex([indexEntry]);
+      if (key === 'releases/execution/features/RHAISTRAT-1168.json') return featureFile;
+      return null;
+    });
+
+    const result = readFeatures(read);
+    expect(result.features['RHAISTRAT-1168'].latest.assignee).toBe('dmanor@redhat.com');
+  });
+
+  it('extracts displayName from an object-shaped assignee on the feature detail file', () => {
+    const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' } };
+    const featureFile = makeFeatureFile();
+    featureFile.assignee = { displayName: 'Dan Manor', emailAddress: 'dmanor@redhat.com' };
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return makeReleasesIndex([indexEntry]);
+      if (key === 'releases/execution/features/RHAISTRAT-1168.json') return featureFile;
+      return null;
+    });
+
+    const result = readFeatures(read);
+    expect(result.features['RHAISTRAT-1168'].latest.assignee).toBe('Dan Manor');
+  });
+
+  it('defaults assignee to null when the feature detail file has no assignee', () => {
+    const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' } };
+    const featureFile = makeFeatureFile();
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return makeReleasesIndex([indexEntry]);
+      if (key === 'releases/execution/features/RHAISTRAT-1168.json') return featureFile;
+      return null;
+    });
+
+    const result = readFeatures(read);
+    expect(result.features['RHAISTRAT-1168'].latest.assignee).toBeNull();
+  });
+
+  it('never reads assignee from the releases index entry, even when present there', () => {
+    const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' }, assignee: 'index-shaped@redhat.com' };
+    const featureFile = makeFeatureFile();
+    featureFile.assignee = { displayName: 'Dan Manor' };
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return makeReleasesIndex([indexEntry]);
+      if (key === 'releases/execution/features/RHAISTRAT-1168.json') return featureFile;
+      return null;
+    });
+
+    const result = readFeatures(read);
+    expect(result.features['RHAISTRAT-1168'].latest.assignee).toBe('Dan Manor');
+  });
+
+  it('does not throw and defaults assignee to null when the per-feature detail file is missing', () => {
+    const indexEntry = { key: 'RHAISTRAT-1168', aiReview: { recommendation: 'approve' } };
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return makeReleasesIndex([indexEntry]);
+      return null;
+    });
+
+    expect(() => readFeatures(read)).not.toThrow();
+    expect(readFeatures(read).features['RHAISTRAT-1168'].latest.assignee).toBeNull();
+  });
+
   it('falls back to legacy store when no releases index', () => {
     const legacyData = {
       lastSyncedAt: '2026-04-19T12:00:00Z',
@@ -347,7 +413,25 @@ describe('readFeatures', () => {
     });
 
     const result = readFeatures(read);
-    expect(result).toBe(legacyData);
+    expect(result.lastSyncedAt).toBe(legacyData.lastSyncedAt);
+    expect(result.totalFeatures).toBe(legacyData.totalFeatures);
+    expect(result.features.A.latest.assignee).toBeNull();
+  });
+
+  it('normalizes an object-shaped assignee on a legacy record when there is no releases index', () => {
+    const legacyData = {
+      lastSyncedAt: '2026-04-19T12:00:00Z',
+      totalFeatures: 1,
+      features: { A: { latest: { key: 'A', assignee: { displayName: 'Dan Manor' } }, history: [] } }
+    };
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') return null;
+      if (key === 'ai-impact/features.json') return legacyData;
+      return null;
+    });
+
+    const result = readFeatures(read);
+    expect(result.features.A.latest.assignee).toBe('Dan Manor');
   });
 
   it('falls back to legacy store when releases index has no aiReview features, backfilling fixVersions by key', () => {
@@ -378,6 +462,25 @@ describe('readFeatures', () => {
     expect(result.features.A.latest.fixVersions).toEqual(['0.2']);
     // Legacy's own fixVersions is preserved, not overwritten by the index
     expect(result.features.B.latest.fixVersions).toEqual(['legacy-existing']);
+    expect(result.features.A.latest.assignee).toBeNull();
+  });
+
+  it('normalizes assignee on the legacy fixVersions-backfill fallback path', () => {
+    const legacyData = {
+      lastSyncedAt: '2026-04-19T12:00:00Z',
+      totalFeatures: 1,
+      features: { A: { latest: { key: 'A', assignee: 'dmanor@redhat.com' }, history: [] } }
+    };
+    const read = vi.fn(function(key) {
+      if (key === 'releases/execution/index.json') {
+        return makeReleasesIndex([{ key: 'A', summary: 'No AI', fixVersions: ['0.2'] }]);
+      }
+      if (key === 'ai-impact/features.json') return legacyData;
+      return null;
+    });
+
+    const result = readFeatures(read);
+    expect(result.features.A.latest.assignee).toBe('dmanor@redhat.com');
   });
 
   it('backfills from the index when the legacy record has an empty fixVersions array', () => {
@@ -555,6 +658,20 @@ describe('getLatestProjection', () => {
     expect(proj.features['B'].prdRecommendation).toBeNull();
     expect(proj.features['B'].prdReviewState).toBeNull();
     expect(proj.features['B'].designReviewState).toBeNull();
+  });
+
+  it('carries assignee through, defaulting to null when absent', () => {
+    const data = {
+      lastSyncedAt: '2026-04-19T12:00:00Z',
+      totalFeatures: 2,
+      features: {
+        'A': { latest: { key: 'RHAISTRAT-1', assignee: 'Dan Manor' }, history: [] },
+        'B': { latest: { key: 'RHAISTRAT-2' }, history: [] }
+      }
+    };
+    const proj = getLatestProjection(data);
+    expect(proj.features['A'].assignee).toBe('Dan Manor');
+    expect(proj.features['B'].assignee).toBeNull();
   });
 
   it('carries fixVersions through, defaulting to an empty array when absent', () => {

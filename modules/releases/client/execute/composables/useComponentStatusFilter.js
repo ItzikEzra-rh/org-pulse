@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 export const UNASSIGNED_COMPONENT = 'Unassigned'
 export const UNKNOWN_STATUS = 'Unknown'
 export const UNASSIGNED_TEAM = 'Unassigned'
+// Internal sentinel, not the literal "Unassigned" — a person's displayName could collide with that string.
+export const UNASSIGNED_ASSIGNEE = '__unassigned__'
 
 // Display-only readability fixes for raw Jira Component values. The raw value
 // (map key) stays the contract used for filtering/matching; only the rendered
@@ -64,10 +66,30 @@ export function matchesTeam(team, selected) {
   return selected.includes(team || UNASSIGNED_TEAM)
 }
 
+export function assigneeDisplayLabel(raw) {
+  return raw === UNASSIGNED_ASSIGNEE ? 'Unassigned' : raw
+}
+
+export function collectAssigneeOptions(items, getAssignee) {
+  const set = new Set()
+  for (const item of items) {
+    set.add(getAssignee(item) || UNASSIGNED_ASSIGNEE)
+  }
+  const sorted = [...set].filter(a => a !== UNASSIGNED_ASSIGNEE).sort()
+  if (set.has(UNASSIGNED_ASSIGNEE)) sorted.push(UNASSIGNED_ASSIGNEE)
+  return sorted
+}
+
+export function matchesAssignee(assignee, selected) {
+  if (!selected || selected.length === 0) return true
+  return selected.includes(assignee || UNASSIGNED_ASSIGNEE)
+}
+
 export function useComponentStatusFilter() {
   const selectedComponents = ref([])
   const selectedStatuses = ref([])
   const selectedTeams = ref([])
+  const selectedAssignees = ref([])
 
   function toggleComponent(value) {
     const idx = selectedComponents.value.indexOf(value)
@@ -87,23 +109,39 @@ export function useComponentStatusFilter() {
     else selectedTeams.value.push(value)
   }
 
+  function toggleAssignee(value) {
+    const idx = selectedAssignees.value.indexOf(value)
+    if (idx >= 0) selectedAssignees.value.splice(idx, 1)
+    else selectedAssignees.value.push(value)
+  }
+
+  // Overwrites the Assignee selection outright — used by the "Assigned to me" shortcut.
+  function setAssignees(values) {
+    selectedAssignees.value = [...values]
+  }
+
   function clearFilters() {
     selectedComponents.value = []
     selectedStatuses.value = []
     selectedTeams.value = []
+    selectedAssignees.value = []
   }
 
   const isFiltered = computed(() =>
-    selectedComponents.value.length > 0 || selectedStatuses.value.length > 0 || selectedTeams.value.length > 0
+    selectedComponents.value.length > 0 || selectedStatuses.value.length > 0 ||
+    selectedTeams.value.length > 0 || selectedAssignees.value.length > 0
   )
 
   return {
     selectedComponents,
     selectedStatuses,
     selectedTeams,
+    selectedAssignees,
     toggleComponent,
     toggleStatus,
     toggleTeam,
+    toggleAssignee,
+    setAssignees,
     clearFilters,
     isFiltered
   }

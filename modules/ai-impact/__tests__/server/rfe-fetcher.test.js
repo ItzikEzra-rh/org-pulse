@@ -242,6 +242,30 @@ describe('processIssue', () => {
     expect(result.createdLabelDate).toBeNull();
     expect(result.revisedLabelDate).toBeNull();
   });
+
+  it('projects the direct Jira assignee displayName to jiraAssignee', () => {
+    const issue = makeIssue({ assignee: { displayName: 'Alice', accountId: 'alice-123' } });
+    const result = processIssue(issue, DEFAULT_CONFIG);
+    expect(result.jiraAssignee).toBe('Alice');
+  });
+
+  it('sets jiraAssignee to explicit null when Jira assignee is null', () => {
+    const issue = makeIssue({ assignee: null });
+    const result = processIssue(issue, DEFAULT_CONFIG);
+    expect(result.jiraAssignee).toBeNull();
+  });
+
+  it('does not fall back to creator/reporter when there is no assignee', () => {
+    const issue = makeIssue({
+      assignee: null,
+      creator: { name: 'testuser', displayName: 'Test User', emailAddress: 'test@example.com' },
+      reporter: { displayName: 'Some Reporter' }
+    });
+    const result = processIssue(issue, DEFAULT_CONFIG);
+    expect(result.jiraAssignee).toBeNull();
+    expect(result.jiraAssignee).not.toBe('Test User');
+    expect(result.jiraAssignee).not.toBe('Some Reporter');
+  });
 });
 
 describe('fetchRFEData JQL validation', () => {

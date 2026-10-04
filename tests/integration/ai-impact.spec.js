@@ -251,6 +251,55 @@ test.describe('AI Impact Views @ai-impact', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('PRD Review Assignee filter narrows the PRD list, with Unassigned selectable', async ({ page }) => {
+    await page.route('**/api/modules/ai-impact/features', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ lastSyncedAt: null, totalFeatures: 0, features: {} }) });
+    });
+    await page.route('**/api/modules/ai-impact/rfe-data**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          fetchedAt: '2026-04-19T12:00:00Z',
+          jiraHost: 'https://redhat.atlassian.net',
+          metrics: { createdPct: 0, createdChange: 0, trend: 'stable', revisedCount: 0, priorRevisedCount: 0, windowTotal: 2, totalRFEs: 2 },
+          trendData: [],
+          breakdown: [],
+          pipelineFriction: { needsAttentionPct: 0, needsAttentionChange: 0, needsAttentionTrend: 'stable', feasibilityBlockedPct: 0, feasibilityBlockedChange: 0, feasibilityBlockedTrend: 'stable' },
+          issues: [
+            {
+              key: 'EP-201', summary: 'PRD assigned to Alice', status: 'Open', priority: 'Major',
+              created: '2026-04-01T00:00:00.000Z', creatorDisplayName: 'Alice', aiInvolvement: 'created',
+              components: [], jiraAssignee: 'Alice'
+            },
+            {
+              key: 'EP-202', summary: 'PRD with no assignee', status: 'Open', priority: 'Major',
+              created: '2026-04-01T00:00:00.000Z', creatorDisplayName: 'Bob', aiInvolvement: 'none',
+              components: [], jiraAssignee: null
+            }
+          ]
+        })
+      });
+    });
+
+    await skipFirstVisitGuide(page);
+    await page.goto('/#/ai-impact/prd-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByText('PRD assigned to Alice')).toBeVisible();
+    await expect(page.getByText('PRD with no assignee')).toBeVisible();
+
+    await page.getByRole('button', { name: 'All Assignees' }).click();
+    await page.locator('label', { hasText: 'Unassigned' }).locator('input[type="checkbox"]').check();
+    await page.waitForTimeout(500);
+
+    await expect(page.getByText('PRD with no assignee')).toBeVisible();
+    await expect(page.getByText('PRD assigned to Alice')).not.toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
   test('Design Review shows a Design List header and page title, matching PRD Review', async ({ page }) => {
     await page.goto('/#/ai-impact/design-review');
     await page.waitForLoadState('networkidle');
@@ -353,6 +402,55 @@ test.describe('AI Impact Views @ai-impact', () => {
     await fixVersionSelect.selectOption({ label: 'Unassigned' });
     await expect(page.getByText('Feature with no fix version')).toBeVisible();
     await expect(page.getByText('Feature with a fix version')).not.toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Design Review Assignee filter narrows the feature list (OR within category, AND with other filters)', async ({ page }) => {
+    await page.route('**/api/modules/ai-impact/features', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          lastSyncedAt: '2026-04-19T12:00:00Z',
+          totalFeatures: 3,
+          features: {
+            'OSAC-A1': {
+              key: 'OSAC-A1', title: 'Alice Core feature', priority: 'Major',
+              humanReviewStatus: 'awaiting-review', recommendation: 'approve',
+              components: ['Core'], fixVersions: [], assignee: 'Alice'
+            },
+            'OSAC-A2': {
+              key: 'OSAC-A2', title: 'Bob UI feature', priority: 'Major',
+              humanReviewStatus: 'awaiting-review', recommendation: 'approve',
+              components: ['UI'], fixVersions: [], assignee: 'Bob'
+            },
+            'OSAC-A3': {
+              key: 'OSAC-A3', title: 'Unassigned feature', priority: 'Major',
+              humanReviewStatus: 'awaiting-review', recommendation: 'approve',
+              components: [], fixVersions: [], assignee: null
+            }
+          }
+        })
+      });
+    });
+
+    await skipFirstVisitGuide(page);
+    await page.goto('/#/ai-impact/design-review');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    await expect(page.getByText('Alice Core feature')).toBeVisible();
+    await expect(page.getByText('Bob UI feature')).toBeVisible();
+    await expect(page.getByText('Unassigned feature')).toBeVisible();
+
+    await page.getByRole('button', { name: 'All Assignees' }).click();
+    await page.locator('label', { hasText: 'Alice' }).locator('input[type="checkbox"]').check();
+    await page.waitForTimeout(500);
+
+    await expect(page.getByText('Alice Core feature')).toBeVisible();
+    await expect(page.getByText('Bob UI feature')).not.toBeVisible();
+    await expect(page.getByText('Unassigned feature')).not.toBeVisible();
 
     expect(page.errors).toHaveLength(0);
   });
