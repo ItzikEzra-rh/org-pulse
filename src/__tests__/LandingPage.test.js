@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import LandingPage from '../components/LandingPage.vue'
 import { _resetForTesting } from '../composables/useSotuLayout.js'
 
@@ -128,5 +129,59 @@ describe('LandingPage', () => {
     await flushPromises()
     await wrapper.find('button.underline').trigger('click')
     expect(wrapper.emitted('navigate')).toEqual([['settings']])
+  })
+
+  it('does not dispatch sotu-layout-changed after unmount when a layout-change nextTick is already queued', async () => {
+    localStorage.setItem('orgpulse_sotu_layout', JSON.stringify([{ widgetId: 'ai-impact:feature-board', size: 'full' }]))
+    const wrapper = await mountLandingPage({ builtInManifests: [AI_IMPACT_MANIFEST], isAdmin: false })
+    await flushPromises()
+
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+    vi.useFakeTimers()
+    try {
+      // Dropping the manifest changes resolvedLayout via props, not the shared
+      // useSotuLayout singleton, so it can't leak into other tests' live wrappers.
+      await wrapper.setProps({ builtInManifests: [] })
+
+      // setProps already awaited one nextTick, landing right after the watcher
+      // queued its own nextTick callback but before that callback has run.
+      wrapper.unmount()
+      await nextTick()
+      vi.runAllTimers()
+
+      const dispatchedLayoutChanged = dispatchSpy.mock.calls.some(([event]) => event.type === 'sotu-layout-changed')
+      expect(dispatchedLayoutChanged).toBe(false)
+    } finally {
+      vi.useRealTimers()
+      dispatchSpy.mockRestore()
+    }
+  })
+
+  it('does not dispatch sotu-layout-changed after unmount when the delayed timeout is already pending', async () => {
+    localStorage.setItem('orgpulse_sotu_layout', JSON.stringify([{ widgetId: 'ai-impact:feature-board', size: 'full' }]))
+    const wrapper = await mountLandingPage({ builtInManifests: [AI_IMPACT_MANIFEST], isAdmin: false })
+    await flushPromises()
+
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+    vi.useFakeTimers()
+    try {
+      // Dropping the manifest changes resolvedLayout via props, not the shared
+      // useSotuLayout singleton, so it can't leak into other tests' live wrappers.
+      await wrapper.setProps({ builtInManifests: [] })
+
+      // One more nextTick past setProps lets the watcher's queued callback actually
+      // run (unlike the queued-nextTick race test above), so the delayed timeout is
+      // scheduled and pending before we unmount.
+      await nextTick()
+
+      wrapper.unmount()
+      vi.runAllTimers()
+
+      const dispatchedLayoutChanged = dispatchSpy.mock.calls.some(([event]) => event.type === 'sotu-layout-changed')
+      expect(dispatchedLayoutChanged).toBe(false)
+    } finally {
+      vi.useRealTimers()
+      dispatchSpy.mockRestore()
+    }
   })
 })

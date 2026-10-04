@@ -148,6 +148,8 @@ const topSectionRef = ref(null)
 let sortableInstance = null
 let topSectionObserver = null
 let lastTopSectionHeight = null
+let layoutChangeTimeout = null
+let isUnmounted = false
 
 const EXPLORE_CARDS = [
   {
@@ -303,10 +305,12 @@ function initSortable() {
 
 watch(resolvedLayout, () => {
   nextTick(() => {
+    if (isUnmounted) return
     initSortable()
     // Notify position-dependent widgets (ResizeObserver won't catch a pure position change)
     // once Sortable's reorder animation settles.
-    setTimeout(() => window.dispatchEvent(new Event('sotu-layout-changed')), SORT_ANIMATION_MS)
+    clearTimeout(layoutChangeTimeout)
+    layoutChangeTimeout = setTimeout(() => window.dispatchEvent(new Event('sotu-layout-changed')), SORT_ANIMATION_MS)
   })
 })
 
@@ -329,11 +333,13 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  isUnmounted = true
   if (sortableInstance) {
     sortableInstance.destroy()
     sortableInstance = null
   }
   topSectionObserver?.disconnect()
+  clearTimeout(layoutChangeTimeout)
 })
 
 const iconMap = {
