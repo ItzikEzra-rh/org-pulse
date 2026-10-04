@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "profileRevision": "a385b84453828321",
+  "projectId": "osac",
+  "displayName": "OSAC",
+  "jiraProjectKey": "OSAC",
+  "jiraProjectName": "Open Source as a Cloud",
+  "jiraBaseUrl": "https://redhat.atlassian.net",
+  "repositories": [
+    {
+      "fullName": "osac-project/osac",
+      "role": "delivery",
+      "authority": "OSAC implementation and build workflows"
+    },
+    {
+      "fullName": "osac-project/enhancement-proposals",
+      "role": "planning",
+      "authority": "enhancement proposals and reviewed planning documents"
+    },
+    {
+      "fullName": "osac-project/osac-test-infra",
+      "role": "capability",
+      "authority": "CI and test infrastructure evidence"
+    }
+  ],
+  "sources": [
+    {
+      "id": "jira-versions",
+      "kind": "jira",
+      "role": "delivery",
+      "authority": "Jira project versions",
+      "locator": "https://redhat.atlassian.net/plugins/servlet/project-config/OSAC/versions"
+    },
+    {
+      "id": "jira-issues",
+      "kind": "jira",
+      "role": "delivery",
+      "authority": "raw OSAC issue state and relationships; no review or release inference",
+      "locator": "https://redhat.atlassian.net/issues/?jql=project%20%3D%20OSAC",
+      "collection": {
+        "jql": "project = OSAC ORDER BY key ASC",
+        "fields": [
+          "project",
+          "summary",
+          "issuetype",
+          "status",
+          "resolution",
+          "priority",
+          "assignee",
+          "reporter",
+          "parent",
+          "components",
+          "labels",
+          "fixVersions",
+          "created",
+          "updated",
+          "resolutiondate",
+          "issuelinks",
+          "customfield_10001"
+        ],
+        "teamField": "customfield_10001"
+      }
+    },
+    {
+      "id": "github-pull-requests",
+      "kind": "github",
+      "role": "traceability",
+      "authority": "raw PR metadata for configured repositories; repo roles control denominators",
+      "locator": "https://api.github.com/repos/osac-project",
+      "collection": {
+        "state": "all",
+        "repositoriesFromProfile": true
+      }
+    },
+    {
+      "id": "osac-roster",
+      "kind": "atlassian-teams",
+      "role": "roster",
+      "authority": "membership",
+      "locator": "team-data/registry.json"
+    },
+    {
+      "id": "osac-ep-review",
+      "kind": "jira-github-derived",
+      "role": "planning",
+      "authority": "PRD/design/test-plan review interpretation",
+      "locator": "https://github.com/osac-project/enhancement-proposals",
+      "collection": {
+        "issueTypes": [
+          "Feature"
+        ],
+        "repos": [
+          "osac-project/enhancement-proposals"
+        ],
+        "botLogin": "github-actions[bot]"
+      }
+    },
+    {
+      "id": "osac-jira-autofix",
+      "kind": "jira-derived",
+      "role": "capability",
+      "authority": "jira-autofix and jira-triage label interpretation",
+      "locator": "https://redhat.atlassian.net/browse/OSAC",
+      "collection": {
+        "issueTypes": [
+          "Bug"
+        ],
+        "labels": [
+          "jira-autofix",
+          "jira-autofix-pending",
+          "jira-autofix-review",
+          "jira-autofix-ci-failing",
+          "jira-autofix-merged",
+          "jira-autofix-rejected",
+          "jira-autofix-max-retries",
+          "jira-autofix-researched",
+          "jira-autofix-blocked",
+          "jira-autofix-fork-user-missing",
+          "jira-triage-pending",
+          "jira-triage-not-fixable",
+          "jira-triage-stale",
+          "jira-triage-missing-info",
+          "jira-triage-external",
+          "jira-triage-security-review"
+        ],
+        "botAccounts": [
+          "osac-dev-bot"
+        ],
+        "excludedComponents": [
+          "Enclave",
+          "agentic-sdlc"
+        ],
+        "contributorField": "customfield_10466"
+      }
+    },
+    {
+      "id": "osac-ci-digest",
+      "kind": "github-actions-derived",
+      "role": "capability",
+      "authority": "CI duty digest from the project test-infra publisher",
+      "locator": "https://github.com/osac-project/osac-test-infra",
+      "collection": {
+        "repo": "osac-project/osac-test-infra",
+        "workflowFile": "ci-daily-digest.yml",
+        "branch": "main",
+        "artifactName": "ci-digest-data"
+      }
+    },
+    {
+      "id": "osac-builds",
+      "kind": "github-actions-derived",
+      "role": "delivery",
+      "authority": "OSAC build workflow evidence; legacy collector",
+      "locator": "osac-builds-data.json"
+    }
+  ],
+  "teamIds": [
+    "93eb6d97-b6c6-4509-ab08-16478cd02304",
+    "b470b07d-0ba5-4216-934f-0b6c0238caf2",
+    "b29325e5-601a-4d53-b84b-0170920db548",
+    "a63c4ba4-a73c-41ea-a397-0a4020253953",
+    "ab57b451-a878-4901-aee7-6a0e40e6c594",
+    "248248c6-7017-4287-898a-612ad169182e",
+    "b9d7e309-889f-4692-90d1-0cb838ba8bd2",
+    "683a4065-b74b-4e79-b57e-effdea29b508",
+    "47734075-6e9e-4726-8031-8ffc56637bac",
+    "ef7546dd-c8f3-40b5-95b7-1abf4b34f86f",
+    "79daf97e-198e-43e4-b2a8-00925442bcd2",
+    "b2085ca5-d82c-4751-801f-45c921840840",
+    "fb86f568-c9c8-4a18-9b55-7e270ac40278"
+  ],
+  "capabilities": {
+    "releaseRegistry": {
+      "state": "supported",
+      "artifactKey": "releases/registry.json"
+    }
+  },
+  "provenance": {
+    "configPath": "config/projects/osac.json",
+    "repositoryRevision": null,
+    "publishedAt": "2026-10-04T16:33:10.070287Z"
+  }
+}

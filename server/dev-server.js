@@ -32,7 +32,7 @@ const apiTokens = require('./api-tokens');
 
 const modulesConfig = require('./modules/config');
 const gitSync = require('./modules/git-sync');
-const createProjectProfiles = require('./project-profiles');
+const { createServerProjectProfiles, createProjectListHandler } = require('./project-profiles');
 const { createModuleStaticMiddleware, invalidateCache: invalidateStaticCache } = require('./modules/static-serve');
 const {
   getDiscoveredModules,
@@ -1744,7 +1744,7 @@ if (allocationStrategy) {
 } else {
   console.log('[platform] No allocation strategy found — allocation features will be hidden');
 }
-const projectProfiles = createProjectProfiles(storageModule);
+const projectProfiles = createServerProjectProfiles(storageModule);
 
 /**
  * @openapi
@@ -1776,21 +1776,7 @@ const projectProfiles = createProjectProfiles(storageModule);
  *       500:
  *         description: The published project list could not be read
  */
-app.get('/api/projects', authMiddleware, function (req, res) {
-  try {
-    const projects = projectProfiles.list().map(function (profile) {
-      return { projectId: profile.projectId, displayName: profile.displayName };
-    });
-    res.json({ projects });
-  } catch (error) {
-    console.error('[projects] Failed to list published projects:', error.message);
-    const discoveryUnavailable = error.name === 'ProjectProfileIndexError';
-    res.status(discoveryUnavailable ? 503 : 500).json({
-      error: 'Failed to list published projects',
-      code: discoveryUnavailable ? error.code : 'PROJECT_LIST_FAILED'
-    });
-  }
-});
+app.get('/api/projects', authMiddleware, createProjectListHandler(projectProfiles));
 
 const coreServices = { storage: storageModule, requireAuth: authMiddleware, requireAdmin, requireTeamAdmin, requireRole, requireScope, roleStore, roleRegistry, scopeRegistry, secretRegistry, allocationStrategy, projects: projectProfiles };
 const registries = { diagnostics: diagnosticsRegistry, messages: messageRegistry, refresh: refreshRegistry, exports: exportRegistry };

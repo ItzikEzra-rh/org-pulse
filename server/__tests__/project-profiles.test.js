@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 
-const createProjectProfiles = require('../project-profiles')
+const { createServerProjectProfiles, createProjectListHandler } = require('../project-profiles')
+const demoStorage = require('../../shared/server/demo-storage')
 
 const OSAC = {
   schemaVersion: 1,
@@ -70,8 +71,12 @@ function makeStorage(overrides = {}) {
 }
 
 describe('server project profiles', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('reads explicit OSAC and Flightctl profiles from published storage', () => {
-    const projectProfiles = createProjectProfiles(makeStorage())
+    const projectProfiles = createServerProjectProfiles(makeStorage())
     expect(projectProfiles.list().map(profile => profile.projectId)).toEqual(['osac', 'flightctl'])
     expect(projectProfiles.get('flightctl')).toMatchObject({
       projectId: 'flightctl',
@@ -82,12 +87,12 @@ describe('server project profiles', () => {
   })
 
   it('does not use the profile reader as an access-control decision', () => {
-    const projectProfiles = createProjectProfiles(makeStorage())
+    const projectProfiles = createServerProjectProfiles(makeStorage())
     expect(projectProfiles.get('flightctl').capabilities.accessRestrictions).toBeNull()
   })
 
   it('preserves a valid single-project OSAC deployment', () => {
-    const projectProfiles = createProjectProfiles(makeStorage({
+    const projectProfiles = createServerProjectProfiles(makeStorage({
       'projects/index.json': {
         schemaVersion: 1,
         projects: [{
@@ -103,7 +108,7 @@ describe('server project profiles', () => {
   })
 
   it('raises a discovery error when the published index is missing', () => {
-    const projectProfiles = createProjectProfiles({ readFromStorage: () => null })
+    const projectProfiles = createServerProjectProfiles({ readFromStorage: () => null })
     expect(() => projectProfiles.list()).toThrow(expect.objectContaining({
       name: 'ProjectProfileIndexError',
       code: 'PROJECT_INDEX_MISSING'
@@ -111,7 +116,47 @@ describe('server project profiles', () => {
   })
 
   it('has no profile fallback for an unknown project', () => {
-    const projectProfiles = createProjectProfiles(makeStorage())
+    const projectProfiles = createServerProjectProfiles(makeStorage())
     expect(projectProfiles.get('rhoai')).toBeNull()
   })
+
+  it('serves the checked-in single-OSAC discovery fixture through the projects API handler', () => {
+    const projectProfiles = createServerProjectProfiles(demoStorage)
+    const response = createResponse()
+    const handler = createProjectListHandler(projectProfiles)
+
+    handler({}, response)
+
+    expect(response.status).not.toHaveBeenCalled()
+    expect(response.json).toHaveBeenCalledWith({
+      projects: [{ projectId: 'osac', displayName: 'OSAC' }]
+    })
+  })
+
+  it('maps missing discovery publication to HTTP 503 through the projects API handler', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const projectProfiles = createServerProjectProfiles({ readFromStorage: () => null })
+    const response = createResponse()
+
+    createProjectListHandler(projectProfiles)({}, response)
+
+    expect(response.status).toHaveBeenCalledWith(503)
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'Failed to list published projects',
+      code: 'PROJECT_INDEX_MISSING'
+    })
+  })
 })
+
+function createResponse() {
+  return {
+    status: vi.fn(function (statusCode) {
+      this.statusCode = statusCode
+      return this
+    }),
+    json: vi.fn(function (body) {
+      this.body = body
+      return this
+    })
+  }
+}

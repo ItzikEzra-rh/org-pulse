@@ -62,6 +62,10 @@ Missing, empty, malformed, duplicate, or incomplete discovery data is reported
 as unavailable instead of being treated as a projectless single-project
 deployment. A valid one-entry OSAC index keeps the existing single-project
 behavior, with no selector. The app never maintains a second source registry.
+Core demo mode includes a valid one-entry OSAC publication fixture. Project
+discovery keeps its strict 503 response when publication data is missing or
+invalid; the app retries HTTP 503 up to four times (five requests maximum),
+with 1, 2, 4, and 8 second delays, before reporting unavailable.
 
 In a sidecar-managed volume, `projects/{projectId}/current.json` points to an
 immutable generation under `projects/{projectId}/generations/{generationId}/`.
