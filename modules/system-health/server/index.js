@@ -25,8 +25,8 @@ module.exports = function registerRoutes(router, context) {
   });
   router.use('/disconnected', disconnectedRouter);
 
-  registerCiDigestRoutes(router, { storage, requireAuth, requireScope });
-  registerCiDutyRoutes(router, { storage, requireAuth, requireScope });
+  registerCiDigestRoutes(router, { storage, requireAuth, requireScope, projects: context.projects });
+  registerCiDutyRoutes(router, { storage, requireAuth, requireScope, projects: context.projects });
   registerReleaseExecutionRoutes(router, { requireAuth, requireScope, projects: context.projects });
 
   if (context.registerRefresh) {

@@ -9,6 +9,7 @@
 const DATA_PREFIX = 'releases/release-plans'
 const VERSION_RE = /^[a-zA-Z0-9._-]{1,50}$/
 const RESERVED_VERSIONS = ['__proto__', 'constructor', 'prototype']
+const { resolveProjectSelection } = require('../../../../shared/server/project-profile')
 
 function isValidVersion(version) {
   return typeof version === 'string' && VERSION_RE.test(version) && !RESERVED_VERSIONS.includes(version)
@@ -16,13 +17,6 @@ function isValidVersion(version) {
 
 // OSAC keeps the legacy layout (its plans are still generated there); every
 // other project reads its own project-qualified release-plans directory.
-function planPrefix(projectId) {
-  if (projectId && projectId !== 'osac') {
-    return `projects/${projectId}/releases/release-plans`
-  }
-  return DATA_PREFIX
-}
-
 /**
  * Register release-plan routes on the provided Express router.
  *
@@ -30,8 +24,19 @@ function planPrefix(projectId) {
  * @param {object} context - { storage, requireAuth, requireScope }
  */
 module.exports = function registerRoutes(router, context) {
-  const { storage, requireAuth, requireScope } = context
+  const { storage, requireAuth, requireScope, projects } = context
   const { readFromStorage } = storage
+
+  function resolvePlanPrefix(req, res) {
+    const selection = resolveProjectSelection(projects, req.query)
+    if (selection.status) {
+      res.status(selection.status).json({ error: selection.error })
+      return null
+    }
+    return selection.provided && selection.projectId !== 'osac'
+      ? `projects/${selection.projectId}/releases/release-plans`
+      : DATA_PREFIX
+  }
 
   /**
    * @openapi
@@ -40,12 +45,18 @@ module.exports = function registerRoutes(router, context) {
    *     summary: List published release-plan versions
    *     tags: [releases-release-plan]
    *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - name: projectId
+   *         in: query
+   *         required: false
+   *         schema: { type: string }
    *     responses:
    *       200:
    *         description: Index of published release-plan versions
    */
   router.get('/release-plans', requireAuth, requireScope('releases:read'), function(req, res) {
-    const prefix = planPrefix(req.query?.projectId)
+    const prefix = resolvePlanPrefix(req, res)
+    if (!prefix) return
     const index = readFromStorage(`${prefix}/index.json`)
     res.json(index || { versions: [] })
   })
@@ -61,6 +72,10 @@ module.exports = function registerRoutes(router, context) {
    *       - name: version
    *         in: query
    *         required: true
+   *         schema: { type: string }
+   *       - name: projectId
+   *         in: query
+   *         required: false
    *         schema: { type: string }
    *     responses:
    *       200:
@@ -79,7 +94,8 @@ module.exports = function registerRoutes(router, context) {
       return res.status(400).json({ error: 'Invalid version format' })
     }
 
-    const prefix = planPrefix(req.query?.projectId)
+    const prefix = resolvePlanPrefix(req, res)
+    if (!prefix) return
     const plan = readFromStorage(`${prefix}/${version}.json`)
     if (!plan) {
       return res.status(404).json({ error: 'Release plan not found' })

@@ -100,6 +100,8 @@ const branch = computed(() => data.value?.branch || null)
 const partial = computed(() => envelope.value?.partial === true)
 const freshness = computed(() => envelope.value?.freshness)
 const generatedAt = computed(() => envelope.value?.generatedAt)
+const projectId = useProjectId()
+let requestSequence = 0
 
 function artifactBadgeClasses(artifact) {
   if (artifact.presence === 'present') return 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-500/30'
@@ -114,28 +116,35 @@ function formatDate(value) {
 }
 
 async function load() {
+  const requestedProjectId = projectId.value
+  const requestId = ++requestSequence
   loading.value = true
   error.value = null
   unavailable.value = null
   envelope.value = null
   try {
-    const projectId = useProjectId().value
-    if (!projectId) {
+    if (!requestedProjectId) {
       unavailable.value = 'No project context selected'
+      loading.value = false
       return
     }
-    envelope.value = await apiRequest(`/modules/ai-impact/project-design-docs?projectId=${encodeURIComponent(projectId)}`)
+    const next = await apiRequest(`/modules/ai-impact/project-design-docs?projectId=${encodeURIComponent(requestedProjectId)}`)
+    if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
+    envelope.value = next
   } catch (e) {
+    if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
     if (e.status === 404) {
       unavailable.value = 'No design-docs publication for this project yet'
     } else {
       error.value = e.message || 'Failed to load design-docs evidence'
     }
   } finally {
-    loading.value = false
+    if (requestId === requestSequence && projectId.value === requestedProjectId) {
+      loading.value = false
+    }
   }
 }
 
 onMounted(load)
-watch(useProjectId(), () => load())
+watch(projectId, () => load(), { flush: 'sync' })
 </script>

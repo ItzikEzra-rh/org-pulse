@@ -10,10 +10,11 @@
  */
 
 const DATA_KEY = 'ci-digest-data.json'
+const { resolveProjectSelection } = require('../../../../shared/server/project-profile')
 
 /**
  * @param {object} router - Express router mounted at /api/modules/system-health/
- * @param {object} context - { storage, requireAuth, requireScope }
+ * @param {object} context - { storage, requireAuth, requireScope, projects }
  */
 module.exports = function registerCiDigestRoutes(router, context) {
   const { storage, requireAuth, requireScope } = context
@@ -26,6 +27,11 @@ module.exports = function registerCiDigestRoutes(router, context) {
    *     summary: Get the latest OSAC CI daily digest envelope
    *     tags: [system-health-ci-digest]
    *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: false
+   *         schema: { type: string }
    *     responses:
    *       200:
    *         description: CI digest envelope ({ source, fetchedAt, digest })
@@ -33,12 +39,14 @@ module.exports = function registerCiDigestRoutes(router, context) {
    *         description: No CI digest report has been delivered yet
    */
   router.get('/ci-digest', requireAuth, requireScope('system-health:read'), function(req, res) {
+    const selection = resolveProjectSelection(context.projects, req.query)
+    if (selection.status) return res.status(selection.status).json({ error: selection.error })
     // The CI digest envelope is an OSAC-only data source: a non-OSAC project
     // never receives OSAC digest data. Project CI evidence flows through the
     // capability-driven release-execution publication instead.
-    if (req.query?.projectId && req.query.projectId !== 'osac') {
+    if (selection.provided && selection.projectId !== 'osac') {
       return res.status(200).json({
-        projectId: req.query.projectId,
+        projectId: selection.projectId,
         state: 'unavailable',
         reason: 'osac-only-data-source',
         data: null

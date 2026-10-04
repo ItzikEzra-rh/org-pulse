@@ -1,6 +1,7 @@
 module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage } = storage;
+  const { resolveProjectSelection } = require('../../../shared/server/project-profile');
   const { readProjectProvenance } = require('./project-provenance');
   const { readProjectDesignDocs } = require('./project-design-docs');
 
@@ -10,9 +11,15 @@ module.exports = function registerRoutes(router, context) {
   // project-qualified artifact (e.g. the profile-driven autofix or EP-review
   // collectors), that data is served instead — never an OSAC fallback.
   function osacOnlyDataGuard(req, res) {
-    if (req.query?.projectId && req.query.projectId !== 'osac') {
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (!selection.provided) return false;
+    if (selection.status) {
+      res.status(selection.status).json({ error: selection.error });
+      return true;
+    }
+    if (selection.projectId !== 'osac') {
       res.status(200).json({
-        projectId: req.query.projectId,
+        projectId: selection.projectId,
         state: 'unavailable',
         reason: 'osac-only-data-source',
         data: null
@@ -618,10 +625,11 @@ module.exports = function registerRoutes(router, context) {
   // (scanner totals, source markers, provenance footers) from the data repo's
   // collectors. Never falls back between projects.
   router.get('/project-provenance', requireScope('ai-impact:read'), function(req, res) {
-    const projectId = req.query?.projectId;
-    if (!projectId) return res.status(400).json({ error: 'projectId is required' });
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (!selection.provided) return res.status(400).json({ error: 'projectId is required' });
+    if (selection.status) return res.status(selection.status).json({ error: selection.error });
     try {
-      const result = readProjectProvenance(context.projects, projectId);
+      const result = readProjectProvenance(context.projects, selection.projectId);
       if (result.status !== 200) return res.status(result.status).json({ error: result.error });
       return res.json(result.provenance);
     } catch (error) {
@@ -632,11 +640,31 @@ module.exports = function registerRoutes(router, context) {
   // Project-qualified design-docs presence: feature/artifact counts and
   // design PRs from the data repo's design-docs collector. Never falls back
   // between projects.
+  /**
+   * @openapi
+   * /api/modules/ai-impact/project-design-docs:
+   *   get:
+   *     tags: [AI Impact]
+   *     summary: Read published design-doc evidence for a project
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Project-qualified design-doc presence and PR evidence
+   *       400:
+   *         description: Missing or invalid project ID
+   *       404:
+   *         description: Unknown project or publication
+   */
   router.get('/project-design-docs', requireScope('ai-impact:read'), function(req, res) {
-    const projectId = req.query?.projectId;
-    if (!projectId) return res.status(400).json({ error: 'projectId is required' });
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (!selection.provided) return res.status(400).json({ error: 'projectId is required' });
+    if (selection.status) return res.status(selection.status).json({ error: selection.error });
     try {
-      const result = readProjectDesignDocs(context.projects, projectId);
+      const result = readProjectDesignDocs(context.projects, selection.projectId);
       if (result.status !== 200) return res.status(result.status).json({ error: result.error });
       return res.json(result.designDocs);
     } catch (error) {

@@ -449,4 +449,24 @@ describe('registerRegistryRoutes', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Unknown project' });
     expect(res.body.releases).toBeUndefined();
   });
+
+  it('rejects an explicitly empty project ID instead of reading the legacy registry', () => {
+    const router = makeRouter();
+    const context = {
+      ...makeContext(),
+      storage: createMockStorage({ [REGISTRY_FILE]: { schemaVersion: 1, releases: [{ id: 'osac-0.4' }] } }),
+      projects: { get: vi.fn(() => null), readArtifact: vi.fn() }
+    };
+    registerRegistryRoutes(router, context);
+    const handler = router.get.mock.calls.find(call => call[0] === '/registry')[3];
+    const res = {
+      status: vi.fn(function (code) { this.code = code; return this }),
+      json: vi.fn(function (body) { this.body = body; return this })
+    };
+
+    handler({ query: { projectId: '' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body.error).toContain('projectId');
+  });
 });

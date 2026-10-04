@@ -77,6 +77,17 @@ describe('readProjectPublication', () => {
     expect(result.error).toBe('Unknown project');
   });
 
+  it('returns a server error when reading the project profile fails', () => {
+    const projects = {
+      get() { throw new Error('storage unavailable') },
+      readArtifact: () => null
+    };
+    const result = readProjectPublication(projects, 'flightctl', 'buildRegistry');
+
+    expect(result.status).toBe(500);
+    expect(result.error).toBe('storage unavailable');
+  });
+
   it('returns truthful unavailable when the capability is not supported', () => {
     const profile = makeProfile('flightctl');
     profile.capabilities.buildRegistry = { state: 'unavailable', artifactKey: 'x.json' };

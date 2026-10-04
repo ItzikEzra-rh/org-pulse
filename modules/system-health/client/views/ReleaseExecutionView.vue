@@ -87,6 +87,8 @@ const loading = ref(true)
 const error = ref(null)
 const unavailable = ref(null)
 const data = ref(null)
+const projectId = useProjectId()
+let requestSequence = 0
 
 function runBadgeClasses(run) {
   const status = String(run.status || run.conclusion || '').toLowerCase()
@@ -103,27 +105,36 @@ function formatDate(value) {
 }
 
 async function load() {
+  const requestedProjectId = projectId.value
+  const requestId = ++requestSequence
   loading.value = true
   error.value = null
   unavailable.value = null
   data.value = null
   envelope.value = null
   try {
-    const next = await apiRequest(`/modules/system-health/release-execution${projectQuery(useProjectId().value)}`)
+    const next = await apiRequest(`/modules/system-health/release-execution${projectQuery(requestedProjectId)}`)
+    if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
+    if (next?.projectId && next.projectId !== requestedProjectId) {
+      throw new Error('Release execution response project identity mismatch')
+    }
     envelope.value = next
     data.value = next?.data || null
     if (!data.value) unavailable.value = next?.error || 'No release execution publication for this project'
   } catch (e) {
+    if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
     if (e.status === 404) {
       unavailable.value = 'No release execution publication for this project yet'
     } else {
       error.value = e.message || 'Failed to load release execution evidence'
     }
   } finally {
-    loading.value = false
+    if (requestId === requestSequence && projectId.value === requestedProjectId) {
+      loading.value = false
+    }
   }
 }
 
 onMounted(load)
-watch(useProjectId(), () => load())
+watch(projectId, () => load(), { flush: 'sync' })
 </script>

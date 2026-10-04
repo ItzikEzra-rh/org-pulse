@@ -18,14 +18,28 @@ const envelope = ref(null)
 const loading = ref(true)
 const error = ref(null)
 const notFound = ref(false)
+const unavailable = ref(null)
+const projectId = useProjectId()
+let requestSequence = 0
 
 async function load() {
+  const requestedProjectId = projectId.value
+  const requestId = ++requestSequence
   loading.value = true
   error.value = null
   notFound.value = false
+  unavailable.value = null
+  envelope.value = null
   try {
-    envelope.value = await apiRequest(`/modules/system-health/ci-digest${projectQuery(useProjectId().value)}`)
+    const next = await apiRequest(`/modules/system-health/ci-digest${projectQuery(requestedProjectId)}`)
+    if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
+    if (['unavailable', 'inapplicable'].includes(next?.state)) {
+      unavailable.value = next
+    } else {
+      envelope.value = next
+    }
   } catch (e) {
+    if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
     if (e.status === 404) {
       notFound.value = true
     } else {
@@ -33,7 +47,9 @@ async function load() {
     }
     envelope.value = null
   } finally {
-    loading.value = false
+    if (requestId === requestSequence && projectId.value === requestedProjectId) {
+      loading.value = false
+    }
   }
 }
 
@@ -209,7 +225,14 @@ const topFailingText = computed(() => {
   return tf ? `${tf.workflow} (${tf.failure} failures)` : 'None'
 })
 
-watch(useProjectId(), () => load())
+watch(projectId, () => load(), { flush: 'sync' })
+
+const unavailableMessage = computed(() => {
+  if (unavailable.value?.reason === 'osac-only-data-source') {
+    return 'The CI Daily Digest is OSAC-specific and does not apply to this project.'
+  }
+  return 'CI Daily Digest is not available for this project.'
+})
 
 function retry() {
   load()
@@ -272,6 +295,15 @@ function retry() {
         @click="retry"
         class="mt-4 px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline"
       >Try again</button>
+    </div>
+
+    <!-- Project-specific unavailable state -->
+    <div
+      v-else-if="unavailable"
+      class="text-center py-16 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+    >
+      <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">CI digest unavailable for this project</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{{ unavailableMessage }}</p>
     </div>
 
     <!-- Missing data -->

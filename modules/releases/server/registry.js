@@ -9,6 +9,7 @@
 
 const { logAudit } = require('./planning/audit-log');
 const { loadRegistryConfig, saveRegistryConfig } = require('./registry-config');
+const { resolveProjectSelection } = require('../../../shared/server/project-profile');
 
 const REGISTRY_FILE = 'releases/registry.json';
 const SCHEMA_VERSION = 1;
@@ -42,7 +43,7 @@ function readProjectRegistry(projects, projectId, artifactKey = 'releases/regist
   try {
     profile = projects.get(projectId);
   } catch (error) {
-    return { status: 400, error: error.message };
+    return { status: 500, error: error.message };
   }
   if (!profile) return { status: 404, error: 'Unknown project' };
 
@@ -584,8 +585,10 @@ function registerRegistryRoutes(router, context) {
    *                     type: object
    */
   router.get('/registry', requireAuth, requireScope('releases:read'), function(req, res) {
-    if (req.query?.projectId) {
-      const result = readProjectRegistry(projects, req.query.projectId);
+    const selection = resolveProjectSelection(projects, req.query);
+    if (selection.status) return res.status(selection.status).json({ error: selection.error });
+    if (selection.provided) {
+      const result = readProjectRegistry(projects, selection.projectId);
       if (result.status !== 200) return res.status(result.status).json({ error: result.error });
       return res.json(result.registry);
     }
@@ -663,8 +666,10 @@ function registerRegistryRoutes(router, context) {
    *         description: Release not found
    */
   router.get('/registry/:id', requireAuth, requireScope('releases:read'), function(req, res) {
-    const projectResult = req.query?.projectId
-      ? readProjectRegistry(projects, req.query.projectId)
+    const selection = resolveProjectSelection(projects, req.query);
+    if (selection.status) return res.status(selection.status).json({ error: selection.error });
+    const projectResult = selection.provided
+      ? readProjectRegistry(projects, selection.projectId)
       : null;
     if (projectResult && projectResult.status !== 200) {
       return res.status(projectResult.status).json({ error: projectResult.error });

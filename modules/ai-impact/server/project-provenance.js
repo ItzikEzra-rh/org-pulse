@@ -20,7 +20,7 @@ function readProjectProvenance(projects, projectId) {
   try {
     profile = projects.get(projectId);
   } catch (error) {
-    return { status: 400, error: error.message };
+    return { status: 500, error: error.message };
   }
   if (!profile) return { status: 404, error: 'Unknown project' };
 

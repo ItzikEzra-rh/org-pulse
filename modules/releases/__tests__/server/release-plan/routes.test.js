@@ -41,7 +41,10 @@ describe('release-plan routes', () => {
     context = {
       storage,
       requireAuth: vi.fn(),
-      requireScope: () => (req, res, next) => next()
+      requireScope: () => (req, res, next) => next(),
+      projects: {
+        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null
+      }
     }
     registerReleasePlanRoutes(router, context)
   })
@@ -74,6 +77,27 @@ describe('release-plan routes', () => {
       handler({}, res)
 
       expect(res._json).toEqual({ versions: [] })
+    })
+
+    it('reads only the selected project index and rejects unknown or empty IDs', () => {
+      const index = { versions: ['0.10.0'] }
+      storage = makeStorage({ 'projects/flightctl/releases/release-plans/index.json': index })
+      const r = makeRouter()
+      registerReleasePlanRoutes(r, { ...context, storage })
+      const handler = r._routes.get['/release-plans'].at(-1)
+
+      const projectRes = makeRes()
+      handler({ query: { projectId: 'flightctl' } }, projectRes)
+      expect(projectRes._json).toEqual(index)
+
+      const unknownRes = makeRes()
+      handler({ query: { projectId: 'unknown' } }, unknownRes)
+      expect(unknownRes._status).toBe(404)
+      expect(unknownRes._json).toEqual({ error: 'Unknown project' })
+
+      const emptyRes = makeRes()
+      handler({ query: { projectId: '' } }, emptyRes)
+      expect(emptyRes._status).toBe(400)
     })
   })
 
@@ -116,6 +140,18 @@ describe('release-plan routes', () => {
       handler({ query: { version: '0.3' } }, res)
 
       expect(res._json).toEqual(plan)
+    })
+
+    it('validates the project ID before constructing a project storage key', () => {
+      const handler = router._routes.get['/release-plan'].at(-1)
+      const unknownRes = makeRes()
+      handler({ query: { version: '0.3', projectId: 'unknown' } }, unknownRes)
+      expect(unknownRes._status).toBe(404)
+      expect(unknownRes._json).toEqual({ error: 'Unknown project' })
+
+      const emptyRes = makeRes()
+      handler({ query: { version: '0.3', projectId: '' } }, emptyRes)
+      expect(emptyRes._status).toBe(400)
     })
   })
 })

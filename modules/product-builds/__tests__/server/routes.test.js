@@ -56,6 +56,10 @@ describe('product-builds routes', () => {
       storage,
       requireAdmin,
       secrets: {},
+      projects: {
+        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null,
+        readArtifact: vi.fn()
+      },
       registerRefresh: vi.fn(),
       registerDiagnostics: vi.fn(),
     }
@@ -227,6 +231,42 @@ describe('product-builds routes', () => {
 
     it('registers diagnostics', () => {
       expect(context.registerDiagnostics).toHaveBeenCalled()
+    })
+  })
+
+  describe('project-qualified proxy isolation', () => {
+    it('returns 404 for unknown projects before proxying every AIPCC route', () => {
+      const handler = router._routes.get['/drops/:key/metrics'].at(-1)
+      const res = makeRes()
+
+      handler({ query: { projectId: 'unknown' }, params: { key: 'drop-1' } }, res)
+
+      expect(res._status).toBe(404)
+      expect(res._json).toEqual({ error: 'Unknown project' })
+    })
+
+    it('returns unavailable for known non-OSAC projects instead of proxying OSAC data', () => {
+      const handler = router._routes.get['/drops/:key/metrics'].at(-1)
+      const res = makeRes()
+
+      handler({ query: { projectId: 'flightctl' }, params: { key: 'drop-1' } }, res)
+
+      expect(res._json).toEqual({
+        projectId: 'flightctl',
+        state: 'unavailable',
+        reason: 'osac-only-data-source',
+        data: null
+      })
+    })
+
+    it('rejects an explicitly empty project ID rather than proxying OSAC data', () => {
+      const handler = router._routes.get['/drops/:key/metrics'].at(-1)
+      const res = makeRes()
+
+      handler({ query: { projectId: '' }, params: { key: 'drop-1' } }, res)
+
+      expect(res._status).toBe(400)
+      expect(res._json.error).toContain('projectId')
     })
   })
 })

@@ -43,6 +43,39 @@ function normalizeProjectId(projectId) {
   return value
 }
 
+/**
+ * Resolve an optional projectId query parameter without allowing invalid or
+ * unknown IDs to fall through to an unqualified (legacy) data source.
+ */
+function resolveProjectSelection(projects, query) {
+  const params = query && typeof query === 'object' ? query : {}
+  if (!Object.prototype.hasOwnProperty.call(params, 'projectId')) {
+    return { provided: false }
+  }
+
+  let projectId
+  try {
+    projectId = normalizeProjectId(params.projectId)
+  } catch (error) {
+    return { provided: true, status: 400, error: error.message }
+  }
+  if (params.projectId !== projectId) {
+    return { provided: true, status: 400, error: 'projectId must not contain surrounding whitespace' }
+  }
+
+  if (!projects || typeof projects.get !== 'function') {
+    return { provided: true, status: 503, error: 'Project profile reader is unavailable' }
+  }
+
+  try {
+    const profile = projects.get(projectId)
+    if (!profile) return { provided: true, status: 404, error: 'Unknown project' }
+    return { provided: true, projectId, profile }
+  } catch (error) {
+    return { provided: true, status: 500, error: error.message || 'Failed to read project profile' }
+  }
+}
+
 function normalizeArtifactKey(key) {
   const value = normalizeString(key, 'artifactKey').replace(/\\/g, '/')
   const segments = value.split('/')
@@ -345,7 +378,7 @@ function createProjectProfileRegistry(profiles) {
 
   return Object.freeze({
     schemaVersion: PUBLICATION_SCHEMA_VERSION,
-    get: projectId => profileMap.get(projectId) || null,
+    get: projectId => profileMap.get(normalizeProjectId(projectId)) || null,
     list: () => Array.from(profileMap.values()),
     qualifyStorageKey,
     publicationStatusKey,
@@ -362,6 +395,7 @@ module.exports = {
   CAPABILITY_STATES,
   FRESHNESS_STATES,
   normalizeArtifactKey,
+  resolveProjectSelection,
   normalizeProjectProfile,
   createPublicationEnvelope,
   createProjectProfileReader,

@@ -286,7 +286,7 @@ module.exports = function registerRoutes(router, context) {
   router.use('/pm-hub', pmHubRouter);
 
   // Release Plan routes (top-level under /api/modules/releases/, no LLM call — pure storage passthrough)
-  registerReleasePlanRoutes(router, { storage, requireAuth, requireScope });
+  registerReleasePlanRoutes(router, { storage, requireAuth, requireScope, projects: context.projects || null });
 
   // ─── Unified Audit Routes ───
 

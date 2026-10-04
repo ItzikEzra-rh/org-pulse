@@ -85,6 +85,8 @@ const registry = ref(null)
 const loading = ref(true)
 const error = ref(null)
 const unavailable = ref(null)
+const projectId = useProjectId()
+let requestSequence = 0
 
 const summary = computed(() => registry.value?.data?.summary || {})
 const packages = computed(() => {
@@ -93,19 +95,31 @@ const packages = computed(() => {
 })
 
 async function load() {
+  const requestedProjectId = projectId.value
+  const requestId = ++requestSequence
   loading.value = true
   error.value = null
   unavailable.value = null
+  registry.value = null
   try {
-    registry.value = await apiRequest(`/modules/product-builds/project-publication${projectQuery(useProjectId().value)}`)
+    const next = await apiRequest(`/modules/product-builds/project-publication${projectQuery(requestedProjectId)}`)
+    if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
+    if (['unavailable', 'inapplicable'].includes(next?.state) || !next?.data) {
+      unavailable.value = { reason: next?.reason || 'No build registry publication for this project' }
+    } else {
+      registry.value = next
+    }
   } catch (e) {
+    if (requestId !== requestSequence || projectId.value !== requestedProjectId) return
     if (e.status === 404) {
       unavailable.value = { reason: 'No build registry published for this project yet' }
     } else {
       error.value = e.message || 'Failed to load the build registry'
     }
   } finally {
-    loading.value = false
+    if (requestId === requestSequence && projectId.value === requestedProjectId) {
+      loading.value = false
+    }
   }
 }
 
@@ -116,5 +130,5 @@ function formatDate(value) {
 }
 
 onMounted(load)
-watch(useProjectId(), () => load())
+watch(projectId, () => load(), { flush: 'sync' })
 </script>

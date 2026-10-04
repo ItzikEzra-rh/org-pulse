@@ -51,7 +51,10 @@ describe('ci-duty routes', () => {
     context = {
       storage,
       requireAuth: vi.fn(),
-      requireScope: () => (req, res, next) => next()
+      requireScope: () => (req, res, next) => next(),
+      projects: {
+        get: projectId => ['osac', 'flightctl'].includes(projectId) ? { projectId } : null
+      }
     }
     registerCiDutyRoutes(router, context)
   })
@@ -92,5 +95,29 @@ describe('ci-duty routes', () => {
 
     expect(res._status).toBe(404)
     expect(res._json).toEqual({ error: 'No CI Duty roster available yet' })
+  })
+
+  it('returns 404 for unknown projects and inapplicable for known non-OSAC projects', () => {
+    const handler = router._routes.get['/ci-duty'].at(-1)
+    const unknownRes = makeRes()
+    handler({ query: { projectId: 'unknown' } }, unknownRes)
+    expect(unknownRes._status).toBe(404)
+    expect(unknownRes._json).toEqual({ error: 'Unknown project' })
+
+    const flightctlRes = makeRes()
+    handler({ query: { projectId: 'flightctl' } }, flightctlRes)
+    expect(flightctlRes._json).toEqual({
+      projectId: 'flightctl',
+      state: 'inapplicable',
+      reason: 'user-approved-osac-only',
+      data: null
+    })
+  })
+
+  it('rejects an explicit empty project ID rather than serving the OSAC roster', () => {
+    const handler = router._routes.get['/ci-duty'].at(-1)
+    const res = makeRes()
+    handler({ query: { projectId: '' } }, res)
+    expect(res._status).toBe(400)
   })
 })
