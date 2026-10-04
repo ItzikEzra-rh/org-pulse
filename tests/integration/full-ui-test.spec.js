@@ -6,7 +6,7 @@ const { setupErrorTracking, logCapturedErrors } = require('./helpers');
  * Full UI validation (both projects) against a deployed candidate.
  *
  * Covers what the onboarding harness does not:
- * - Default load with no projectId (legacy layout, OSAC data present)
+ * - Default Flight Control context and People-directory isolation when switching to OSAC
  * - OSAC project-qualified reads (?projectId=osac)
  * - OSAC autofix pipeline data (real rows) for the OSAC context
  * - OSAC AI screens never serve flightctl rows
@@ -27,13 +27,18 @@ test.describe('Full UI @full-ui', () => {
     logCapturedErrors(page, testInfo);
   });
 
-  test('default load with no projectId serves the legacy layout (OSAC data present)', async ({ page }) => {
-    let rosterStatus = null;
-    let rosterBody = null;
+  test('default project context shows Flight Control people and switching to OSAC stays isolated', async ({ page }) => {
+    const rosterResponses = [];
+    const legacyPeopleRequests = [];
     page.on('response', async (response) => {
-      if (response.url().includes('/api/roster')) {
-        rosterStatus = response.status();
-        try { rosterBody = await response.json(); } catch { /* binary */ }
+      const url = new URL(response.url());
+      if (url.pathname === '/api/roster' && url.searchParams.get('projectId') === FLIGHTCTL) {
+        try { rosterResponses.push({ status: response.status(), body: await response.json() }); } catch { /* binary */ }
+      }
+    });
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/modules/team-tracker/registry/people') {
+        legacyPeopleRequests.push(request.url());
       }
     });
 
@@ -41,11 +46,27 @@ test.describe('Full UI @full-ui', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
-    expect(rosterStatus).toBe(200);
-    // No explicit projectId: the legacy layout serves; OSAC data is present
-    expect(rosterBody?.vp?.uid).toBe(OSAC);
-    expect((rosterBody?.orgs || []).length).toBeGreaterThan(0);
-    expect(page.url()).not.toContain('projectId=flightctl');
+    expect(page.url()).toContain(`projectId=${FLIGHTCTL}`);
+    expect(await page.locator('#project-selector').inputValue()).toBe(FLIGHTCTL);
+    expect(rosterResponses.at(-1)?.status).toBe(200);
+    expect(rosterResponses.at(-1)?.body?.people).toHaveLength(23);
+    await expect(page.locator('tbody tr')).toHaveCount(23);
+    expect(legacyPeopleRequests).toHaveLength(0);
+
+    await page.locator('#project-selector').selectOption(OSAC);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    expect(page.url()).toContain(`projectId=${OSAC}`);
+    await expect(page.locator('tbody tr')).toHaveCount(94);
+    const osacLegacyRequestCount = legacyPeopleRequests.length;
+    expect(osacLegacyRequestCount).toBeGreaterThan(0);
+
+    await page.locator('#project-selector').selectOption(FLIGHTCTL);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+    expect(page.url()).toContain(`projectId=${FLIGHTCTL}`);
+    await expect(page.locator('tbody tr')).toHaveCount(23);
+    expect(legacyPeopleRequests).toHaveLength(osacLegacyRequestCount);
   });
 
   test('OSAC project-qualified reads serve OSAC data', async ({ page }) => {

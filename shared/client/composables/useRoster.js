@@ -1,41 +1,77 @@
 import { ref, computed, watch } from 'vue'
-import { getRoster, apiRequest } from '../services/api'
-import { useProjectId, projectQuery } from './useProjectId.js'
+import { getRoster } from '../services/api'
+import { useProjectId } from './useProjectId.js'
 
 const rosterData = ref(null)
 const loading = ref(false)
 const error = ref(null)
 const selectedOrgKey = ref(null)
-const _rosterProjectId = useProjectId()
+const projectId = useProjectId()
+let rosterProjectId = projectId.value
+let requestSequence = 0
+let pendingRosterRequest = null
 
-async function reloadRoster() {
+watch(projectId, currentProjectId => {
+  rosterProjectId = currentProjectId
+  rosterData.value = null
+  selectedOrgKey.value = null
+  error.value = null
+  loading.value = false
+  requestSequence += 1
+  pendingRosterRequest = null
+  fetchRoster()
+}, { flush: 'sync' })
+
+function fetchRoster({ force = false } = {}) {
+  const requestedProjectId = projectId.value
+  if (!force && rosterData.value && rosterProjectId === requestedProjectId) {
+    return Promise.resolve(rosterData.value)
+  }
+  if (!force && pendingRosterRequest?.projectId === requestedProjectId) {
+    return pendingRosterRequest.promise
+  }
+
+  const requestId = ++requestSequence
+  rosterProjectId = requestedProjectId
   loading.value = true
   error.value = null
-  try {
-    const fresh = await apiRequest(`/roster${projectQuery(_rosterProjectId.value)}`)
-    rosterData.value = fresh
-  } catch (err) {
-    error.value = err.message
-    console.error('Failed to reload roster:', err)
-  } finally {
-    loading.value = false
-  }
+
+  const promise = (async () => {
+    try {
+      const fresh = await getRoster(requestedProjectId)
+      if (requestedProjectId && requestedProjectId !== 'osac' && fresh?.projectId !== requestedProjectId) {
+        throw new Error('Roster response project identity mismatch')
+      }
+      if (requestId === requestSequence && projectId.value === requestedProjectId) {
+        rosterData.value = fresh
+        rosterProjectId = requestedProjectId
+      }
+      return fresh
+    } catch (err) {
+      if (requestId === requestSequence && projectId.value === requestedProjectId) {
+        error.value = err.message
+        console.error('Failed to load roster:', err)
+      }
+      return null
+    } finally {
+      if (requestId === requestSequence) {
+        loading.value = false
+        pendingRosterRequest = null
+      }
+    }
+  })()
+
+  pendingRosterRequest = { projectId: requestedProjectId, promise }
+  return promise
 }
 
-async function loadRoster() {
-  loading.value = true
-  error.value = null
-  try {
-    rosterData.value = await getRoster(_rosterProjectId.value)
-  } catch (err) {
-    error.value = err.message
-    console.error('Failed to load roster:', err)
-  } finally {
-    loading.value = false
-  }
+function loadRoster() {
+  return fetchRoster()
 }
 
-watch(_rosterProjectId, () => reloadRoster())
+function reloadRoster() {
+  return fetchRoster({ force: true })
+}
 
 export function useRoster() {
   const orgs = computed(() => {
@@ -114,7 +150,7 @@ export function useRoster() {
     const names = new Set()
     for (const team of teams.value) {
       for (const member of team.members) {
-        names.add(member.jiraDisplayName)
+        names.add(member.accountId || member.jiraDisplayName)
       }
     }
     return names.size

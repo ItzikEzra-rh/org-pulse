@@ -8,28 +8,38 @@ const loading = ref(true)
 const error = ref(null)
 const refreshStatus = ref(null)
 let hasFetched = false
+let requestSequence = 0
 
 const timeWindow = ref('month')
+const projectId = useProjectId()
 
 async function load() {
   const tw = timeWindow.value || 'month'
+  const requestedProjectId = projectId.value
+  const requestId = ++requestSequence
   loading.value = true
   error.value = null
   try {
     const params = new URLSearchParams({ timeWindow: tw })
-    const projectId = useProjectId().value
-    if (projectId) params.set('projectId', projectId)
+    if (requestedProjectId) params.set('projectId', requestedProjectId)
     const data = await apiRequest(`/modules/ai-impact/rfe-data?${params}`)
-    // Ignore a stale response if the window changed while this request was in
-    // flight, so an earlier request can't clobber a newer selection's data
-    // (or its loading/error state).
-    if ((timeWindow.value || 'month') !== tw) return
+    if (requestedProjectId && requestedProjectId !== 'osac' && data?.projectId !== requestedProjectId) {
+      throw new Error('RFE response project identity mismatch')
+    }
+    // A response is valid only for the project and period that requested it.
+    if (requestId !== requestSequence
+        || projectId.value !== requestedProjectId
+        || (timeWindow.value || 'month') !== tw) return
     rfeData.value = data
   } catch (e) {
-    if ((timeWindow.value || 'month') !== tw) return
+    if (requestId !== requestSequence
+        || projectId.value !== requestedProjectId
+        || (timeWindow.value || 'month') !== tw) return
     error.value = e.message
   } finally {
-    if ((timeWindow.value || 'month') === tw) {
+    if (requestId === requestSequence
+        && projectId.value === requestedProjectId
+        && (timeWindow.value || 'month') === tw) {
       loading.value = false
     }
   }
@@ -45,7 +55,12 @@ async function checkRefreshStatus() {
 
 // Re-fetch when time window changes
 watch(timeWindow, () => load())
-watch(useProjectId(), () => load())
+watch(projectId, () => {
+  rfeData.value = null
+  error.value = null
+  refreshStatus.value = null
+  load()
+}, { flush: 'sync' })
 
 // No caller-supplied time window: consumers that care about the period read
 // and write the returned `timeWindow` ref directly (same pattern as
@@ -60,6 +75,7 @@ export function useAIImpact() {
 }
 
 export function _resetForTesting() {
+  requestSequence += 1
   rfeData.value = null
   loading.value = true
   error.value = null

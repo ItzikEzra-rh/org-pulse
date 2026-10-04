@@ -45,6 +45,8 @@ describe.skipIf(!process.env.ORG_PULSE_REAL_DATA_DIR)('published roster resolves
     if (roster.state === 'supported') {
       expect(roster.publication.state).toBe('supported')
       expect(roster.publication.generatedAt).toBeTruthy()
+      expect(roster.people).toHaveLength(23)
+      expect(roster.people.filter(person => person.status === 'active')).toHaveLength(23)
       const org = roster.orgs[0]
       expect(org.key).toBe('flightctl')
       expect(Object.keys(org.teams).length).toBeGreaterThan(0)

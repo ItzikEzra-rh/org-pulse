@@ -61,9 +61,29 @@ describe('readProjectRoster', () => {
     const org = result.roster.orgs[0];
     expect(org.key).toBe('flightctl');
     expect(org.teams['RHEM-QE'].members).toEqual([
-      { name: 'Alice', jiraDisplayName: 'Alice', customFields: {} }
+      { accountId: 'acct-1', name: 'Alice', jiraDisplayName: 'Alice', customFields: {} }
     ]);
     expect(org.teams['RHEM-DEV'].members.map(m => m.name)).toEqual(['Alice']);
+    expect(result.roster.people).toEqual([
+      {
+        accountId: 'acct-1',
+        name: 'Alice',
+        status: 'active',
+        orgRoot: 'flightctl',
+        orgDisplayName: 'Flight Control',
+        teamIds: ['team-1', 'team-2'],
+        teams: ['RHEM-QE', 'RHEM-DEV']
+      },
+      {
+        accountId: 'acct-2',
+        name: 'Bob',
+        status: 'inactive',
+        orgRoot: 'flightctl',
+        orgDisplayName: 'Flight Control',
+        teamIds: ['team-2'],
+        teams: ['RHEM-DEV']
+      }
+    ]);
     expect(result.roster.teamDataSource).toBe('project-publication');
     expect(result.roster.availability).toBe('available');
   });

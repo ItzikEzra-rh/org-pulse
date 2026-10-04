@@ -103,6 +103,8 @@ function readProjectRoster(projects, projectId) {
     };
   }
 
+  const teamById = new Map(teams.map(team => [team.id, team]));
+
   const membershipsByTeamId = new Map();
   for (const person of people) {
     if (new Set(person.teamIds).size !== person.teamIds.length) {
@@ -126,12 +128,23 @@ function readProjectRoster(projects, projectId) {
     for (const person of members.values()) {
       if (!person.active) continue;
       teamMap[team.name].members.push({
+        accountId: person.accountId,
         name: person.displayName.trim(),
         jiraDisplayName: person.displayName.trim(),
         customFields: {}
       });
     }
   }
+
+  const projectPeople = people.map(person => ({
+    accountId: person.accountId,
+    name: person.displayName.trim(),
+    status: person.active ? 'active' : 'inactive',
+    orgRoot: projectId,
+    orgDisplayName: profile.displayName || projectId,
+    teamIds: [...person.teamIds],
+    teams: person.teamIds.map(teamId => teamById.get(teamId).name)
+  }));
 
   const available = Object.values(teamMap).some(team => team.members.length > 0);
   return {
@@ -143,6 +156,7 @@ function readProjectRoster(projects, projectId) {
       reason: available ? null : 'no-active-team-memberships',
       sourceArtifact: `projects/${projectId}/${ARTIFACT_KEY}`,
       publication: { state: envelope.state, generatedAt, partial: false },
+      people: projectPeople,
       vp: null,
       orgs: [{
         key: projectId,
@@ -167,6 +181,7 @@ function _unavailableRoster(projectId, reason, publicationState, generatedAt) {
     reason,
     sourceArtifact: `projects/${projectId}/${ARTIFACT_KEY}`,
     publication: { state: publicationState, generatedAt, partial: reason === 'publication-partial' },
+    people: [],
     vp: null,
     orgs: [],
     visibleFields: [],

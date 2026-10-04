@@ -73,10 +73,10 @@ describe('ProjectSelector', () => {
     expect(wrapper.find('select#project-selector').element.value).toBe('flightctl')
   })
 
-  it('keeps the first project as selection for an unknown projectId param', async () => {
+  it('keeps an unknown projectId visible for 404 handling', async () => {
     apiRequest.mockResolvedValueOnce(twoProjects)
     const { wrapper } = mountSelector({ projectId: 'nonexistent' })
     await flushPromises()
-    expect(wrapper.find('select#project-selector').element.value).toBe('osac')
+    expect(wrapper.find('select#project-selector').element.value).toBe('nonexistent')
   })
 })
