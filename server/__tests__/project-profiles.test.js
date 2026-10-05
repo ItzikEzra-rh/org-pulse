@@ -13,7 +13,14 @@ const OSAC = {
   repositories: [],
   sources: [],
   teamIds: [],
-  capabilities: { releaseRegistry: { state: 'supported', artifactKey: 'releases/registry.json' } }
+  capabilities: {
+    releaseRegistry: { state: 'supported', artifactKey: 'releases/registry.json' },
+    operationalMetrics: {
+      state: 'supported',
+      title: 'Unified Operational Intelligence',
+      url: 'https://devtools.pages.redhat.com/n8n-pulumi-poc/#/?org=ecosystem&product=osac&team=osac'
+    }
+  }
 }
 
 const FLIGHTCTL = {
@@ -40,7 +47,11 @@ const FLIGHTCTL = {
   ],
   capabilities: {
     releaseRegistry: { state: 'supported', artifactKey: 'releases/registry.json' },
-    accessRestrictions: null
+    accessRestrictions: null,
+    operationalMetrics: {
+      state: 'inapplicable',
+      reason: 'The UOI registry has no Flightctl/RHEM entry and is OSAC-only.'
+    }
   }
 }
 
@@ -131,6 +142,60 @@ describe('server project profiles', () => {
     expect(response.json).toHaveBeenCalledWith({
       projects: [{ projectId: 'osac', displayName: 'OSAC' }]
     })
+  })
+
+  it('publishes only the project-qualified Operational Metrics disposition', () => {
+    const response = createResponse()
+    createProjectListHandler(createServerProjectProfiles(makeStorage()))({}, response)
+
+    expect(response.json).toHaveBeenCalledWith({
+      projects: [
+        {
+          projectId: 'osac',
+          displayName: 'OSAC',
+          capabilities: {
+            operationalMetrics: {
+              state: 'supported',
+              title: 'Unified Operational Intelligence',
+              url: 'https://devtools.pages.redhat.com/n8n-pulumi-poc/#/?org=ecosystem&product=osac&team=osac',
+              freshness: 'unknown'
+            }
+          }
+        },
+        {
+          projectId: 'flightctl',
+          displayName: 'Flight Control',
+          capabilities: {
+            operationalMetrics: {
+              state: 'inapplicable',
+              title: 'Operational Metrics',
+              reason: 'The UOI registry has no Flightctl/RHEM entry and is OSAC-only.'
+            }
+          }
+        }
+      ]
+    })
+  })
+
+  it('fails closed when a supported Operational Metrics URL is outside the approved dashboard', () => {
+    for (const url of [
+      'https://example.com/osac',
+      'https://devtools.pages.redhat.com/n8n-pulumi-poc-evil/osac',
+      'https://devtools.pages.redhat.com/n8n-pulumi-poc/#/?product=flightctl'
+    ]) {
+      const profile = {
+        ...OSAC,
+        capabilities: {
+          ...OSAC.capabilities,
+          operationalMetrics: { state: 'supported', url }
+        }
+      }
+      expect(require('../project-profiles').publicOperationalMetricsCapability(profile)).toEqual({
+        state: 'unavailable',
+        title: 'Operational Metrics',
+        reason: 'The published Operational Metrics URL is missing or invalid.'
+      })
+    }
   })
 
   it('maps missing discovery publication to HTTP 503 through the projects API handler', () => {

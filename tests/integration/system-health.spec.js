@@ -44,6 +44,48 @@ function makeCiDutyGapRoster() {
   };
 }
 
+async function mockOperationalMetricsProjects(page) {
+  await page.route('**/api/roster**', route => {
+    const requestUrl = new URL(route.request().url());
+    const projectId = requestUrl.searchParams.get('projectId') || 'osac';
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projectId, orgs: [], visibleFields: [], managerNames: {} })
+    });
+  });
+  await page.route('**/api/projects', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      projects: [
+        {
+          projectId: 'osac',
+          displayName: 'OSAC',
+          capabilities: {
+            operationalMetrics: {
+              state: 'supported',
+              title: 'Unified Operational Intelligence',
+              url: 'https://devtools.pages.redhat.com/n8n-pulumi-poc/#/?org=ecosystem&product=osac&team=osac',
+              freshness: 'unknown'
+            }
+          }
+        },
+        {
+          projectId: 'flightctl',
+          displayName: 'Flight Control',
+          capabilities: {
+            operationalMetrics: {
+              state: 'inapplicable',
+              reason: 'The UOI registry has no Flightctl/RHEM entry and is OSAC-only.'
+            }
+          }
+        }
+      ]
+    })
+  }));
+}
+
 test.describe('System Health Module @system-health', () => {
   test.beforeEach(async ({ page }) => {
     setupErrorTracking(page);
@@ -175,8 +217,16 @@ test.describe('System Health Views @system-health', () => {
     expect(page.errors).toHaveLength(0);
   }
 
-  test('should load Operational Metrics view with embedded UOI dashboard', async ({ page }) => {
-    await testView(page, 'operational-metrics', 'Operational Metrics');
+  test('should load the configured OSAC UOI dashboard for the OSAC project', async ({ page }) => {
+    await mockOperationalMetricsProjects(page);
+    await page.route('https://devtools.pages.redhat.com/n8n-pulumi-poc/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><title>UOI test dashboard</title>'
+    }));
+    await page.goto('/#/system-health/operational-metrics?projectId=osac');
+
+    await expect(page.locator('main h1')).toHaveText('Operational Metrics');
 
     const iframe = page.locator('iframe');
     await expect(iframe).toHaveCount(1);
@@ -188,6 +238,23 @@ test.describe('System Health Views @system-health', () => {
     await expect(openInNewTab).toHaveAttribute('target', '_blank');
     const href = await openInNewTab.getAttribute('href');
     expect(href).toContain('devtools.pages.redhat.com/n8n-pulumi-poc');
+  });
+
+  test('should not request or render the OSAC UOI dashboard for Flight Control', async ({ page }) => {
+    await mockOperationalMetricsProjects(page);
+    const dashboardRequests = [];
+    page.on('request', request => {
+      if (request.url().includes('devtools.pages.redhat.com/n8n-pulumi-poc')) {
+        dashboardRequests.push(request.url());
+      }
+    });
+
+    await page.goto('/#/system-health/operational-metrics?projectId=flightctl');
+
+    await expect(page.getByText('Operational Metrics is not applicable to Flight Control')).toBeVisible();
+    await expect(page.locator('iframe')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Open in new tab' })).toHaveCount(0);
+    expect(dashboardRequests).toHaveLength(0);
   });
 
   test('should load Quality Analysis view', async ({ page }) => {

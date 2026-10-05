@@ -1754,7 +1754,7 @@ const projectProfiles = createServerProjectProfiles(storageModule);
  *     summary: List the validated published project profiles
  *     responses:
  *       200:
- *         description: Published project IDs and display names
+ *         description: Published project identities and the bounded capabilities used by the app shell
  *         content:
  *           application/json:
  *             schema:
@@ -1771,6 +1771,26 @@ const projectProfiles = createServerProjectProfiles(storageModule);
  *                         type: string
  *                       displayName:
  *                         type: string
+ *                       capabilities:
+ *                         type: object
+ *                         properties:
+ *                           operationalMetrics:
+ *                             type: object
+ *                             required: [state, title]
+ *                             properties:
+ *                               state:
+ *                                 type: string
+ *                                 enum: [supported, unavailable, inaccessible, empty, inapplicable, disabled, source-only, error]
+ *                               title:
+ *                                 type: string
+ *                               reason:
+ *                                 type: string
+ *                               url:
+ *                                 type: string
+ *                                 format: uri
+ *                               freshness:
+ *                                 type: string
+ *                                 enum: [unknown]
  *       503:
  *         description: The published project index or one of its profiles is missing or invalid
  *       500:
