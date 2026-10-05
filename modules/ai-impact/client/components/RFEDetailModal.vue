@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onBeforeUnmount, nextTick, computed } from 'vue'
 import PipelineTimeline from './PipelineTimeline.vue'
 import AssessmentBreakdown from './AssessmentBreakdown.vue'
 import AssessmentHistory from './AssessmentHistory.vue'
@@ -19,6 +19,9 @@ const props = defineProps({
   assessment: { type: Object, default: null },
   loadAssessmentDetail: { type: Function, default: null }
 })
+
+const prdUnavailable = computed(() => props.rfe?.prdArtifactPresence === 'unavailable' || props.rfe?.status === 'Unknown')
+const prdPresentWithoutPr = computed(() => props.rfe?.prdArtifactPresence === 'present' && props.rfe?.status === 'No PR')
 
 const emit = defineEmits(['close', 'navigateToFeature', 'navigateToTestPlan'])
 
@@ -121,7 +124,7 @@ function handleKeydown(e) {
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div class="flex items-center gap-3 min-w-0">
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ rfe.status === 'No PR' ? 'Feature Details' : 'PRD Details' }}</h2>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ rfe.status === 'No PR' || prdUnavailable ? 'Feature Details' : 'PRD Details' }}</h2>
               <a
                 v-if="issueUrl(rfe.key)"
                 :href="issueUrl(rfe.key)"
@@ -148,8 +151,11 @@ function handleKeydown(e) {
           <div class="flex-1 overflow-auto px-6 py-5">
             <h3 class="font-medium text-gray-900 dark:text-gray-200 mb-4">{{ rfe.summary }}</h3>
 
-            <div v-if="rfe.status === 'No PR'" class="mb-6 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-              No PRD has been verified for this feature.
+            <div v-if="prdUnavailable" class="mb-6 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+              PRD document and review status are unavailable because the project docs registry could not be verified.
+            </div>
+            <div v-else-if="rfe.status === 'No PR'" class="mb-6 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+              {{ prdPresentWithoutPr ? 'A PRD document exists, but no linked PR is available to review.' : 'No PRD has been verified for this feature.' }}
             </div>
 
             <div v-else class="grid grid-cols-3 gap-4 mb-6 text-sm">
@@ -210,7 +216,16 @@ function handleKeydown(e) {
             </div>
 
             <!-- Assessment Section -->
-            <template v-if="rfe.status === 'No PR'">
+            <template v-if="prdUnavailable">
+              <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mb-4">
+                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Quality Assessment</h4>
+                <div class="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 px-4 py-5 text-center">
+                  <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Assessment unavailable</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">The docs registry is unavailable, so the PRD and its score cannot be verified.</p>
+                </div>
+              </div>
+            </template>
+            <template v-else-if="rfe.status === 'No PR'">
               <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mb-4">
                 <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Quality Assessment</h4>
                 <div class="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 px-4 py-5 text-center">

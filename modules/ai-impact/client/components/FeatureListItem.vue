@@ -15,6 +15,35 @@ const props = defineProps({
 const emit = defineEmits(['select'])
 
 const reviewStatus = computed(() => getMeaningfulDesignReviewStatus(props.feature))
+const designArtifactPresence = computed(() => {
+  const explicit = props.feature.designArtifactPresence
+  if (explicit === 'present' || explicit === 'missing' || explicit === 'unavailable') return explicit
+  return props.feature.designPrStatus == null ? 'missing' : 'present'
+})
+const hasDesignArtifact = computed(() => designArtifactPresence.value === 'present')
+const designStatusLabel = computed(() => {
+  if (designArtifactPresence.value === 'missing') return 'Missing Design'
+  if (designArtifactPresence.value === 'unavailable') return 'Design unavailable'
+  if (props.feature.designArtifactPresence === 'present') {
+    if (props.feature.designPrStatus === 'No PR') return 'Design doc, no linked PR'
+    if (props.feature.designPrStatus) return `Design ${props.feature.designPrStatus}`
+    return 'Design available'
+  }
+  return getDesignStatusLabel(props.feature.designPrStatus)
+})
+const designStatusClass = computed(() => {
+  if (designArtifactPresence.value === 'missing') return getDesignStatusClass(null)
+  if (designArtifactPresence.value === 'unavailable') return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+  return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+})
+const showAiBadge = computed(() => {
+  if (designArtifactPresence.value === 'unavailable' || designArtifactPresence.value === 'missing') return false
+  return ['none', 'created', 'revised', 'both'].includes(props.feature.aiInvolvement)
+})
+const genericPrUrl = computed(() => {
+  const prs = Array.isArray(props.feature.linkedPrs) ? props.feature.linkedPrs : []
+  return prs.find(pr => pr?.url && pr.url !== props.feature.prdPrUrl && pr.url !== props.feature.designPrUrl)?.url || null
+})
 const prdPrUrl = computed(() => getPrdReviewPrUrl({
   status: props.feature.status,
   sourceRfe: props.feature.sourceRfe,
@@ -36,14 +65,14 @@ const prdPrUrl = computed(() => getPrdReviewPrUrl({
         <div class="flex items-center gap-2 mb-1">
           <span class="font-mono text-xs text-gray-500 dark:text-gray-400">{{ feature.key }}</span>
           <span
-            v-if="getDesignStatusLabel(feature.designPrStatus)"
+            v-if="designStatusLabel"
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-            :class="getDesignStatusClass(feature.designPrStatus)"
+            :class="designStatusClass"
           >
-            {{ getDesignStatusLabel(feature.designPrStatus) }}
+            {{ designStatusLabel }}
           </span>
           <span
-            v-else
+            v-if="showAiBadge"
             class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
             :class="getInvolvementClass(feature.aiInvolvement)"
           >
@@ -51,7 +80,7 @@ const prdPrUrl = computed(() => getPrdReviewPrUrl({
           </span>
         </div>
         <h4 class="font-medium text-sm truncate dark:text-gray-200">{{ feature.title }}</h4>
-        <div v-if="feature.designPrStatus != null" class="flex items-center flex-wrap gap-2 mt-2">
+        <div v-if="hasDesignArtifact" class="flex items-center flex-wrap gap-2 mt-2">
           <span v-if="reviewStatus" class="inline-flex items-center">
             <span
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
@@ -98,6 +127,19 @@ const prdPrUrl = computed(() => getPrdReviewPrUrl({
           rel="noopener noreferrer"
           class="text-purple-500 dark:text-purple-400"
           title="View design pull request on GitHub"
+          @click.stop
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
+        <a
+          v-if="genericPrUrl"
+          :href="genericPrUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-gray-500 dark:text-gray-400"
+          title="View linked pull request on GitHub"
           @click.stop
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

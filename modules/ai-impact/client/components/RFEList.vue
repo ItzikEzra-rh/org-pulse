@@ -67,6 +67,29 @@ const meAssigneeOption = computed(() => {
   return name ? { value: name, label: 'Assigned to me' } : null
 })
 
+function hasPrdArtifact(rfe) {
+  if (rfe.prdArtifactPresence === 'present') return true
+  if (['missing', 'unavailable'].includes(rfe.prdArtifactPresence)) return false
+  return !['No PR', 'Unknown'].includes(rfe.status)
+}
+
+function prdArtifactIsMissing(rfe) {
+  if (rfe.prdArtifactPresence === 'missing') return true
+  if (rfe.prdArtifactPresence === 'present' || rfe.prdArtifactPresence === 'unavailable') return false
+  return rfe.status === 'No PR'
+}
+
+function prdDataIsUnavailable(rfe) {
+  return rfe.prdArtifactPresence === 'unavailable' || rfe.status === 'Unknown'
+}
+
+function prdSortRank(rfe) {
+  if (prdDataIsUnavailable(rfe)) return 1
+  if (rfe.status === 'No PR' && rfe.prdArtifactPresence === 'present') return 2
+  if (prdArtifactIsMissing(rfe)) return 3
+  return 0
+}
+
 const sortedAndFilteredRFEs = computed(() => {
   let rfes = [...props.rfes]
 
@@ -88,9 +111,9 @@ const sortedAndFilteredRFEs = computed(() => {
 
   // Apply artifact filter (whether the PRD exists at all)
   if (props.artifactFilter === 'has') {
-    rfes = rfes.filter(rfe => rfe.status !== 'No PR')
+    rfes = rfes.filter(hasPrdArtifact)
   } else if (props.artifactFilter === 'missing') {
-    rfes = rfes.filter(rfe => rfe.status === 'No PR')
+    rfes = rfes.filter(prdArtifactIsMissing)
   }
 
   // Apply review status filter (derived human sign-off, independent of raw PR status)
@@ -132,9 +155,9 @@ const sortedAndFilteredRFEs = computed(() => {
   } else {
     // Default: verified PRDs first, then newest Feature ID (numeric) first within each group
     rfes.sort((a, b) => {
-      const aMissing = a.status === 'No PR'
-      const bMissing = b.status === 'No PR'
-      if (aMissing !== bMissing) return aMissing ? 1 : -1
+      const aRank = prdSortRank(a)
+      const bRank = prdSortRank(b)
+      if (aRank !== bRank) return aRank - bRank
       return extractNumericId(b.key) - extractNumericId(a.key)
     })
   }

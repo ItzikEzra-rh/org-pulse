@@ -149,11 +149,16 @@ module.exports = function registerRoutes(router, context) {
         : 'month';
       const config = getConfig(readFromStorage);
       const projectIssues = projectEnvelope.data.issues || [];
-      const computed = computeAllMetrics(projectIssues, projectTimeWindow, config);
+      // Keep unknown rows in the list, but out of PRD adoption and sign-off
+      // metrics until the source can verify whether a linked PRD exists.
+      const metricIssues = projectIssues.filter(issue => issue.status !== 'Unknown');
+      const computed = computeAllMetrics(metricIssues, projectTimeWindow, config);
       return res.json({
         projectId: projectEnvelope.projectId,
         state: projectEnvelope.state,
         freshness: projectEnvelope.freshness,
+        partial: projectEnvelope.partial === true,
+        error: projectEnvelope.error || null,
         fetchedAt: projectEnvelope.generatedAt,
         jiraHost: JIRA_HOST,
         metrics: computed.metrics,

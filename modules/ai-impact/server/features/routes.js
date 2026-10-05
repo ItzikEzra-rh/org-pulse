@@ -267,31 +267,73 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
     const projectEnvelope = readProjectFeatureEnvelope(req);
     if (projectEnvelope) {
       // The profile-driven EP-review collector publishes features as a list;
-      // project them into the legacy keyed shape so the Design Review view
-      // renders what exists. Fields the collector does not produce stay
-      // undefined rather than invented.
+      // project them into the keyed shape consumed by useFeatures. Keep Jira
+      // inventory, document state, PR traceability and explicit AI evidence
+      // together so a missing review marker never removes the base feature.
       const projected = {};
       for (const feature of projectEnvelope.data.features || []) {
         if (!feature || !feature.key) continue;
-        const scores = feature.designScores || {};
+        const designScores = feature.designScores;
+        const scores = designScores && designScores.scores
+          ? { ...designScores.scores, total: designScores.total ?? null }
+          : null;
+        const reviewState = feature.humanReview;
         projected[feature.key] = {
           key: feature.key,
-          title: feature.summary,
+          title: feature.title || feature.summary || feature.key,
+          summary: feature.summary || feature.title || '',
           status: feature.status,
-          prNumber: feature.prNumber,
-          scores: scores.scores,
-          total: scores.total,
-          passFail: scores.passFail,
-          verdict: scores.verdict,
-          assessedAt: scores.assessedAt,
-          humanReviewStatus: feature.humanReview
+          jiraStatus: feature.jiraStatus || feature.status,
+          priority: feature.priority,
+          created: feature.created,
+          updated: feature.updated,
+          creator: feature.creator,
+          creatorDisplayName: feature.creatorDisplayName,
+          assignee: feature.assignee,
+          components: feature.components || [],
+          labels: feature.labels || [],
+          fixVersions: feature.fixVersions || [],
+          sourceRfe: feature.sourceRfe || feature.key,
+          jiraUrl: feature.jiraUrl,
+          designArtifactPresence: feature.designArtifactPresence,
+          designArtifactPath: feature.designArtifactPath,
+          designArtifactUrl: feature.designArtifactUrl,
+          designStatus: feature.designStatus,
+          designPrStatus: feature.designPrStatus,
+          designPrNumber: feature.designPrNumber,
+          designPrUrl: feature.designPrUrl,
+          designReviewState: feature.designReviewState,
+          prdArtifactPresence: feature.prdArtifactPresence,
+          prdPrStatus: feature.prdPrStatus,
+          prdPrNumber: feature.prdPrNumber,
+          prdPrUrl: feature.prdPrUrl,
+          prdRecommendation: feature.prdRecommendation,
+          prdReviewState: feature.prdReviewState,
+          aiInvolvement: feature.aiInvolvement,
+          provenanceKind: feature.provenanceKind,
+          artifacts: feature.artifacts || [],
+          linkedPrs: feature.linkedPrs || [],
+          scores,
+          passFail: designScores?.passFail,
+          recommendation: designScores?.recommendation,
+          verdict: designScores?.verdict,
+          assessedAt: designScores?.assessedAt,
+          humanReviewStatus: reviewState === 'APPROVED'
+            ? 'approved'
+            : reviewState === 'CHANGES_REQUESTED'
+              ? 'needs-review'
+              : null
         };
       }
       return res.json({
-        ...projected,
+        features: projected,
+        totalFeatures: projectEnvelope.data.totalFeatures ?? Object.keys(projected).length,
+        lastSyncedAt: projectEnvelope.generatedAt || null,
         projectId: projectEnvelope.projectId,
         state: projectEnvelope.state,
-        freshness: projectEnvelope.freshness
+        freshness: projectEnvelope.freshness,
+        partial: projectEnvelope.partial === true,
+        error: projectEnvelope.error || null
       });
     }
     if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;

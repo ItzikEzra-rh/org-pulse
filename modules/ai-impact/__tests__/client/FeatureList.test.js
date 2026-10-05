@@ -85,12 +85,13 @@ describe('FeatureList AI Involvement filter (aligned with PRD Review)', () => {
     return wrapper.findAllComponents(FeatureListItem).map(c => c.props('feature').key);
   }
 
-  // The real API never sends the string 'none' -- aiInvolvement is null
-  // until the design-provenance pipeline reviews the feature.
+  // Null means the provenance source could not establish an AI state; only
+  // an explicit "none" is a verified empty signal.
   const features = {
-    A: makeFeature({ key: 'A', aiInvolvement: 'both' }),
-    B: makeFeature({ key: 'B', aiInvolvement: 'created' }),
-    C: makeFeature({ key: 'C', aiInvolvement: null })
+    A: makeFeature({ key: 'A', aiInvolvement: 'both', designArtifactPresence: 'present' }),
+    B: makeFeature({ key: 'B', aiInvolvement: 'created', designArtifactPresence: 'present' }),
+    C: makeFeature({ key: 'C', aiInvolvement: 'none', designArtifactPresence: 'present' }),
+    D: makeFeature({ key: 'D', aiInvolvement: null, designArtifactPresence: 'unavailable' })
   };
 
   it('filters by aiInvolvement, matching the PRD tab semantics', () => {
@@ -100,18 +101,18 @@ describe('FeatureList AI Involvement filter (aligned with PRD Review)', () => {
 
   it('"all" (default) includes every AI involvement state', () => {
     const wrapper = mount(FeatureList, { props: { features } });
-    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'B', 'C']);
+    expect(renderedKeys(wrapper).sort()).toEqual(['A', 'B', 'C', 'D']);
   });
 
-  it('"No AI" matches a null aiInvolvement (not just the literal string "none")', () => {
+  it('"No AI" matches only an explicit empty signal, excluding unknown provenance', () => {
     const wrapper = mount(FeatureList, { props: { features, aiInvolvementFilter: 'none' } });
     expect(renderedKeys(wrapper)).toEqual(['C']);
   });
 
-  it('excludes features with no design PR from "No AI", matching the breakdown chart', () => {
+  it('excludes missing and unknown design states from the "No AI" filter', () => {
     const withNoDesignDoc = {
       ...features,
-      D: makeFeature({ key: 'D', aiInvolvement: null, sourceRfe: null })
+      E: makeFeature({ key: 'E', aiInvolvement: 'none', sourceRfe: null, designArtifactPresence: 'missing' })
     };
     const wrapper = mount(FeatureList, { props: { features: withNoDesignDoc, aiInvolvementFilter: 'none' } });
     expect(renderedKeys(wrapper)).toEqual(['C']);
@@ -153,7 +154,8 @@ describe('FeatureList artifact filter (aligned with PRD Review)', () => {
     C: makeFeature({ key: 'C', designPrStatus: null }),
     // Artifact exists (Merged) but never got an AI Design Review score.
     // Must count as "has", not "missing".
-    D: makeFeature({ key: 'D', designPrStatus: 'Merged', designPrUrl: null, recommendation: null, scores: null })
+    D: makeFeature({ key: 'D', designPrStatus: 'Merged', designPrUrl: null, recommendation: null, scores: null }),
+    E: makeFeature({ key: 'E', designArtifactPresence: 'unavailable', designPrStatus: null })
   };
 
   it('"has" excludes rows with no design doc', () => {
@@ -164,6 +166,13 @@ describe('FeatureList artifact filter (aligned with PRD Review)', () => {
   it('"missing" includes only rows with no design doc', () => {
     const wrapper = mount(FeatureList, { props: { features, artifactFilter: 'missing' } });
     expect(renderedKeys(wrapper)).toEqual(['C']);
+  });
+
+  it('keeps an unavailable docs registry out of both has and missing artifact counts', () => {
+    const has = mount(FeatureList, { props: { features, artifactFilter: 'has' } });
+    const missing = mount(FeatureList, { props: { features, artifactFilter: 'missing' } });
+    expect(renderedKeys(has)).not.toContain('E');
+    expect(renderedKeys(missing)).not.toContain('E');
   });
 
   it('an unscored Design artifact (designPrUrl null) is never labeled Missing Design', () => {

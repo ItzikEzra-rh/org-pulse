@@ -64,14 +64,29 @@ async function callHandler(routes, path, query = {}) {
 }
 
 describe('feature routes serve the project-qualified EP-review artifact', () => {
-  it('projects artifact features into the legacy keyed shape for a non-OSAC project', async () => {
+  it('returns the keyed feature inventory and preserves Jira, doc, PR, and AI fields', async () => {
     const artifact = makeArtifactEnvelope('flightctl', {
       features: [
         {
           key: 'EDM-1',
           summary: 'Add streaming inference',
           status: 'In Progress',
-          prNumber: 12,
+          priority: 'High',
+          created: '2026-09-01T00:00:00Z',
+          components: ['core'],
+          fixVersions: ['0.10.0'],
+          sourceRfe: 'EDM-1',
+          jiraUrl: 'https://redhat.atlassian.net/browse/EDM-1',
+          designArtifactPresence: 'present',
+          designPrStatus: 'Merged',
+          designPrNumber: 12,
+          designPrUrl: 'https://github.com/flightctl/design-docs/pull/12',
+          prdArtifactPresence: 'present',
+          prdPrStatus: 'Open',
+          prdPrNumber: 11,
+          prdPrUrl: 'https://github.com/flightctl/design-docs/pull/11',
+          aiInvolvement: 'created',
+          provenanceKind: 'session',
           designScores: {
             scores: { feasibility: 2, testability: 1, scope: 2, architecture: 2 },
             total: 7,
@@ -90,18 +105,47 @@ describe('feature routes serve the project-qualified EP-review artifact', () => 
 
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        'EDM-1': expect.objectContaining({
-          key: 'EDM-1',
-          title: 'Add streaming inference',
-          total: 7,
-          passFail: 'PASS',
-          humanReviewStatus: 'APPROVED'
-        }),
+        features: {
+          'EDM-1': expect.objectContaining({
+            key: 'EDM-1',
+            title: 'Add streaming inference',
+            scores: { feasibility: 2, testability: 1, scope: 2, architecture: 2, total: 7 },
+            passFail: 'PASS',
+            humanReviewStatus: 'approved',
+            designArtifactPresence: 'present',
+            designPrUrl: 'https://github.com/flightctl/design-docs/pull/12',
+            prdPrUrl: 'https://github.com/flightctl/design-docs/pull/11',
+            priority: 'High',
+            components: ['core'],
+            aiInvolvement: 'created',
+            provenanceKind: 'session'
+          })
+        },
+        totalFeatures: 1,
         projectId: 'flightctl',
         state: 'supported',
-        freshness: 'fresh'
+        freshness: 'fresh',
+        partial: false
       })
     );
+  });
+
+  it('keeps missing scores empty and distinguishes unavailable docs from known missing docs', async () => {
+    const artifact = makeArtifactEnvelope('flightctl', {
+      features: [
+        { key: 'EDM-1', summary: 'No marker', designArtifactPresence: 'present', designPrStatus: 'Open', designScores: null, aiInvolvement: 'none' },
+        { key: 'EDM-2', summary: 'Docs unknown', designArtifactPresence: 'unavailable', designPrStatus: null, designScores: null, aiInvolvement: null },
+        { key: 'EDM-3', summary: 'Known missing', designArtifactPresence: 'missing', designPrStatus: null, designScores: null, aiInvolvement: 'none' }
+      ]
+    });
+    const { router, routes } = createRouter();
+    registerFeatureRoutes(router, makeContext({ artifact }));
+    const res = await callHandler(routes, '/features', { projectId: 'flightctl' });
+    const response = res.json.mock.calls[0][0];
+
+    expect(response.features['EDM-1']).toMatchObject({ designPrStatus: 'Open', scores: null, aiInvolvement: 'none' });
+    expect(response.features['EDM-2']).toMatchObject({ designArtifactPresence: 'unavailable', scores: null, aiInvolvement: null });
+    expect(response.features['EDM-3']).toMatchObject({ designArtifactPresence: 'missing', scores: null });
   });
 
   it('serves an honest empty state when the artifact has no features', async () => {

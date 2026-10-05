@@ -22,8 +22,10 @@ const props = defineProps({
   }
 })
 
-// Existing PRDs only ('No PR' rows can't be signed off, assessed, or actioned).
-const existingRfes = computed(() => props.rfes.filter(rfe => rfe.status !== 'No PR'))
+// PRD rows with no linked PR or unverified docs cannot be signed off, assessed, or actioned.
+const existingRfes = computed(() => props.rfes.filter(rfe =>
+  !['No PR', 'Unknown'].includes(rfe.status) && rfe.prdArtifactPresence !== 'unavailable'
+))
 
 const signedOffCount = computed(() => existingRfes.value.filter(rfe => getPrdSignOffStatus(rfe.status) === 'approved').length)
 

@@ -68,6 +68,14 @@ function getRFEPhaseSignal(phaseId) {
   const rfe = props.rfe
   switch (phaseId) {
     case 'prd-review':
+      if (rfe.status === 'Unknown' || rfe.prdArtifactPresence === 'unavailable') {
+        return {
+          completed: false,
+          current: false,
+          aiUsed: null,
+          detail: 'PRD unavailable'
+        }
+      }
       if (rfe.status === 'No PR') {
         return {
           completed: false,
@@ -79,8 +87,10 @@ function getRFEPhaseSignal(phaseId) {
       return {
         completed: false,
         current: true,
-        aiUsed: rfe.aiInvolvement !== 'none',
-        detail: rfe.aiInvolvement !== 'none'
+        aiUsed: rfe.aiInvolvement == null ? null : rfe.aiInvolvement !== 'none',
+        detail: rfe.aiInvolvement == null
+          ? 'AI status unavailable'
+          : rfe.aiInvolvement !== 'none'
           ? `AI ${rfe.aiInvolvement === 'both' ? 'created & revised' : rfe.aiInvolvement}`
           : 'No AI involvement',
         sourceRfe: rfe.sourceRfe,

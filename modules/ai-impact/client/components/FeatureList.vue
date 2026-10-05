@@ -51,6 +51,18 @@ const emit = defineEmits([
 
 const featureList = computed(() => Object.values(props.features))
 
+function hasDesignArtifact(feature) {
+  if (feature.designArtifactPresence === 'present') return true
+  if (['missing', 'unavailable'].includes(feature.designArtifactPresence)) return false
+  return feature.designPrStatus != null
+}
+
+function designArtifactIsMissing(feature) {
+  if (feature.designArtifactPresence === 'missing') return true
+  if (feature.designArtifactPresence === 'present' || feature.designArtifactPresence === 'unavailable') return false
+  return feature.designPrStatus == null
+}
+
 const availablePriorities = computed(() => {
   const values = new Set()
   for (const f of featureList.value) {
@@ -113,14 +125,14 @@ const sortedAndFilteredFeatures = computed(() => {
   // aiInvolvement is null (not the string 'none') until reviewed, so it's
   // normalized the same way the breakdown endpoint does.
   if (props.aiInvolvementFilter !== 'all') {
-    items = items.filter(f => f.sourceRfe && (f.aiInvolvement || 'none') === props.aiInvolvementFilter)
+    items = items.filter(f => hasDesignArtifact(f) && f.aiInvolvement === props.aiInvolvementFilter)
   }
 
   // AI verdict filter (the AI review's recommendation). "Not Reviewed" means
   // a Design artifact exists (designPrStatus != null) but has no recommendation
   // yet; features with no artifact at all belong in "Missing", not here.
   if (props.recommendationFilter === 'not-reviewed') {
-    items = items.filter(f => f.recommendation == null && f.designPrStatus != null)
+    items = items.filter(f => f.recommendation == null && hasDesignArtifact(f))
   } else if (props.recommendationFilter !== 'all') {
     items = items.filter(f => f.recommendation === props.recommendationFilter)
   }
@@ -145,9 +157,9 @@ const sortedAndFilteredFeatures = computed(() => {
   // Artifact filter (whether the design doc exists at all, per designPrStatus —
   // not designStatus, which is AI review processing state, not artifact existence)
   if (props.artifactFilter === 'has') {
-    items = items.filter(f => f.designPrStatus != null)
+    items = items.filter(hasDesignArtifact)
   } else if (props.artifactFilter === 'missing') {
-    items = items.filter(f => f.designPrStatus == null)
+    items = items.filter(designArtifactIsMissing)
   }
 
   // Assignee filter

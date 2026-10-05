@@ -28,6 +28,67 @@ describe('FeatureListItem Missing Design badge', () => {
     expect(wrapper.text()).not.toContain('Missing Design');
   });
 
+  it('shows the Design state and AI Created badge together for a stamped artifact', () => {
+    const feature = makeFeature({
+      designArtifactPresence: 'present',
+      designPrStatus: 'Merged',
+      aiInvolvement: 'created',
+      provenanceKind: 'session',
+      scores: null
+    });
+    const wrapper = mount(FeatureListItem, { props: { feature } });
+    expect(wrapper.text()).toContain('Design Merged');
+    expect(wrapper.text()).toContain('AI Created');
+    expect(wrapper.text()).toContain('N/A');
+    expect(wrapper.text()).not.toContain('Missing Design');
+  });
+
+  it('shows an unscored linked Design PR without inventing AI involvement', () => {
+    const feature = makeFeature({
+      designArtifactPresence: 'present',
+      designPrStatus: 'Open',
+      designPrUrl: 'https://github.com/flightctl/design-docs/pull/12',
+      aiInvolvement: 'none',
+      scores: null
+    });
+    const wrapper = mount(FeatureListItem, { props: { feature } });
+    expect(wrapper.text()).toContain('Design Open');
+    expect(wrapper.text()).toContain('No AI');
+    expect(wrapper.text()).toContain('N/A');
+    expect(wrapper.find('a[title="View design pull request on GitHub"]').attributes('href'))
+      .toBe('https://github.com/flightctl/design-docs/pull/12');
+  });
+
+  it('only labels canonical AI signals', () => {
+    for (const aiInvolvement of [undefined, null, 'ai', 'unknown']) {
+      const feature = makeFeature({
+        designArtifactPresence: 'present',
+        designPrStatus: 'Merged',
+        aiInvolvement,
+        scores: null
+      });
+      const wrapper = mount(FeatureListItem, { props: { feature } });
+      expect(wrapper.text()).not.toContain('No AI');
+      expect(wrapper.text()).not.toContain('AI Created');
+      wrapper.unmount();
+    }
+  });
+
+  it('renders unavailable doc linkage separately from known missing design', () => {
+    const feature = makeFeature({
+      designArtifactPresence: 'unavailable',
+      designPrStatus: null,
+      aiInvolvement: null,
+      linkedPrs: [{ url: 'https://github.com/flightctl/design-docs/pull/77' }]
+    });
+    const wrapper = mount(FeatureListItem, { props: { feature } });
+    expect(wrapper.text()).toContain('Design unavailable');
+    expect(wrapper.text()).not.toContain('Missing Design');
+    expect(wrapper.text()).not.toContain('No AI');
+    expect(wrapper.find('a[title="View linked pull request on GitHub"]').attributes('href'))
+      .toBe('https://github.com/flightctl/design-docs/pull/77');
+  });
+
   it('renders separate canonical PRD and Design PR links', () => {
     const feature = makeFeature({
       designPrStatus: 'Open',
