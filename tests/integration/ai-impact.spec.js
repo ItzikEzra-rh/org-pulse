@@ -252,7 +252,7 @@ test.describe('AI Impact Views @ai-impact', () => {
   });
 
   test('PRD Review Assignee filter narrows the PRD list, with Unassigned selectable', async ({ page }) => {
-    await page.route('**/api/modules/ai-impact/features', async route => {
+    await page.route('**/api/modules/ai-impact/features**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ lastSyncedAt: null, totalFeatures: 0, features: {} }) });
     });
     await page.route('**/api/modules/ai-impact/rfe-data**', async route => {
@@ -361,7 +361,7 @@ test.describe('AI Impact Views @ai-impact', () => {
   });
 
   test('Design Review fix version filter narrows the feature list', async ({ page }) => {
-    await page.route('**/api/modules/ai-impact/features', async route => {
+    await page.route('**/api/modules/ai-impact/features**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -407,7 +407,7 @@ test.describe('AI Impact Views @ai-impact', () => {
   });
 
   test('Design Review Assignee filter narrows the feature list (OR within category, AND with other filters)', async ({ page }) => {
-    await page.route('**/api/modules/ai-impact/features', async route => {
+    await page.route('**/api/modules/ai-impact/features**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -456,7 +456,7 @@ test.describe('AI Impact Views @ai-impact', () => {
   });
 
   test('Design Details: perfect 8/8 score renders green, Size is gone, Component/Fix Version chips show', async ({ page }) => {
-    await page.route('**/api/modules/ai-impact/features', async route => {
+    await page.route('**/api/modules/ai-impact/features**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -477,7 +477,7 @@ test.describe('AI Impact Views @ai-impact', () => {
     // FeatureDetailPanel always fetches per-feature detail and test-plan detail
     // on open; without these mocks the real backend 404s (neither exists on
     // disk), logging console errors the assertion below would otherwise flag.
-    await page.route('**/api/modules/ai-impact/features/OSAC-PERFECT', async route => {
+    await page.route('**/api/modules/ai-impact/features/OSAC-PERFECT**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -495,7 +495,7 @@ test.describe('AI Impact Views @ai-impact', () => {
     // A real 404 here is normal app behavior (handled silently), but the browser
     // still logs it to the console; return 200 so the test isn't asserting
     // about an unrelated fetch outcome it doesn't care about.
-    await page.route('**/api/modules/ai-impact/test-plans/OSAC-PERFECT', async route => {
+    await page.route('**/api/modules/ai-impact/test-plans/OSAC-PERFECT**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ latest: null, history: [] }) });
     });
 
@@ -519,7 +519,7 @@ test.describe('AI Impact Views @ai-impact', () => {
   });
 
   test('PRD Details: shows the canonical PRD PR action and Component chip when a canonical PRD PR URL is present', async ({ page }) => {
-    await page.route('**/api/modules/ai-impact/features', async route => {
+    await page.route('**/api/modules/ai-impact/features**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -556,7 +556,7 @@ test.describe('AI Impact Views @ai-impact', () => {
     // A real 404 here is normal app behavior (handled silently), but the browser
     // still logs it to the console; return 200 so the test isn't asserting
     // about an unrelated fetch outcome it doesn't care about.
-    await page.route('**/api/modules/ai-impact/test-plans/RHAISTRAT-1', async route => {
+    await page.route('**/api/modules/ai-impact/test-plans/RHAISTRAT-1**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ latest: null, history: [] }) });
     });
 
@@ -592,7 +592,7 @@ test.describe('AI Impact Views @ai-impact', () => {
   });
 
   test('PRD Details: hides the PRD PR action when an EP-prefixed key has no canonical PRD PR URL', async ({ page }) => {
-    await page.route('**/api/modules/ai-impact/features', async route => {
+    await page.route('**/api/modules/ai-impact/features**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -646,7 +646,7 @@ test.describe('AI Impact Views @ai-impact', () => {
     // Outside the default "This Month" (30-day) window but inside "Last 3 Months" (90-day).
     const olderCreated = new Date(now - 45 * 24 * 60 * 60 * 1000).toISOString();
 
-    await page.route('**/api/modules/ai-impact/features', async route => {
+    await page.route('**/api/modules/ai-impact/features**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -696,7 +696,7 @@ test.describe('AI Impact Views @ai-impact', () => {
   });
 
   test('Test Plan Review renders the live-shaped three-plan workflow', async ({ page }) => {
-    await page.route('**/api/modules/ai-impact/test-plans', async route => {
+    await page.route('**/api/modules/ai-impact/test-plans**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -812,7 +812,7 @@ test.describe('AI Impact Views @ai-impact', () => {
   });
 
   test('AI Commits proxy endpoint responds', async ({ page }) => {
-    const response = await page.request.get('/api/modules/ai-impact/ai-commits-proxy', {
+    const response = await page.request.get('/api/modules/ai-impact/ai-commits-proxy?projectId=osac', {
       maxRedirects: 0
     });
     const status = response.status();

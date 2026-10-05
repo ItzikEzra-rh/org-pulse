@@ -2,6 +2,13 @@ const { test, expect } = require('@playwright/test');
 const { DEFAULT_PAGE_WAIT_TIME } = require('./constants');
 const { setupErrorTracking, logCapturedErrors } = require('./helpers');
 
+const EXECUTION_API = '/api/modules/releases/execution';
+
+function executionUrl(path, query = '') {
+  const suffix = query ? `${query}&` : '';
+  return `${EXECUTION_API}${path}?${suffix}projectId=osac`;
+}
+
 /**
  * Integration tests for Execution Feature Data Unification
  *
@@ -20,7 +27,7 @@ const { setupErrorTracking, logCapturedErrors } = require('./helpers');
 test.describe('Execution Feature Data Unification @releases', () => {
   test.describe('API: Feature List', () => {
     test('GET /features returns enriched feature data with _sources', async ({ request }) => {
-      const res = await request.get('/api/modules/releases/execution/features');
+      const res = await request.get(executionUrl('/features'));
       expect(res.ok()).toBe(true);
 
       const body = await res.json();
@@ -43,7 +50,7 @@ test.describe('Execution Feature Data Unification @releases', () => {
     });
 
     test('GET /features supports status filter', async ({ request }) => {
-      const res = await request.get('/api/modules/releases/execution/features?status=Refinement');
+      const res = await request.get(executionUrl('/features', 'status=Refinement'));
       expect(res.ok()).toBe(true);
 
       const body = await res.json();
@@ -54,7 +61,7 @@ test.describe('Execution Feature Data Unification @releases', () => {
     });
 
     test('GET /features supports sorting', async ({ request }) => {
-      const res = await request.get('/api/modules/releases/execution/features?sortBy=key&sortDir=asc');
+      const res = await request.get(executionUrl('/features', 'sortBy=key&sortDir=asc'));
       expect(res.ok()).toBe(true);
 
       const body = await res.json();
@@ -70,11 +77,11 @@ test.describe('Execution Feature Data Unification @releases', () => {
   test.describe('API: Feature Detail', () => {
     test('GET /features/:key returns unified schema with _sources', async ({ request }) => {
       // First get a valid key from the list
-      const listRes = await request.get('/api/modules/releases/execution/features');
+      const listRes = await request.get(executionUrl('/features'));
       const list = await listRes.json();
       const key = list.features[0].key;
 
-      const res = await request.get(`/api/modules/releases/execution/features/${key}`);
+      const res = await request.get(executionUrl(`/features/${key}`));
       expect(res.ok()).toBe(true);
 
       const feature = await res.json();
@@ -95,18 +102,18 @@ test.describe('Execution Feature Data Unification @releases', () => {
     });
 
     test('GET /features/:key returns 400 for invalid key format', async ({ request }) => {
-      const res = await request.get('/api/modules/releases/execution/features/not-a-valid-key');
+      const res = await request.get(executionUrl('/features/not-a-valid-key'));
       expect(res.status()).toBe(400);
     });
 
     test('GET /features/:key returns 404 for nonexistent key', async ({ request }) => {
-      const res = await request.get('/api/modules/releases/execution/features/ZZZZZ-99999');
+      const res = await request.get(executionUrl('/features/ZZZZZ-99999'));
       expect(res.status()).toBe(404);
     });
 
     test('feature detail preserves assignee as object shape', async ({ request }) => {
       // Find a feature with an assignee
-      const listRes = await request.get('/api/modules/releases/execution/features');
+      const listRes = await request.get(executionUrl('/features'));
       const list = await listRes.json();
       const withAssignee = list.features.find(f => f.assignee);
 
@@ -115,7 +122,7 @@ test.describe('Execution Feature Data Unification @releases', () => {
         return;
       }
 
-      const res = await request.get(`/api/modules/releases/execution/features/${withAssignee.key}`);
+      const res = await request.get(executionUrl(`/features/${withAssignee.key}`));
       const feature = await res.json();
 
       // Assignee should be an object with displayName, not a plain string
@@ -128,24 +135,24 @@ test.describe('Execution Feature Data Unification @releases', () => {
 
   test.describe('API: Per-Feature Refresh', () => {
     test('POST /features/:key/refresh returns valid response', async ({ request }) => {
-      const listRes = await request.get('/api/modules/releases/execution/features');
+      const listRes = await request.get(executionUrl('/features'));
       const list = await listRes.json();
       const key = list.features[0].key;
 
-      const res = await request.post(`/api/modules/releases/execution/features/${key}/refresh`);
+      const res = await request.post(executionUrl(`/features/${key}/refresh`));
       // 503 if Jira not configured (demo/CI), 200 if configured (local dev),
       // or 429 if cooldown active
       expect([200, 429, 503]).toContain(res.status());
     });
 
     test('POST /features/:key/refresh returns 400 for invalid key', async ({ request }) => {
-      const res = await request.post('/api/modules/releases/execution/features/bad-key/refresh');
+      const res = await request.post(executionUrl('/features/bad-key/refresh'));
       // 400 in production; 200 in demo mode (global middleware intercepts all POST refresh routes)
       expect([200, 400]).toContain(res.status());
     });
 
     test('POST /features/:key/refresh returns 404 for nonexistent key', async ({ request }) => {
-      const res = await request.post('/api/modules/releases/execution/features/ZZZZZ-99999/refresh');
+      const res = await request.post(executionUrl('/features/ZZZZZ-99999/refresh'));
       // 404 in production; 200 in demo mode (global middleware intercepts all POST refresh routes)
       expect([200, 404]).toContain(res.status());
     });
@@ -153,7 +160,7 @@ test.describe('Execution Feature Data Unification @releases', () => {
 
   test.describe('API: Status and Versions', () => {
     test('GET /status reports schema version and data availability', async ({ request }) => {
-      const res = await request.get('/api/modules/releases/execution/status');
+      const res = await request.get(executionUrl('/status'));
       expect(res.ok()).toBe(true);
 
       const body = await res.json();
@@ -163,7 +170,7 @@ test.describe('Execution Feature Data Unification @releases', () => {
     });
 
     test('GET /versions returns version list', async ({ request }) => {
-      const res = await request.get('/api/modules/releases/execution/versions');
+      const res = await request.get(executionUrl('/versions'));
       expect(res.ok()).toBe(true);
 
       const body = await res.json();

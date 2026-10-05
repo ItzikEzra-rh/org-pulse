@@ -662,7 +662,7 @@ test.describe('Releases PM Hub @releases', () => {
  */
 test.describe('Releases Unified Feature Store @releases', () => {
   test('execution features API returns aiReview data in index', async ({ request }) => {
-    const res = await request.get('/api/modules/releases/execution/features');
+    const res = await request.get('/api/modules/releases/execution/features?projectId=osac');
     expect(res.ok()).toBe(true);
     const body = await res.json();
     expect(body).toHaveProperty('features');
@@ -681,7 +681,7 @@ test.describe('Releases Unified Feature Store @releases', () => {
 
   test('execution feature detail includes full aiReview data', async ({ request }) => {
     // TEST1-1168 is a fixture feature with aiReview + history
-    const res = await request.get('/api/modules/releases/execution/features/TEST1-1168');
+    const res = await request.get('/api/modules/releases/execution/features/TEST1-1168?projectId=osac');
     expect(res.ok()).toBe(true);
     const feature = await res.json();
     expect(feature).toHaveProperty('aiReview');
@@ -718,10 +718,10 @@ test.describe('Releases Unified Feature Store @releases', () => {
       history: []
     };
 
-    await page.route('**/api/modules/releases/execution/features/TEST1-208', route =>
+    await page.route('**/api/modules/releases/execution/features/TEST1-208**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(epFeature) })
     );
-    await page.route('**/api/modules/ai-impact/features/TEST1-208', route =>
+    await page.route('**/api/modules/ai-impact/features/TEST1-208**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(epReview) })
     );
 
@@ -755,7 +755,7 @@ test.describe('Releases Unified Feature Store @releases', () => {
   });
 
   test('AI Impact features API reads from unified store', async ({ request }) => {
-    const res = await request.get('/api/modules/ai-impact/features');
+    const res = await request.get('/api/modules/ai-impact/features?projectId=osac');
     expect(res.ok()).toBe(true);
     const body = await res.json();
     expect(body).toHaveProperty('features');
@@ -812,10 +812,10 @@ test.describe('Releases Epics by Release @releases', () => {
   });
 
   test('epics API requires a version and returns Fix Version/Component provenance', async ({ request }) => {
-    const missingVersion = await request.get('/api/modules/releases/execution/epics');
+    const missingVersion = await request.get('/api/modules/releases/execution/epics?projectId=osac');
     expect(missingVersion.status()).toBe(400);
 
-    const res = await request.get('/api/modules/releases/execution/epics?version=rhoai-3.4');
+    const res = await request.get('/api/modules/releases/execution/epics?version=rhoai-3.4&projectId=osac');
     expect(res.ok()).toBe(true);
     const body = await res.json();
     expect(body).toHaveProperty('features');
@@ -842,19 +842,19 @@ test.describe('Releases Epics by Release @releases', () => {
    * matching Epic shown.
    */
   test('versions endpoint is Feature-only by default and adds direct-Epic-only versions with scope=epics', async ({ request }) => {
-    const defaultRes = await request.get('/api/modules/releases/execution/versions');
+    const defaultRes = await request.get('/api/modules/releases/execution/versions?projectId=osac');
     expect(defaultRes.ok()).toBe(true);
     const defaultBody = await defaultRes.json();
     expect(defaultBody.versions).not.toContain('rhoai-3.4-m1');
 
-    const epicsScopeRes = await request.get('/api/modules/releases/execution/versions?scope=epics');
+    const epicsScopeRes = await request.get('/api/modules/releases/execution/versions?scope=epics&projectId=osac');
     expect(epicsScopeRes.ok()).toBe(true);
     const epicsScopeBody = await epicsScopeRes.json();
     expect(epicsScopeBody.versions).toContain('rhoai-3.4-m1');
   });
 
   test('epics API surfaces a non-matching parent Feature as context for a direct-Epic-only milestone', async ({ request }) => {
-    const res = await request.get('/api/modules/releases/execution/epics?version=rhoai-3.4-m1');
+    const res = await request.get('/api/modules/releases/execution/epics?version=rhoai-3.4-m1&projectId=osac');
     expect(res.ok()).toBe(true);
     const body = await res.json();
 
