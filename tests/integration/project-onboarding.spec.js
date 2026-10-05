@@ -34,6 +34,7 @@ test.describe('Project onboarding @project-onboarding', () => {
 
     const selector = page.locator('#project-selector');
     await expect(selector).toBeVisible();
+    await expect(selector).toHaveValue('osac');
 
     const options = await selector.locator('option').allTextContents();
     expect(options.length).toBeGreaterThan(1);
@@ -44,16 +45,16 @@ test.describe('Project onboarding @project-onboarding', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
-    // Flight Control is the default first project on this deployment, so an
-    // actual switch means selecting OSAC first, then back to Flight Control
+    // Keep OSAC as the default while exercising project-qualified navigation
+    // in both directions.
     const selector = page.locator('#project-selector');
-    await selector.selectOption('osac');
-    await page.waitForTimeout(500);
-    expect(page.url()).toContain('projectId=osac');
-
     await selector.selectOption(FLIGHTCTL);
     await page.waitForTimeout(500);
     expect(page.url()).toContain(`projectId=${FLIGHTCTL}`);
+
+    await selector.selectOption('osac');
+    await page.waitForTimeout(500);
+    expect(page.url()).toContain('projectId=osac');
   });
 
   test('People & Teams fetches the project roster for Flight Control', async ({ page }) => {
