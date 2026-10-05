@@ -738,7 +738,7 @@ test.describe('Releases Unified Feature Store @releases', () => {
       .toHaveAttribute('href', 'https://github.com/osac-project/enhancement-proposals/pull/131');
 
     await legacyPrdReview.click();
-    await expect(page).toHaveURL(/#\/ai-impact\/prd-review\?select=RHAIRFE-1001$/);
+    await expect(page).toHaveURL(/#\/ai-impact\/prd-review\?select=RHAIRFE-1001&projectId=osac$/);
 
     await page.goto('/#/releases/feature-detail?key=TEST1-208');
     await page.waitForLoadState('networkidle');
@@ -751,7 +751,7 @@ test.describe('Releases Unified Feature Store @releases', () => {
     await expect(page.getByRole('button', { name: 'Open EP-208 in PRD Review', exact: true })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Open TEST1-208 in Design Review', exact: true }).click();
-    await expect(page).toHaveURL(/#\/ai-impact\/design-review\?select=TEST1-208$/);
+    await expect(page).toHaveURL(/#\/ai-impact\/design-review\?select=TEST1-208&projectId=osac$/);
   });
 
   test('AI Impact features API reads from unified store', async ({ request }) => {
