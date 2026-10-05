@@ -11,16 +11,28 @@ import HygieneConfigView from '../../client/components/HygieneConfigView.vue'
 function sampleConfig(overrides = {}) {
   return {
     schemaVersion: 1,
+    projectId: 'osac',
+    profileRevision: 'profile-test',
+    generatedAt: '2026-10-05T10:00:00Z',
+    freshness: 'fresh',
+    state: 'supported',
+    partial: false,
+    configuration: null,
     projects: {
       OSAC: {
+        projectId: 'osac',
+        projectKey: 'OSAC',
         displayName: 'OSAC',
         jiraBaseUrl: 'https://redhat.atlassian.net',
+        enabledRuleIds: ['in-progress-no-fix-version', 'no-team'],
         rules: [
           {
             id: 'in-progress-no-fix-version',
             name: 'In Progress Feature/Epic without Fix Version',
             description: 'Features and Epics that are In Progress must have a Fix Version.',
             category: 'lifecycle',
+            enabled: true,
+            disabledReason: null,
             jql: 'project = OSAC AND status = "In Progress" AND fixVersion is EMPTY'
           },
           {
@@ -28,6 +40,8 @@ function sampleConfig(overrides = {}) {
             name: 'Open issue without Team',
             description: 'All issues that are not Done should have a Team assigned.',
             category: 'ownership',
+            enabled: true,
+            disabledReason: null,
             jql: 'project = OSAC AND cf[10001] is EMPTY'
           }
         ],
@@ -151,7 +165,7 @@ describe('HygieneConfigView', () => {
   })
 
   it('shows an empty state when no projects are configured', async () => {
-    apiRequest.mockResolvedValue({ schemaVersion: 1, projects: {} })
+    apiRequest.mockResolvedValue({ schemaVersion: 1, projectId: 'osac', projects: {} })
     const wrapper = mount(HygieneConfigView)
     await flushPromises()
     expect(wrapper.text()).toContain('No hygiene rules are configured yet.')
@@ -174,9 +188,56 @@ describe('HygieneConfigView', () => {
   })
 
   it('does not silently pick an arbitrary project when the response is malformed', async () => {
-    apiRequest.mockResolvedValue({ schemaVersion: 1, projects: null })
+    apiRequest.mockResolvedValue({ schemaVersion: 1, projectId: 'osac', projects: null })
     const wrapper = mount(HygieneConfigView)
     await flushPromises()
     expect(wrapper.text()).toContain('No hygiene rules are configured yet.')
+  })
+
+  it('shows disabled-rule reasons and does not show an EDM Team mapping', async () => {
+    apiRequest.mockResolvedValue(sampleConfig({
+      projectId: 'flightctl',
+      projects: {
+        EDM: {
+          projectId: 'flightctl',
+          projectKey: 'EDM',
+          displayName: 'Flight Control',
+          jiraBaseUrl: 'https://redhat.atlassian.net',
+          enabledRuleIds: ['in-progress-no-assignee'],
+          fieldMappings: {},
+          rules: [
+            { id: 'in-progress-no-assignee', name: 'In Progress issue without Assignee', category: 'ownership', enabled: true, jql: 'project = EDM AND statusCategory = "In Progress" AND assignee is EMPTY' },
+            { id: 'no-team', name: 'Open issue without Team', category: 'ownership', enabled: false, disabledReason: 'Pending Team mapping and policy confirmation.', jql: null }
+          ]
+        }
+      }
+    }))
+    window.location.hash = '#/settings/releases?projectId=flightctl'
+    window.dispatchEvent(new Event('urlchange'))
+    const wrapper = mount(HygieneConfigView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Pending Team mapping and policy confirmation.')
+    expect(wrapper.text()).toContain('Disabled')
+    expect(wrapper.text()).not.toContain('team field')
+  })
+
+  it('ignores a late config response after the selected project changes', async () => {
+    let resolveOsac
+    apiRequest.mockImplementation(url => url.includes('projectId=osac')
+      ? new Promise(resolve => { resolveOsac = resolve })
+      : Promise.resolve(sampleConfig({
+        projectId: 'flightctl',
+        projects: { EDM: { displayName: 'Flight Control', projectKey: 'EDM', rules: [], fieldMappings: {} } }
+      })))
+    const wrapper = mount(HygieneConfigView)
+    window.location.hash = '#/settings/releases?projectId=flightctl'
+    window.dispatchEvent(new Event('urlchange'))
+    await flushPromises()
+
+    resolveOsac(sampleConfig())
+    await flushPromises()
+    expect(wrapper.text()).toContain('Flight Control')
+    expect(wrapper.text()).not.toContain('team field')
   })
 })

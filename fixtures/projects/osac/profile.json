@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "profileRevision": "888b545aa66f884a",
+  "profileRevision": "653d4e3d171383df",
   "projectId": "osac",
   "displayName": "OSAC",
   "jiraProjectKey": "OSAC",
@@ -152,6 +152,36 @@
       "role": "delivery",
       "authority": "OSAC build workflow evidence; legacy collector",
       "locator": "osac-builds-data.json"
+    },
+    {
+      "id": "jira-hygiene",
+      "kind": "jira",
+      "role": "hygiene",
+      "authority": "Profile-configured Jira Hygiene checks; disabled rules remain policy-pending.",
+      "locator": "https://redhat.atlassian.net/issues/?jql=project%20%3D%20OSAC",
+      "collection": {
+        "enabledRuleIds": [
+          "in-progress-no-fix-version",
+          "in-progress-no-assignee",
+          "epic-no-parent-feature",
+          "no-component",
+          "no-team"
+        ],
+        "activeStatusSelector": {
+          "field": "status",
+          "value": "In Progress"
+        },
+        "applicableIssueTypes": {
+          "in-progress-no-fix-version": [
+            "Epic",
+            "Feature"
+          ]
+        },
+        "fieldMappings": {
+          "team": "customfield_10001"
+        },
+        "disabledRuleReasons": {}
+      }
     }
   ],
   "teamIds": [
@@ -174,14 +204,30 @@
       "state": "supported",
       "artifactKey": "releases/registry.json"
     },
+    "operationalMetrics": {
+      "state": "supported",
+      "title": "Unified Operational Intelligence",
+      "url": "https://devtools.pages.redhat.com/n8n-pulumi-poc/#/?org=ecosystem&product=osac&team=osac"
+    },
     "releaseExecution": {
       "state": "supported",
       "view": "feature-execution"
+    },
+    "jiraHygiene": {
+      "state": "supported",
+      "sourceId": "jira-hygiene",
+      "artifactKey": "sources/jira-hygiene/registry.json",
+      "legacyMigration": {
+        "projectId": "osac",
+        "projectKey": "OSAC",
+        "resultsArtifactKey": "releases/hygiene/project-hygiene-results.json",
+        "configArtifactKey": "releases/hygiene/project-hygiene-config.json"
+      }
     }
   },
   "provenance": {
     "configPath": "config/projects/osac.json",
     "repositoryRevision": null,
-    "publishedAt": "2026-10-04T16:33:10.070287Z"
+    "publishedAt": "2026-10-05T10:48:17.487966Z"
   }
 }

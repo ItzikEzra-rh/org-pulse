@@ -1,0 +1,420 @@
+{
+  "schemaVersion": 1,
+  "projectId": "osac",
+  "profileRevision": "653d4e3d171383df",
+  "artifactKey": "sources/jira-hygiene/registry.json",
+  "source": {
+    "id": "jira-hygiene",
+    "kind": "jira",
+    "revision": "55405f37d171f5427077af2b9ec5121bf56d54c309b0100467b5b7b8f0c0bf09",
+    "runId": null
+  },
+  "generatedAt": "2026-10-05T11:00:00Z",
+  "fetchedAt": "2026-10-05T11:00:00Z",
+  "observedAt": "2026-10-05T11:00:00Z",
+  "attemptedAt": "2026-10-05T11:00:00Z",
+  "publishedAt": "2026-10-05T11:00:00Z",
+  "state": "supported",
+  "freshness": "fresh",
+  "partial": true,
+  "error": {
+    "code": "JIRA_HYGIENE_RULES_PARTIAL",
+    "count": 1
+  },
+  "lastKnownGood": null,
+  "data": {
+    "projectId": "osac",
+    "profileRevision": "653d4e3d171383df",
+    "artifactKey": "sources/jira-hygiene/registry.json",
+    "projectKey": "OSAC",
+    "displayName": "OSAC",
+    "jiraBaseUrl": "https://redhat.atlassian.net",
+    "generatedAt": "2026-10-05T11:00:00Z",
+    "source": "jira-dashboard-26582",
+    "configRevision": "55405f37d171f5427077af2b9ec5121bf56d54c309b0100467b5b7b8f0c0bf09",
+    "configuredRuleIds": [
+      "in-progress-no-fix-version",
+      "in-progress-no-assignee",
+      "epic-no-parent-feature",
+      "no-component",
+      "no-team"
+    ],
+    "evaluatedRuleIds": [
+      "in-progress-no-fix-version",
+      "in-progress-no-assignee",
+      "epic-no-parent-feature",
+      "no-component",
+      "no-team"
+    ],
+    "successfulRuleIds": [
+      "in-progress-no-fix-version",
+      "in-progress-no-assignee",
+      "epic-no-parent-feature",
+      "no-component"
+    ],
+    "queries": [
+      {
+        "ruleId": "in-progress-no-fix-version",
+        "jql": "project = OSAC AND status = \"In Progress\" AND fixVersion is EMPTY AND issuetype in (Epic, Feature)",
+        "fields": [
+          "summary",
+          "status",
+          "issuetype",
+          "assignee",
+          "fixVersions",
+          "components",
+          "parent",
+          "customfield_10001"
+        ]
+      },
+      {
+        "ruleId": "in-progress-no-assignee",
+        "jql": "project = OSAC AND status = \"In Progress\" AND assignee is EMPTY",
+        "fields": [
+          "summary",
+          "status",
+          "issuetype",
+          "assignee",
+          "fixVersions",
+          "components",
+          "parent",
+          "customfield_10001"
+        ]
+      },
+      {
+        "ruleId": "epic-no-parent-feature",
+        "jql": "project = OSAC AND issuetype = Epic AND parent is EMPTY AND statusCategory != Done",
+        "fields": [
+          "summary",
+          "status",
+          "issuetype",
+          "assignee",
+          "fixVersions",
+          "components",
+          "parent",
+          "customfield_10001"
+        ]
+      },
+      {
+        "ruleId": "no-component",
+        "jql": "project = OSAC AND component is EMPTY AND statusCategory != Done",
+        "fields": [
+          "summary",
+          "status",
+          "issuetype",
+          "assignee",
+          "fixVersions",
+          "components",
+          "parent",
+          "customfield_10001"
+        ]
+      },
+      {
+        "ruleId": "no-team",
+        "jql": "project = OSAC AND cf[10001] is EMPTY AND statusCategory != Done",
+        "fields": [
+          "summary",
+          "status",
+          "issuetype",
+          "assignee",
+          "fixVersions",
+          "components",
+          "parent",
+          "customfield_10001"
+        ]
+      }
+    ],
+    "configuration": {
+      "schemaVersion": 1,
+      "projectId": "osac",
+      "profileRevision": "653d4e3d171383df",
+      "projectKey": "OSAC",
+      "displayName": "OSAC",
+      "jiraBaseUrl": "https://redhat.atlassian.net",
+      "enabledRuleIds": [
+        "in-progress-no-fix-version",
+        "in-progress-no-assignee",
+        "epic-no-parent-feature",
+        "no-component",
+        "no-team"
+      ],
+      "activeStatusSelector": {
+        "field": "status",
+        "value": "In Progress"
+      },
+      "applicableIssueTypes": {
+        "in-progress-no-fix-version": [
+          "Epic",
+          "Feature"
+        ]
+      },
+      "fieldMappings": {
+        "team": "customfield_10001"
+      },
+      "disabledRuleReasons": {},
+      "rules": [
+        {
+          "id": "in-progress-no-fix-version",
+          "name": "In Progress Feature/Epic without Fix Version",
+          "description": "Features and Epics that are In Progress must have a Fix Version.",
+          "category": "lifecycle",
+          "remediation": "Assign the appropriate Fix Version after confirming release scope.",
+          "requiredFields": [
+            "status",
+            "issuetype",
+            "fixVersions"
+          ],
+          "enabled": true,
+          "disabledReason": null,
+          "jql": "project = OSAC AND status = \"In Progress\" AND fixVersion is EMPTY AND issuetype in (Epic, Feature)",
+          "fields": [
+            "summary",
+            "status",
+            "issuetype",
+            "assignee",
+            "fixVersions",
+            "components",
+            "parent",
+            "customfield_10001"
+          ]
+        },
+        {
+          "id": "in-progress-no-assignee",
+          "name": "In Progress issue without Assignee",
+          "description": "All In Progress issues must have an assignee.",
+          "category": "ownership",
+          "remediation": "Assign an owner for the active issue.",
+          "requiredFields": [
+            "status",
+            "assignee"
+          ],
+          "enabled": true,
+          "disabledReason": null,
+          "jql": "project = OSAC AND status = \"In Progress\" AND assignee is EMPTY",
+          "fields": [
+            "summary",
+            "status",
+            "issuetype",
+            "assignee",
+            "fixVersions",
+            "components",
+            "parent",
+            "customfield_10001"
+          ]
+        },
+        {
+          "id": "epic-no-parent-feature",
+          "name": "Open Epic without parent Feature",
+          "description": "Epics that are not Done should be linked to a parent Feature.",
+          "category": "lifecycle",
+          "remediation": "Link the Epic to its parent Feature when the hierarchy policy requires it.",
+          "requiredFields": [
+            "status",
+            "issuetype",
+            "parent"
+          ],
+          "enabled": true,
+          "disabledReason": null,
+          "jql": "project = OSAC AND issuetype = Epic AND parent is EMPTY AND statusCategory != Done",
+          "fields": [
+            "summary",
+            "status",
+            "issuetype",
+            "assignee",
+            "fixVersions",
+            "components",
+            "parent",
+            "customfield_10001"
+          ]
+        },
+        {
+          "id": "no-component",
+          "name": "Open issue without Component",
+          "description": "All issues that are not Done should have at least one Component.",
+          "category": "classification",
+          "remediation": "Set a Jira Component when classification policy requires one.",
+          "requiredFields": [
+            "status",
+            "components"
+          ],
+          "enabled": true,
+          "disabledReason": null,
+          "jql": "project = OSAC AND component is EMPTY AND statusCategory != Done",
+          "fields": [
+            "summary",
+            "status",
+            "issuetype",
+            "assignee",
+            "fixVersions",
+            "components",
+            "parent",
+            "customfield_10001"
+          ]
+        },
+        {
+          "id": "no-team",
+          "name": "Open issue without Team",
+          "description": "All issues that are not Done should have a Team assigned.",
+          "category": "ownership",
+          "remediation": "Set the configured Jira Team field when ownership policy requires it.",
+          "requiredFields": [
+            "status",
+            "team"
+          ],
+          "enabled": true,
+          "disabledReason": null,
+          "jql": "project = OSAC AND cf[10001] is EMPTY AND statusCategory != Done",
+          "fields": [
+            "summary",
+            "status",
+            "issuetype",
+            "assignee",
+            "fixVersions",
+            "components",
+            "parent",
+            "customfield_10001"
+          ]
+        }
+      ],
+      "artifactKey": "sources/jira-hygiene/registry.json",
+      "sourceId": "jira-hygiene",
+      "sourceKind": "jira",
+      "configRevision": "55405f37d171f5427077af2b9ec5121bf56d54c309b0100467b5b7b8f0c0bf09"
+    },
+    "partial": true,
+    "errors": [
+      {
+        "ruleId": "no-team",
+        "message": "Jira query timed out after 3 retries"
+      }
+    ],
+    "summary": {
+      "uniqueIssueCount": 4,
+      "totalRuleMatches": 5,
+      "affectedRuleCount": 3,
+      "failedRuleCount": 1,
+      "generatedAt": "2026-10-05T11:00:00Z"
+    },
+    "rules": [
+      {
+        "id": "in-progress-no-fix-version",
+        "name": "In Progress Feature/Epic without Fix Version",
+        "description": "Features and Epics that are In Progress must have a Fix Version.",
+        "remediation": "Assign the appropriate Fix Version after confirming release scope.",
+        "category": "lifecycle",
+        "count": 2,
+        "issues": [
+          {
+            "key": "OSAC-101",
+            "summary": "Support disconnected install for VM workloads",
+            "issueType": "Epic",
+            "status": "In Progress",
+            "assignee": "Alex Kim",
+            "parentKey": "OSAC-50",
+            "fixVersions": [],
+            "components": [
+              "Console"
+            ],
+            "jiraUrl": "https://redhat.atlassian.net/browse/OSAC-101",
+            "team": null,
+            "teamId": null
+          },
+          {
+            "key": "OSAC-102",
+            "summary": "Add agentic workflow triage view",
+            "issueType": "Feature",
+            "status": "In Progress",
+            "assignee": "Priya Patel",
+            "parentKey": null,
+            "fixVersions": [],
+            "components": [],
+            "jiraUrl": "https://redhat.atlassian.net/browse/OSAC-102",
+            "team": "Platform",
+            "teamId": "10031"
+          }
+        ]
+      },
+      {
+        "id": "in-progress-no-assignee",
+        "name": "In Progress issue without Assignee",
+        "description": "All In Progress issues must have an assignee.",
+        "remediation": "Assign an owner for the active issue.",
+        "category": "ownership",
+        "count": 1,
+        "issues": [
+          {
+            "key": "OSAC-103",
+            "summary": "Investigate CI flake in triage pipeline",
+            "issueType": "Feature",
+            "status": "In Progress",
+            "assignee": null,
+            "parentKey": null,
+            "fixVersions": [],
+            "components": [
+              "API"
+            ],
+            "jiraUrl": "https://redhat.atlassian.net/browse/OSAC-103",
+            "team": "Data",
+            "teamId": null
+          }
+        ]
+      },
+      {
+        "id": "epic-no-parent-feature",
+        "name": "Open Epic without parent Feature",
+        "description": "Epics that are not Done should be linked to a parent Feature.",
+        "remediation": "Link the Epic to its parent Feature when the hierarchy policy requires it.",
+        "category": "lifecycle",
+        "count": 0,
+        "issues": []
+      },
+      {
+        "id": "no-component",
+        "name": "Open issue without Component",
+        "description": "All issues that are not Done should have at least one Component.",
+        "remediation": "Set a Jira Component when classification policy requires one.",
+        "category": "classification",
+        "count": 2,
+        "issues": [
+          {
+            "key": "OSAC-102",
+            "summary": "Add agentic workflow triage view",
+            "issueType": "Feature",
+            "status": "In Progress",
+            "assignee": "Priya Patel",
+            "parentKey": null,
+            "fixVersions": [],
+            "components": [],
+            "jiraUrl": "https://redhat.atlassian.net/browse/OSAC-102",
+            "team": "Platform",
+            "teamId": "10031"
+          },
+          {
+            "key": "OSAC-104",
+            "summary": "Triage bug backlog for disconnected installs",
+            "issueType": "Bug",
+            "status": "New",
+            "assignee": "Priya Patel",
+            "parentKey": null,
+            "fixVersions": [
+              "OSAC 1.2"
+            ],
+            "components": [],
+            "jiraUrl": "https://redhat.atlassian.net/browse/OSAC-104",
+            "team": "Platform",
+            "teamId": "10031"
+          }
+        ]
+      },
+      {
+        "id": "no-team",
+        "name": "Open issue without Team",
+        "description": "All issues that are not Done should have a Team assigned.",
+        "remediation": "Set the configured Jira Team field when ownership policy requires it.",
+        "category": "ownership",
+        "count": -1,
+        "issues": []
+      }
+    ]
+  }
+}

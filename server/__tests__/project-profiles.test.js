@@ -131,7 +131,7 @@ describe('server project profiles', () => {
     expect(projectProfiles.get('rhoai')).toBeNull()
   })
 
-  it('serves the checked-in single-OSAC discovery fixture through the projects API handler', () => {
+  it('serves the checked-in multi-project discovery fixture through the projects API handler', () => {
     const projectProfiles = createServerProjectProfiles(demoStorage)
     const response = createResponse()
     const handler = createProjectListHandler(projectProfiles)
@@ -139,9 +139,12 @@ describe('server project profiles', () => {
     handler({}, response)
 
     expect(response.status).not.toHaveBeenCalled()
-    expect(response.json).toHaveBeenCalledWith({
-      projects: [{ projectId: 'osac', displayName: 'OSAC' }]
-    })
+    const payload = response.json.mock.calls[0][0]
+    expect(payload.projects).toHaveLength(2)
+    expect(payload.projects.map(project => [project.projectId, project.displayName])).toEqual([
+      ['flightctl', 'Flight Control'],
+      ['osac', 'OSAC']
+    ])
   })
 
   it('publishes only the project-qualified Operational Metrics disposition', () => {

@@ -2,6 +2,55 @@ const { test, expect } = require('@playwright/test');
 const { DEFAULT_PAGE_WAIT_TIME } = require('./constants');
 const { setupErrorTracking, logCapturedErrors } = require('./helpers');
 
+// These Hygiene-focused browser tests run against the checked-in demo fixture
+// tree, which intentionally contains Hygiene but not unrelated project roster
+// or release-registry publications. Keep the app shell quiet with honest empty
+// responses for those adjacent feeds; all Hygiene requests still hit the app.
+async function stubAdjacentProjectFeeds(page) {
+  await page.route('**/api/roster**', async route => {
+    const url = new URL(route.request().url());
+    const projectId = url.searchParams.get('projectId') || 'osac';
+    await route.fulfill({
+      status: 200,
+      json: {
+        projectId,
+        state: 'empty',
+        availability: 'empty',
+        reason: 'fixture-roster-not-included',
+        sourceArtifact: `projects/${projectId}/sources/roster/registry.json`,
+        publication: { state: 'empty', generatedAt: null, partial: false },
+        people: [],
+        vp: null,
+        orgs: [],
+        visibleFields: [],
+        primaryDisplayField: null,
+        mergedKeyMap: {},
+        teamDataSource: 'project-publication',
+        managerNames: {}
+      }
+    });
+  });
+  await page.route('**/api/modules/releases/registry**', async route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('projectId') !== 'osac') return route.continue();
+    await route.fulfill({
+      status: 200,
+      json: {
+        schemaVersion: 1,
+        projectId: 'osac',
+        profileRevision: '653d4e3d171383df',
+        releases: [],
+        publication: {
+          state: 'empty', freshness: 'fresh', partial: false, error: null,
+          generatedAt: null, fetchedAt: null, observedAt: null,
+          attemptedAt: null, publishedAt: null, source: null,
+          lastKnownGood: null, generationId: null
+        }
+      }
+    });
+  });
+}
+
 /**
  * Integration tests for the project-wide Jira Hygiene capability
  * (Releases module → Reports → Jira Hygiene, Manage → Hygiene Rules).
@@ -19,10 +68,11 @@ const { setupErrorTracking, logCapturedErrors } = require('./helpers');
 
 test.describe('Releases — Project Hygiene API @jira-hygiene', () => {
   test('GET project-hygiene results returns the fixture-backed contract', async ({ request }) => {
-    const res = await request.get('/api/modules/releases/hygiene/project-hygiene');
+    const res = await request.get('/api/modules/releases/hygiene/project-hygiene?projectId=osac');
     expect(res.ok()).toBe(true);
     const body = await res.json();
 
+    expect(body.projectId).toBe('osac');
     expect(body).toHaveProperty('schemaVersion');
     expect(body).toHaveProperty('results');
     expect(body.results).toHaveProperty('OSAC');
@@ -32,23 +82,47 @@ test.describe('Releases — Project Hygiene API @jira-hygiene', () => {
     expect(project.summary).toHaveProperty('uniqueIssueCount');
     expect(project.summary).toHaveProperty('totalRuleMatches');
     expect(Array.isArray(project.rules)).toBe(true);
-    expect(project.rules.length).toBeGreaterThan(0);
+    expect(project.rules.map(rule => rule.id)).toEqual([
+      'in-progress-no-fix-version', 'in-progress-no-assignee', 'epic-no-parent-feature', 'no-component', 'no-team'
+    ]);
+    expect(project.rules.flatMap(rule => rule.issues).every(issue => issue.key.startsWith('OSAC-'))).toBe(true);
   });
 
   test('GET project-hygiene config returns the fixture-backed rule catalog', async ({ request }) => {
-    const res = await request.get('/api/modules/releases/hygiene/project-hygiene/config');
+    const res = await request.get('/api/modules/releases/hygiene/project-hygiene/config?projectId=osac');
     expect(res.ok()).toBe(true);
     const body = await res.json();
 
+    expect(body.projectId).toBe('osac');
     expect(body).toHaveProperty('projects');
     expect(body.projects).toHaveProperty('OSAC');
     expect(Array.isArray(body.projects.OSAC.rules)).toBe(true);
-    expect(body.projects.OSAC.rules.length).toBeGreaterThan(0);
+    expect(body.projects.OSAC.rules).toHaveLength(5);
+  });
+
+  test('GET project-hygiene isolates Flight Control and reports its explicit disabled policy scope', async ({ request }) => {
+    const res = await request.get('/api/modules/releases/hygiene/project-hygiene?projectId=flightctl');
+    expect(res.ok()).toBe(true);
+    const body = await res.json();
+    expect(body.projectId).toBe('flightctl');
+    expect(Object.keys(body.results)).toEqual(['EDM']);
+    expect(body.results.EDM.rules.map(rule => rule.id)).toEqual(['in-progress-no-assignee']);
+    expect(body.results.EDM.rules.flatMap(rule => rule.issues).every(issue => issue.key.startsWith('EDM-'))).toBe(true);
+    expect(body.results.EDM.rules.flatMap(rule => rule.issues).every(issue => !Object.hasOwn(issue, 'team'))).toBe(true);
+    expect(body.configuration.rules.filter(rule => !rule.enabled)).toHaveLength(4);
+    expect(body.configuration.fieldMappings).toEqual({});
+  });
+
+  test('unknown project selection returns 404', async ({ request }) => {
+    const res = await request.get('/api/modules/releases/hygiene/project-hygiene?projectId=not-registered');
+    expect(res.status()).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'Unknown project' });
   });
 });
 
 test.describe('Releases — Jira Hygiene Report @jira-hygiene', () => {
   test.beforeEach(async ({ page }) => {
+    await stubAdjacentProjectFeeds(page);
     setupErrorTracking(page);
   });
 
@@ -57,7 +131,7 @@ test.describe('Releases — Jira Hygiene Report @jira-hygiene', () => {
   });
 
   test('Jira Hygiene appears first in the Reports hub and is clickable', async ({ page }) => {
-    await page.goto('/#/releases/reports');
+    await page.goto('/#/releases/reports?projectId=osac');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
@@ -75,21 +149,21 @@ test.describe('Releases — Jira Hygiene Report @jira-hygiene', () => {
   test('loads via direct report URL and renders fixture-backed content without errors', async ({ page }) => {
     const apiRequests = [];
     page.on('request', request => {
-      if (request.url().includes('/api/modules/releases/hygiene/project-hygiene')) {
+      if (request.url().includes('/api/modules/releases/hygiene/project-hygiene?projectId=osac')) {
         apiRequests.push(request.url());
       }
     });
 
-    await page.goto('/#/releases/reports?report=program-hygiene');
+    await page.goto('/#/releases/reports?report=program-hygiene&projectId=osac');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 
     // Proves the view actually called the new API route, not the legacy one
-    expect(apiRequests.some(url => url.endsWith('/hygiene/project-hygiene'))).toBe(true);
+    expect(apiRequests.some(url => url.includes('/hygiene/project-hygiene?projectId=osac'))).toBe(true);
     expect(apiRequests.some(url => url.includes('/program-report'))).toBe(false);
 
     // Fixture-backed project identity and summary metrics render
-    await expect(page.locator('text=OSAC').first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'OSAC', exact: true })).toBeVisible();
     await expect(page.locator('text=Unique Affected Issues')).toBeVisible();
 
     // Fixture-backed dynamic rule cards render (from project-hygiene-config/results, not hardcoded).
@@ -106,6 +180,7 @@ test.describe('Releases — Jira Hygiene Report @jira-hygiene', () => {
 
 test.describe('Releases — Manage Hygiene Rules (read-only) @jira-hygiene', () => {
   test.beforeEach(async ({ page }) => {
+    await stubAdjacentProjectFeeds(page);
     setupErrorTracking(page);
   });
 
@@ -114,7 +189,7 @@ test.describe('Releases — Manage Hygiene Rules (read-only) @jira-hygiene', () 
   });
 
   test('Hygiene Rules tab is reachable and renders read-only fixture-backed rules', async ({ page }) => {
-    await page.goto('/#/releases/registry?tab=hygiene');
+    await page.goto('/#/releases/registry?tab=hygiene&projectId=osac');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
 

@@ -1,0 +1,416 @@
+{
+  "schemaVersion": 1,
+  "profileRevision": "84d6e4c515154de5",
+  "projectId": "flightctl",
+  "displayName": "Flight Control",
+  "jiraProjectKey": "EDM",
+  "jiraProjectName": "Flight Control",
+  "jiraBaseUrl": "https://redhat.atlassian.net",
+  "repositories": [
+    {
+      "fullName": "flightctl/flightctl",
+      "role": "delivery",
+      "authority": "core implementation"
+    },
+    {
+      "fullName": "flightctl/flightctl-ui",
+      "role": "delivery",
+      "authority": "UI implementation"
+    },
+    {
+      "fullName": "flightctl/flightctl-ui-tests",
+      "role": "capability",
+      "authority": "UI test evidence"
+    },
+    {
+      "fullName": "flightctl/design-docs",
+      "role": "planning",
+      "authority": "planning documents"
+    }
+  ],
+  "sources": [
+    {
+      "id": "jira-versions",
+      "kind": "jira",
+      "role": "delivery",
+      "authority": "Jira project versions",
+      "locator": "https://redhat.atlassian.net/plugins/servlet/project-config/EDM/versions"
+    },
+    {
+      "id": "jira-issues",
+      "kind": "jira",
+      "role": "delivery",
+      "authority": "raw EDM issue state and relationships; no readiness inference",
+      "locator": "https://redhat.atlassian.net/issues/?jql=project%20%3D%20EDM",
+      "collection": {
+        "jql": "project = EDM ORDER BY key ASC",
+        "fields": [
+          "project",
+          "summary",
+          "issuetype",
+          "status",
+          "resolution",
+          "priority",
+          "assignee",
+          "reporter",
+          "parent",
+          "components",
+          "labels",
+          "fixVersions",
+          "created",
+          "updated",
+          "resolutiondate",
+          "issuelinks",
+          "customfield_10001",
+          "customfield_10875"
+        ],
+        "teamField": "customfield_10001"
+      }
+    },
+    {
+      "id": "github-pull-requests",
+      "kind": "github",
+      "role": "traceability",
+      "authority": "raw PR metadata for configured repositories; repo roles control denominators",
+      "locator": "https://api.github.com/repos/flightctl",
+      "collection": {
+        "state": "all",
+        "repositoriesFromProfile": true
+      }
+    },
+    {
+      "id": "flightctl-roster",
+      "kind": "atlassian-teams",
+      "role": "roster",
+      "authority": "selected RHEM-family team membership",
+      "locator": "sources/roster/registry.json"
+    },
+    {
+      "id": "flightctl-ui-tests",
+      "kind": "github",
+      "role": "capability",
+      "authority": "UI test evidence",
+      "locator": "https://github.com/flightctl/flightctl-ui-tests"
+    },
+    {
+      "id": "flightctl-design-docs",
+      "kind": "github",
+      "role": "planning",
+      "authority": "planning documents",
+      "locator": "https://github.com/flightctl/design-docs",
+      "collection": {
+        "state": "all",
+        "repository": "flightctl/design-docs",
+        "branch": "main",
+        "artifactTypes": [
+          "prd",
+          "design",
+          "testplan",
+          "clarifications"
+        ],
+        "applicability": "unknown"
+      }
+    },
+    {
+      "id": "flightctl-release-sources",
+      "kind": "github",
+      "role": "release",
+      "authority": "raw tags and releases for delivery repositories",
+      "locator": "https://api.github.com/repos/flightctl"
+    },
+    {
+      "id": "edmrfe",
+      "kind": "jira",
+      "role": "traceability",
+      "authority": "intake and planning traceability only",
+      "locator": "https://redhat.atlassian.net/plugins/servlet/project-config/EDMRFE",
+      "collection": {
+        "projectKey": "EDMRFE",
+        "jql": "project = EDMRFE ORDER BY key ASC",
+        "fields": [
+          "project",
+          "summary",
+          "issuetype",
+          "status",
+          "resolution",
+          "priority",
+          "labels",
+          "components",
+          "created",
+          "updated",
+          "resolutiondate",
+          "fixVersions",
+          "parent",
+          "issuelinks"
+        ]
+      }
+    },
+    {
+      "id": "flightctl-ep-review",
+      "kind": "jira-github-derived",
+      "role": "planning",
+      "authority": "PRD/design/test-plan review interpretation (same agent markers as OSAC)",
+      "locator": "https://github.com/flightctl/design-docs",
+      "collection": {
+        "issueTypes": [
+          "Feature"
+        ],
+        "repos": [
+          "flightctl/design-docs"
+        ],
+        "botLogin": "github-actions[bot]"
+      }
+    },
+    {
+      "id": "flightctl-jira-autofix",
+      "kind": "jira-derived",
+      "role": "capability",
+      "authority": "jira-autofix and jira-triage label interpretation (same bots as OSAC)",
+      "locator": "https://redhat.atlassian.net/browse/EDM",
+      "collection": {
+        "issueTypes": [
+          "Bug"
+        ],
+        "labels": [
+          "jira-autofix",
+          "jira-autofix-pending",
+          "jira-autofix-review",
+          "jira-autofix-ci-failing",
+          "jira-autofix-merged",
+          "jira-autofix-rejected",
+          "jira-autofix-max-retries",
+          "jira-autofix-researched",
+          "jira-autofix-blocked",
+          "jira-autofix-fork-user-missing",
+          "jira-triage-pending",
+          "jira-triage-not-fixable",
+          "jira-triage-stale",
+          "jira-triage-missing-info",
+          "jira-triage-external",
+          "jira-triage-security-review"
+        ],
+        "botAccounts": [
+          "osac-dev-bot"
+        ],
+        "excludedComponents": [],
+        "contributorField": "customfield_10466"
+      }
+    },
+    {
+      "id": "flightctl-ai-provenance",
+      "kind": "ai-provenance",
+      "role": "ai",
+      "authority": "published AI scanner and source markers",
+      "locator": "https://ai-commits-scanner-fd01cc.pages.redhat.com/flightctl/index.html",
+      "collection": {
+        "state": "all",
+        "scannerUrl": "https://ai-commits-scanner-fd01cc.pages.redhat.com/flightctl/index.html",
+        "projectSlug": "flightctl",
+        "markerWords": [
+          "ai",
+          "autofix",
+          "solver",
+          "good-for-ai",
+          "coderabbit",
+          "claude",
+          "copilot",
+          "bot"
+        ],
+        "referenceWords": [
+          "ai-",
+          "@claude",
+          "coderabbit"
+        ],
+        "prField": "customfield_10875",
+        "upstreamArtifacts": {
+          "jira": "sources/jira-issues/issues.json",
+          "github": "sources/github/pull-requests.json",
+          "designDocs": "sources/design-docs/registry.json"
+        }
+      }
+    },
+    {
+      "id": "flightctl-release-execution",
+      "kind": "github",
+      "role": "delivery",
+      "authority": "raw version, tag, build, test, execution and release evidence",
+      "locator": "https://api.github.com/repos/flightctl",
+      "collection": {
+        "state": "all",
+        "repositories": [
+          {
+            "fullName": "flightctl/flightctl",
+            "role": "delivery"
+          },
+          {
+            "fullName": "flightctl/flightctl-ui",
+            "role": "delivery"
+          },
+          {
+            "fullName": "flightctl/flightctl-ui-tests",
+            "role": "capability"
+          }
+        ],
+        "workflowLookbackDays": 30,
+        "maxWorkflowRuns": 100,
+        "maxWorkflowRunDetails": 20,
+        "maxArtifacts": 100,
+        "reports": {
+          "repository": "flightctl/flightctl-reports",
+          "branch": "main",
+          "directories": [
+            "e2e-health-report",
+            "integration-health-report",
+            "unit-health-report",
+            "triage-dashboard"
+          ],
+          "maxFiles": 5
+        }
+      }
+    },
+    {
+      "id": "flightctl-operational-integrations",
+      "kind": "operational",
+      "role": "operations",
+      "authority": "project-scoped operational feed availability and access diagnostics",
+      "locator": "docs/onboarding/flightctl/flightctl-resolved-operational-feeds.md",
+      "collection": {
+        "state": "all",
+        "feeds": [
+          {
+            "id": "ui-test-publisher",
+            "kind": "github-actions",
+            "authority": "deployed-cluster UI test result publisher",
+            "locator": "https://github.com/flightctl/flightctl-ui-tests",
+            "probe": "github-workflows",
+            "repository": "flightctl/flightctl-ui-tests",
+            "branch": "main",
+            "workflowPath": ".github/workflows",
+            "disposition": "inapplicable",
+            "availability": "osac-only",
+            "reason": "User-approved 2026-09-27: the deployed-cluster UI test result publisher is OSAC-only; actual GitHub Actions runs and build evidence remain collected by the release-execution source."
+          },
+          {
+            "id": "uoi",
+            "kind": "uoi",
+            "authority": "UOI product and team registry",
+            "locator": "https://devtools.pages.redhat.com/n8n-pulumi-poc/",
+            "probe": "uoi-registry",
+            "endpoints": [
+              "https://devtools.pages.redhat.com/n8n-pulumi-poc/orgs.json",
+              "https://devtools.pages.redhat.com/n8n-pulumi-poc/products.json",
+              "https://devtools.pages.redhat.com/n8n-pulumi-poc/teams.json"
+            ],
+            "disposition": "inapplicable",
+            "availability": "osac-only",
+            "reason": "User-approved 2026-09-27: the UOI registry has no Flightctl/RHEM entry and is OSAC-only."
+          },
+          {
+            "id": "component-maturity",
+            "kind": "maturity",
+            "authority": "Flightctl component maturity report",
+            "locator": "https://data-hub.pages.redhat.com/component-maturity/",
+            "probe": "html-marker",
+            "disposition": "inapplicable",
+            "availability": "osac-only",
+            "reason": "User-approved 2026-09-27: the maturity report is RHOAI-only and is OSAC-only."
+          },
+          {
+            "id": "ci-duty",
+            "kind": "ci-duty",
+            "authority": "Flightctl CI duty rotation",
+            "sourceRef": "existing private CI-duty producer",
+            "disposition": "inapplicable",
+            "availability": "osac-only",
+            "reason": "User-approved 2026-09-27: CI duty is OSAC-only; the private duty source remains access-blocked as a diagnostic."
+          },
+          {
+            "id": "product-pages",
+            "kind": "product-pages",
+            "authority": "Flightctl Product Pages delivery mapping",
+            "sourceRef": "bounded Flightctl source audit",
+            "disposition": "inapplicable",
+            "availability": "osac-only",
+            "reason": "User-approved 2026-09-27: Product Pages delivery mapping is OSAC-only; no Flightctl project configuration was found."
+          },
+          {
+            "id": "conforma",
+            "kind": "conforma",
+            "authority": "Flightctl Conforma policy evidence",
+            "sourceRef": "bounded Flightctl source audit",
+            "disposition": "inapplicable",
+            "availability": "osac-only",
+            "reason": "User-approved 2026-09-27: Conforma policy evidence is OSAC-only."
+          }
+        ]
+      }
+    },
+    {
+      "id": "jira-hygiene",
+      "kind": "jira",
+      "role": "hygiene",
+      "authority": "Profile-configured Jira Hygiene checks; disabled rules remain policy-pending.",
+      "locator": "https://redhat.atlassian.net/issues/?jql=project%20%3D%20EDM",
+      "collection": {
+        "enabledRuleIds": [
+          "in-progress-no-assignee"
+        ],
+        "activeStatusSelector": {
+          "field": "statusCategory",
+          "value": "In Progress"
+        },
+        "applicableIssueTypes": {},
+        "fieldMappings": {},
+        "disabledRuleReasons": {
+          "in-progress-no-fix-version": "Pending Flight Control owner confirmation that active Features and Epics require a release assignment.",
+          "epic-no-parent-feature": "Pending Flight Control hierarchy policy confirmation for Epic parent requirements.",
+          "no-component": "Pending Flight Control classification policy confirmation for Jira Components.",
+          "no-team": "Pending Flight Control Team-field mapping and ownership policy confirmation; the collector does not request a Team field."
+        }
+      }
+    }
+  ],
+  "teamIds": [
+    "366df4de-dc38-4f71-9f0d-9916d450c20c",
+    "73ce1d26-43fc-4432-92eb-ce48c5e5e200",
+    "6c3a5b90-0ac3-454f-ac77-640fa449e76c",
+    "98bd1239-df20-437c-ac83-357d4da4288a",
+    "374274a4-ea59-4670-8c7a-6a2c9dd848b0",
+    "019a7821-0815-4e99-ba07-45ac06e8f9b6"
+  ],
+  "capabilities": {
+    "releaseRegistry": {
+      "state": "supported",
+      "artifactKey": "releases/registry.json"
+    },
+    "combinedViews": null,
+    "accessRestrictions": null,
+    "buildRegistry": {
+      "state": "supported",
+      "artifactKey": "sources/build-artifacts/registry.json"
+    },
+    "releaseExecution": {
+      "state": "supported",
+      "artifactKey": "sources/release-execution/registry.json",
+      "view": "release-evidence"
+    },
+    "operationalIntegrations": {
+      "state": "supported",
+      "artifactKey": "sources/operational-integrations/registry.json"
+    },
+    "operationalMetrics": {
+      "state": "inapplicable",
+      "reason": "Owner decision: the UOI registry has no Flightctl/RHEM entry and is OSAC-only."
+    },
+    "jiraHygiene": {
+      "state": "supported",
+      "sourceId": "jira-hygiene",
+      "artifactKey": "sources/jira-hygiene/registry.json"
+    }
+  },
+  "provenance": {
+    "configPath": "config/projects/flightctl.json",
+    "repositoryRevision": null,
+    "publishedAt": "2026-10-05T10:48:17.484817Z"
+  }
+}
