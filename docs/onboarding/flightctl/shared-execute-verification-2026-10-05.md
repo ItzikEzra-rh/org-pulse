@@ -1,15 +1,19 @@
 # Shared Releases → Execute verification
 
-Date: 2026-10-05. Status: local candidate verification complete; remote CI and
-production verification are pending. No merge or deployment has been performed.
+Date: 2026-10-05. Local candidate verification is complete. Data MR !149's
+pipeline and app PR #164's Test & Build plus all five integration suites pass
+on code commit `8b121dd1`; Core and AI Eng smoke suites also pass.
+Production verification is pending. No merge or deployment has been performed.
 
 App base: `rh-ecosystem-edge/org-pulse:main` at
-`a9acb03378f1e307fdc4071aed8b04c6e76e4a17`. Data base:
+`a9acb03378f1e307fdc4071aed8b04c6e76e4a17`; code head: `8b121dd159f0fa8413b4aa565fca3bc1f5f2a981`
+([PR #164](https://github.com/rh-ecosystem-edge/org-pulse/pull/164)). Data base:
 `edge-infrastructure/org-pulse-data:main` at
-`45e1af96fc293f4130a9af084c05fb4da064dfbc`. Both worktrees use the isolated
-branch `codex/shared-release-execute-20261005`. The bases include MR !146's
+`45e1af96fc293f4130a9af084c05fb4da064dfbc`; head: `71b36f58d4d1fbe2a796e6c09d3cb32dea69abe1`
+([MR !149](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/149)). Both isolated branches are
+`codex/shared-release-execute-20261005`. The bases include MR !146's
 build-collector recovery/ordering fix, MR !148's checkpoint transaction repair,
-and the Jira Hygiene changes already merged to main.
+and Jira Hygiene PR #163, already merged to main.
 
 ## Product result
 
@@ -109,7 +113,7 @@ through the same configured path without project-specific implementation code.
 
 | Check | Result |
 | --- | --- |
-| Data repository CI unittest list from `.gitlab-ci.yml` | 349 passed. Includes OSAC parity, all EDM Features, Epic hierarchy/version mapping, unknown/partial sources and configuration-only third project. |
+| Data repository CI unittest list from `.gitlab-ci.yml` | 340 passed. Includes OSAC parity, all EDM Features, Epic hierarchy/version mapping, unknown/partial sources and configuration-only third project. |
 | Data `test_release_plan_ci_contract` | 9 passed; checks producer/derivation/publication order and compatible revisions, including the merged !146 recovery path and !148 checkpoint transaction. |
 | Data `test_sidecar_sync` | 24 passed; covers coherent synthetic activation, failure/LKG behavior, recovery, Execute validation and rejection of the current stale checked-in revisions. |
 | App `npm test` | 6,189 passed, 9 skipped (371 test files; 367 passed, 4 skipped). The full run used local test-server access. |
@@ -123,11 +127,11 @@ through the same configured path without project-specific implementation code.
 
 The browser run captured all six views: [OSAC Feature List](shared-execute-verification-assets/osac-feature-list.png), [OSAC Feature Tracking](shared-execute-verification-assets/osac-feature-tracking.png), [OSAC Epics by Release](shared-execute-verification-assets/osac-epics-by-release.png), [Flight Control Feature List](shared-execute-verification-assets/flightctl-feature-list.png), [Flight Control Feature Tracking](shared-execute-verification-assets/flightctl-feature-tracking.png), and [Flight Control Epics by Release](shared-execute-verification-assets/flightctl-epics-by-release.png). Screenshots are local fixture renderings; they are not production readbacks.
 
-## CI and production status
+## Remote CI and production status
 
-The checks above are local candidate results. Remote MR/PR pipelines have not
-run yet. Production has not been changed or verified. The production gap
-tracker keeps FC-03 open until both projects are read back after rollout.
+- Data MR [!149](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/149), pipeline [18199308](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18199308): all three jobs passed.
+- App PR [#164](https://github.com/rh-ecosystem-edge/org-pulse/pull/164), code head `8b121dd159f0fa8413b4aa565fca3bc1f5f2a981`: Test & Build [37317770270](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37317770270) and all five integration suites [37317770283](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37317770283) passed. Core Smoke, AI Eng Smoke and Smoke Test Status also passed in run [37317770270](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37317770270).
+- Production has not been changed or verified. FC-03 stays open until both projects are read back after rollout.
 
 Required merge/rollout order:
 

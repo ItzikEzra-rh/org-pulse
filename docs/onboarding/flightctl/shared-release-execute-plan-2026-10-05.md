@@ -1,17 +1,14 @@
 # One shared Releases → Execute experience
 
-Date: 2026-10-05. Status: implementation and local verification are complete; both review requests are being opened. Neither change is merged or deployed.
+Date: 2026-10-05. Status: implementation and local verification are complete; data MR !149 and app PR #164 are open. Data CI and all app Test & Build, integration and smoke suites pass on the current code commits. Neither change is merged or deployed.
 
 The data candidate is based on `edge-infrastructure/org-pulse-data:main` at
-`45e1af96fc293f4130a9af084c05fb4da064dfbc`, on branch
-`codex/shared-release-execute-20261005`. The app candidate is based on
-`rh-ecosystem-edge/org-pulse:main` at `a9acb03378f1e307fdc4071aed8b04c6e76e4a17`,
-on a separate branch with the same name. This includes the merged !146 ordering
-and build-collector recovery fixes, the !148 checkpoint transaction repair, and
-the Jira Hygiene changes already on main. MR/PR links, branch head commits and
-remote CI status will be recorded after the branches are pushed and opened. The
-field, endpoint, metric and action inventory
-is recorded in the app candidate's `docs/onboarding/flightctl/shared-execute-verification-2026-10-05.md`.
+`45e1af96fc293f4130a9af084c05fb4da064dfbc`; branch head is
+`71b36f58d4d1fbe2a796e6c09d3cb32dea69abe1` on
+[`codex/shared-release-execute-20261005`](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/149). The app candidate is based on
+`rh-ecosystem-edge/org-pulse:main` at `a9acb03378f1e307fdc4071aed8b04c6e76e4a17`;
+current code head is `8b121dd159f0fa8413b4aa565fca3bc1f5f2a981` on
+[`codex/shared-release-execute-20261005`](https://github.com/rh-ecosystem-edge/org-pulse/pull/164). The bases include !146's ordering/build-collector recovery, !148's checkpoint transaction repair, and merged Jira Hygiene PR #163. Data pipeline [18199308](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18199308) passes all three jobs. App Test & Build, all five integration suites, and Core/AI Eng smoke suites pass. The field, endpoint, metric and action inventory is in the app candidate's `docs/onboarding/flightctl/shared-execute-verification-2026-10-05.md`.
 
 ## Product requirement
 
@@ -23,25 +20,30 @@ configuration rather than a new project-specific view or collector branch.
 Deliver one coordinated data MR and one app PR. Preserve the existing visual
 layout, visible tabs, filters, drilldowns and navigation. Do not redesign OSAC.
 
-## Current implementation and the actual gap
+## Main-branch gap addressed by this change
 
-- `ExecuteView.vue` switches between `feature-execution` and `release-evidence`
-  according to profile capability. Flight Control consequently loses the OSAC
-  tabs and receives `ProjectExecutionEvidenceView` instead.
+- At the app base, `ExecuteView.vue` switched between `feature-execution` and
+  `release-evidence` according to profile capability. Flight Control consequently
+  lost the OSAC tabs. This PR removes that presentation split and uses the OSAC
+  Feature List, Feature Tracking and Epics by Release for both projects.
 - The OSAC view has Feature List, Feature Tracking, and Epics by Release tabs.
   Feature Status is currently hidden: preserve that setting during migration.
 - OSAC's canonical feature store combines Jira enrichment, delivery pipeline
   metrics and AI review fields. Its storage prefix is root `releases/execution`.
-- Flight Control's project-qualified execution collector supplies bounded
-  release/workflow/job/artifact evidence. That evidence is valuable but is not
-  itself the feature inventory expected by the existing Execute UI.
-- Shared Jira/GitHub collectors already exist. The Execute consumer contract and
-  some OSAC legacy derivations are not yet shared.
-- `fetch-releases-feature-tracking.py` hardcodes OSAC and root registry/config
-  paths. Its freeze-baseline rules cannot simply be applied to another project.
-- Flight Control has Jira features, hierarchy and version data. Missing team,
-  policy or delivery joins must be represented explicitly, not used as a reason
-  to replace the entire page.
+- At the data base, Flight Control's project-qualified execution collector
+  supplied bounded release/workflow/job/artifact evidence, not the Jira Feature
+  inventory expected by the Execute UI. MR !149 adds that real inventory and its
+  hierarchy/version relations through the same project-qualified contract.
+- Shared Jira/GitHub collectors already existed, while the Execute consumer
+  contract and several derivations were still tied to OSAC root outputs. MR !149
+  adds a project-qualified contract and profiles without changing their meanings.
+- The prior tracking collector used OSAC root registry/config paths and had
+  freeze-baseline rules that cannot simply be applied to another project. MR !149
+  profiles the hierarchy, field mappings, producer sources and scope-baseline
+  policy while preserving OSAC's existing rules and metric meanings.
+- Flight Control's source inventory includes Jira Features, hierarchy and
+  release versions. Missing Team attribution, unsupported producer metrics and
+  unconfigured freeze/readiness rules remain unknown in the shared UI.
 
 ## 1. Inventory the OSAC UI contract before coding
 
@@ -166,7 +168,7 @@ fixture must work through configuration with a differently named Jira project.
 
 ## 6. Merge and deployment sequence
 
-1. Open data MR and app PR with matching contract fixtures and an OSAC parity report.
+1. Review [data MR !149](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/149) and [app PR #164](https://github.com/rh-ecosystem-edge/org-pulse/pull/164); merge the data MR first after checks pass.
 2. Merge data first and run collection. Verify both coherent project generations
    reach production storage; keep the existing app compatible during this step.
 3. Merge/build/deploy the app PR. Verify actual backend/frontend image revisions

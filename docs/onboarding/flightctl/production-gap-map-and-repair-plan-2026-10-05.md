@@ -3,7 +3,7 @@
 Recorded: 2026-10-05. Related epic: OSAC-5466.
 
 Detailed FC-02 implementation plan: [Project-driven Jira Hygiene](jira-hygiene-implementation-plan-2026-10-05.md).
-FC-02 candidate implementation is under review: data MR [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147) and app PR [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163) are open. Data pipeline 18197577 is green; app CI is green on commit 3e467e93 after smoke exposed a 404 logged by Chromium when probing the missing project-qualified OSAC roster. The registered OSAC server route now serves its preserved legacy roster without issuing that failing probe; other projects remain isolated. Neither change is merged or deployed; production collection, data sync, app rollout and authenticated readback remain outstanding.
+FC-02 implementation is merged in the requested order: data MR [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147) at 12:37:53Z, followed by app PR [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163) at 12:39:19Z. The MR pipeline and app review CI passed. Post-merge app images built and pushed in run [37311043174](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37311043174), but its production image-tag update was skipped because `APP_ID` or `APP_PRIVATE_KEY` is missing. Data main pipelines [18198893](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18198893) and [18199106](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18199106) were running/waiting for resources at last check. No production rollout, collection or authenticated readback is confirmed.
 
 Production: https://org-pulse-ecosystem-poc.apps.rosa.appsres09ue1.24ep.p3.openshiftapps.com/
 
@@ -119,35 +119,36 @@ This summary supersedes older pending-deployment statements below. MR !143 merge
 | FC-01 / FC-07 | App PR #160 and data MR !140 merged; Operational Metrics capability gating and selected-project release labels are included in the deployed app image. | Production screen verification for Flight Control and OSAC. |
 | FC-11 | Data MR !141 and app PR #161 merged; image deployment MR !142 merged and rollout verified. Collector publishes the full Feature inventory with evidence-based document/AI joins. | New collection and publication, then PRD/Design production screen verification. |
 | FC-04 / FC-05 | MR !143 merged per user: collect design docs before traceability; publish project artifacts before later release collectors. 35 focused tests plus publication integration check pass. | Successful full scheduled refresh, updated artifacts, production sync and private-doc access verification. |
-| FC-02 | Data MR [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147) and app PR [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163) are open with the profile-driven collector, EDM baseline and capability-based screen candidate. | Data pipeline [18197577](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18197577) passes all three jobs after rebasing onto refreshed main. App CI on 3e467e93 passes Test & Build, both smoke suites and both integration suites. Live EDM collection, production publication/data sync, app image deployment and authenticated readback remain. |
-| FC-03 | Shared Execute candidate uses the same OSAC Feature List, Feature Tracking and Epics by Release tabs for both projects; OSAC remains the default catalog entry. Local verification is complete. | Open both review requests, then merge data first and run a full refresh. Current source envelopes have older profile revisions, so verify matching profiles, registries, plans, tracking and Execute generations plus data-sync readback before merging the app PR. Production readback remains open. |
+| FC-02 | Data MR [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147) and app PR [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163) are merged in data-first order. | MR pipeline [18197577](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18197577) passed all jobs; app review checks passed. Post-merge images were pushed by [Build & Push Images 37311043174](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37311043174), but production image-tag updates were skipped because `APP_ID` or `APP_PRIVATE_KEY` is missing. Data main pipeline [18198893](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18198893) was running and [18199106](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18199106) was waiting for resources. Live EDM collection, successful production publication/data sync, deployed-image confirmation and authenticated readback remain. |
+| FC-03 | Shared Execute is implemented with the OSAC Feature List, Feature Tracking and Epics by Release tabs for both projects; OSAC remains the default. Data MR [!149](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/149) and app PR [#164](https://github.com/rh-ecosystem-edge/org-pulse/pull/164) are open. Data pipeline 18199308 and app Test & Build plus five integration suites pass on the current code commits. | Core Smoke, AI Eng Smoke and aggregate status checks pass. Merge !149 first, run a full refresh, verify matching profiles/registries/plans/tracking/Execute generations and production data-sync readback, then merge/build/deploy #164. Production screen readback remains open. |
 | FC-06 / FC-08 | Source documentation and bounded release evidence exist. | Documentation navigation; freshness/partial coverage and unmatched-release diagnostics. |
 | FC-09 / FC-10 | Findings recorded. | Investigate missing Jira team attribution and scanner/provenance count/status differences. |
 
 Immediate next step: run the main-branch data pipeline, verify refreshed project-qualified PRD/Design envelopes and production sync, then read both screens. No additional app deployment is required for FC-11. Optional publishers, review agents and product/repository-scope decisions remain as described below.
 
-### FC-02 project-driven Jira Hygiene candidate and verification
+### FC-02 project-driven Jira Hygiene implementation and verification
 
-Data MR [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147), commit 58884f538eb233efe77afc26ac47540610ab4d84, and app PR [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163), commit 3e467e937c5a76247e716ab42f5c62cb7d09ab20, are open against their respective main branches. The data MR is the dependency and must be merged first; neither change has been merged or deployed.
+Data MR [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147), source commit 58884f538eb233efe77afc26ac47540610ab4d84, merged at 12:37:53Z as `d7a65250a34224cf1b959d7b61b55cae69031589`. App PR [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163), source commit 3e467e937c5a76247e716ab42f5c62cb7d09ab20, merged at 12:39:19Z as `a9acb03378f1e307fdc4071aed8b04c6e76e4a17`. Both changes are merged; production deployment and readback are not confirmed.
 
 The data candidate adds a reusable five-rule catalog and profile-discovered collector. OSAC retains its five existing rule IDs and query semantics, including the Epic rule's empty-parent behavior, and keeps writing the legacy root config/results from the same resolved rules. EDM enables only missing-assignee checks for configured status category In Progress; fix-version, hierarchy, component and Team checks remain disabled with explicit policy-pending reasons. The EDM profile has no Team mapping, so the collector neither fetches nor invents Team assignments. Results and resolved configuration share a project-qualified source envelope, and the CI checkpoint includes profile-bound collectors. The app candidate resolves the selected project by capability, returns 404 for an unknown project, never falls back across projects, and reuses the existing report for freshness, partial failures, successful-empty results and disabled-rule scope. Release-specific Hygiene workflows remain outside this change.
 
 Local verification:
 
 - After rebasing onto data main 1ca9c9097ebe3ddcfdbd62298471b4b4f62ef0bc, the full Data unittest discovery passes. Hygiene catalog/collector tests: 22 passed; CI-contract tests: 4 passed; sidecar-sync tests: 22 passed, including checked-in OSAC and Flight Control publication acceptance.
-- The first MR pipeline [18196672](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18196672) failed sidecar acceptance because its then-current release registry revisions lagged the profiles. Main subsequently published coherent registry/profile revisions. The rebased MR pipeline [18197577](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18197577) now passes all three jobs; no stale revision was fabricated and sidecar validation remains strict.
+- The first MR pipeline [18196672](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18196672) failed sidecar acceptance because its then-current release registry revisions lagged the profiles. Main subsequently published coherent registry/profile revisions. The rebased MR pipeline [18197577](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18197577) passed all three jobs before the MR merged; no stale revision was fabricated and sidecar validation remains strict.
 - Hygiene Playwright tests: 7 passed; project selection and EDM-switch browser checks: 2 passed. Earlier lint, build, module/platform validation and OpenAPI validation passed.
 - Full app CI on fcaf4e43 reported 6,170 passed, 9 skipped and one failed project-discovery order assertion; smoke jobs were skipped after Test & Build failed. Commit 66e78e35 corrected that assertion, passed Test & Build and Jira Hygiene integration, but Core and AI Eng smoke tests then failed on a missing project-qualified OSAC roster publication.
 - The selector intentionally defaults to the first catalog entry, so OSAC remains first. Commit 3b34b35e's client fallback still allowed Chromium to record the expected project-qualified 404 as a console error. Commit 3e467e93 moves migration handling to the server: only a registered OSAC profile with no project roster artifact can use the preserved legacy OSAC roster. Flight Control and unknown projects never fall back. Focused Hygiene route, project-profile and roster migration tests: 42 passed; changed-file lint and diff checks passed. Local selector tests: 18 passed; onboarding browser checks: 2 passed. A local container smoke run could not start because Podman's `/run/user/.../libpod` directory is read-only. The full local suite reported 6,123 passed, 9 skipped and 55 failures caused by sandbox `listen EPERM` in existing HTTP-server tests; remote CI passed the full suite in its supported runner. [CI run 37310017226](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37310017226) passed Test & Build, Core Smoke, AI Eng Smoke and Smoke Test Status. [Integration run 37310017297](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37310017297) passed People & Teams, Jira Hygiene and Integration Test Status. CodeRabbit and AI Config Guard passed. The local demo store lacks project-qualified roster artifacts, so its earlier 404 is not production verification.
+- Post-merge app workflow [37311043174](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37311043174) passed tests, image builds/pushes and Core Smoke. Its `Update Prod Image Tags` job skipped the tag changes and deploy commit because required GitHub Actions secrets `APP_ID` or `APP_PRIVATE_KEY` are missing. Thus built images are available, but no production deployment is confirmed. Data main pipelines [18198893](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18198893) (running at SHA `e41205ad`) and [18199106](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18199106) (waiting for resources at SHA `c2bd8add`) have not yet verified a successful post-merge collection/data sync.
 - CodeRabbit's two failed/empty-result findings were verified and fixed on 66e78e35. No live EDM query was run because Jira credentials are unavailable in this environment. The configured active-status-category query and successful collection remain production checks.
 
-Pre-merge checks are complete: app PR #163 checks pass on 3e467e93 and data MR !147 pipeline 18197577 is green and conflict-free. Remaining FC-02 gates, in order:
+Both changes merged in the requested order, and all PR/MR review checks passed. Remaining FC-02 production gates, in order:
 
-1. After the user merges data MR !147, run collection and verify matching profile/config/result revisions for OSAC and EDM, the EDM active-category query and issue links, OSAC rule parity and legacy root artifacts, and a successful production data-sync readback with the new commit and source timestamp.
-2. Only after the data publication is verified, merge app PR #163; confirm Build & Push Images and the deployed frontend/backend revisions.
+1. Confirm a successful main-branch data pipeline and collection after MR !147, then verify matching profile/config/result revisions for OSAC and EDM, EDM active-category query and issue links, OSAC rule parity and legacy root artifacts, and successful production data-sync readback with the source timestamp.
+2. Resolve the skipped production image-tag update through the authorized credential owner or approved deployment process; confirm prod frontend/backend image revisions before counting the app as deployed.
 3. In an authenticated production session, verify OSAC and EDM, project switching, unknown-project 404, no cross-project rows, freshness, partial failures, successful-empty output and disabled-rule explanations. Keep FC-02 open until these checks are recorded.
 
-No merge or deployment has been performed.
+Both review changes were merged by the user in data-first order. No production deployment or authenticated readback is confirmed.
 
 ## Issue register
 
@@ -156,8 +157,8 @@ All entries below remain open unless marked as an investigation or expected gap.
 | ID | Priority | Finding | Evidence and cause | Required outcome |
 | --- | --- | --- | --- | --- |
 | FC-01 | P0 | Operational Metrics can show OSAC content while Flight Control is selected. | `OperationalMetricsView.vue` unconditionally embeds `product=osac&team=osac`. The Flight Control operational-integrations registry marks UOI inapplicable, but its profile has no dedicated Operational Metrics capability yet. | Phase 1 candidate adds a project capability, exposes only its bounded public fields, and gates the iframe on the selected project. Flight Control must not mount/request the OSAC iframe; OSAC retains its configured view. |
-| FC-02 | P1 | Flight Control Jira Hygiene results are missing in production. | Production still publishes only the legacy OSAC Hygiene artifacts; raw EDM Jira records exist. Data MR [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147) and app PR [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163) contain the candidate implementation. | Merge data first, verify project-qualified OSAC/EDM collection and publication plus data sync, then merge/deploy the app and verify authenticated project isolation and report states. EDM policy-dependent rules remain disabled pending confirmation. |
-| FC-03 | P1 | Production Flight Control Releases → Execute still lacks the shared OSAC baseline UI. | The isolated app candidate removes the Execute presentation split and uses one project-qualified contract; the data candidate publishes EDM Feature/Epic/version data. Local browser checks cover all three tabs for both projects. Production still runs the prior app/data revisions. | Merge data first and verify its coherent OSAC/EDM generations and data-sync readback; then merge/build/deploy the app and verify authenticated OSAC/Flight Control screens. Keep CI, Feature completion and readiness metrics distinct. |
+| FC-02 | P1 | Flight Control Jira Hygiene results are missing in production. | Raw EDM Jira records exist. Data MR [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147) and app PR [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163) are merged in data-first order, and their review pipelines passed. The post-merge data pipelines [18198893](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18198893) and [18199106](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18199106) were running/waiting for resources at last check. App images built and pushed, but the production image-tag update skipped because GitHub Actions is missing `APP_ID` or `APP_PRIVATE_KEY`; production deployment is unconfirmed. | Keep FC-02 open until a successful post-merge OSAC/EDM collection and project-qualified publication are verified, production data sync is read back, an authorized image-tag update is completed, and authenticated project isolation/report states are checked. EDM fix-version, hierarchy, component and Team rules remain disabled pending policy confirmation. |
+| FC-03 | P1 | Production Flight Control Releases → Execute still lacks the shared OSAC baseline UI. | Data MR [!149](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/149) and app PR [#164](https://github.com/rh-ecosystem-edge/org-pulse/pull/164) are open. The app reuses the same project-qualified Execute contract and OSAC tabs; six fixture screenshots and three Playwright cases cover both projects, switching and unknown-project 404. Data pipeline 18199308, app Test & Build and all five integration suites pass; Core Smoke, AI Eng Smoke and aggregate status checks also pass. | Merge data first; verify coherent OSAC/EDM profile, registry, plan, tracking and Execute generations plus data-sync readback. Then merge/build/deploy the app and verify authenticated OSAC/Flight Control screens. Keep CI success, Feature completion and readiness distinct. |
 | FC-04 | P1 | Scheduled refresh is not yet verified end-to-end after the credential change. | Latest completed scheduled pipeline 18190219 failed `refresh-osac-builds-data` (job 62671032) with HTTP 403 and a missing `actions` scope. Manual pipeline 18190729 completed all seven jobs successfully; scheduled 18190801 was canceled before release refresh. | Complete a successful scheduled chain through collection, publication and template update using the new credential. Verify the resulting source timestamps and production sync for both projects. |
 | FC-05 | P1 | Flight Control private design-doc access needs final scheduled-run confirmation. | Earlier job 62648395 in pipeline 18180605 failed on `repos/flightctl/design-docs/git/trees/main?recursive=1` with HTTP 404. Manual pipeline 18190729 completed successfully, read `flightctl/design-docs`, and published 17 features / 40 present artifacts. | Confirm a scheduled run completes publication and production data-sync consumes it. Preserve an honest inaccessible/failure status if a later run reports one. |
 | FC-06 | P2 | Documentation is hidden from navigation despite available data. | `modules/ai-impact/module.json` disables the Documentation navigation item. A project-aware documentation route/view and Flight Control artifacts exist. | Expose the supported Documentation screen through the sidebar, preserving project selection and OSAC behavior. |
@@ -293,9 +294,9 @@ fix. Optional sources remain explicitly empty/unavailable until real evidence ex
 | --- | --- | --- |
 | Phase 1 app PR | [#160](https://github.com/rh-ecosystem-edge/org-pulse/pull/160), commit `bb1eeb1464822b925e33db014a2033540b18f068`: FC-01 capability-gated Operational Metrics and FC-07 project-aware Release Plan labels. | Merged at 07:56Z after all checks passed. Production deployment is not confirmed. |
 | Phase 1 data MR | [!140](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/140), commit `8a9946a4846330535534ce6159213d9d0d14ddf2`: OSAC supported and Flight Control inapplicable Operational Metrics capability entries. | Merged at 07:58Z; pipeline 18191486 passed. Production publication/deployment is not confirmed. |
-| Project-driven Jira Hygiene data MR | [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147), commit 58884f538eb233efe77afc26ac47540610ab4d84, based on data main 1ca9c909; 10 changed files. | Pipeline [18197577](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18197577) passed all three jobs. Earlier pipeline 18196672's sidecar failure was resolved by rebasing onto the coherent current main snapshots; validation was not weakened. |
-| Project-driven Jira Hygiene app PR | [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163), latest commit 3e467e937c5a76247e716ab42f5c62cb7d09ab20, based on rh-ecosystem-edge/org-pulse:main 8aff6b6d; 19 changed files. | Depends on MR !147 data publication. Focused Hygiene route/profile/roster tests: 42 passed; selector tests: 18; changed-file lint and diff checks pass. CI [37310017226](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37310017226) passed Test & Build, Core Smoke, AI Eng Smoke and Smoke Test Status. Integration [37310017297](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37310017297) passed People & Teams, Jira Hygiene and Integration Test Status; CodeRabbit and AI Config Guard pass. Both smoke suites now pass after the OSAC-only server migration path removed the expected 404 probe. Build/deploy/readback remain outstanding. |
-| Shared Releases → Execute candidate | FC-03: add one project-qualified data contract and reuse the OSAC tabs for Flight Control. | Local implementation and verification are underway on isolated branches; MR/PR and CI results will be recorded after opening. Production readback remains required. |
+| Project-driven Jira Hygiene data MR | [!147](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/147), source commit 58884f538eb233efe77afc26ac47540610ab4d84, merged at 12:37:53Z as `d7a65250a34224cf1b959d7b61b55cae69031589`; based on data main 1ca9c909; 10 changed files. | MR pipeline [18197577](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18197577) passed all three jobs. The earlier 18196672 sidecar failure was resolved by rebasing onto coherent profile/registry snapshots; validation was not weakened. Post-merge main pipeline [18198893](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18198893) is running and scheduled pipeline [18199106](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18199106) is waiting for resources. Production collection/data sync remains unverified. |
+| Project-driven Jira Hygiene app PR | [#163](https://github.com/rh-ecosystem-edge/org-pulse/pull/163), source commit 3e467e937c5a76247e716ab42f5c62cb7d09ab20, merged at 12:39:19Z as `a9acb03378f1e307fdc4071aed8b04c6e76e4a17`; based on rh-ecosystem-edge/org-pulse:main 8aff6b6d; 19 changed files. | Focused Hygiene route/profile/roster tests: 42 passed; selector tests: 18; lint and diff checks pass. CI [37310017226](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37310017226) passed Test & Build, Core Smoke, AI Eng Smoke and Smoke Test Status; Integration [37310017297](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37310017297) passed People & Teams, Jira Hygiene and Integration Test Status; CodeRabbit passed. Post-merge workflow [37311043174](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37311043174) built and pushed frontend/backend images and passed Core Smoke, but skipped production image-tag update because `APP_ID` or `APP_PRIVATE_KEY` is missing. Deployment and readback remain unverified. |
+| Shared Releases → Execute | FC-03: data MR [!149](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/149) and app PR [#164](https://github.com/rh-ecosystem-edge/org-pulse/pull/164) are open on isolated branches. | Data pipeline 18199308, app Test & Build, five integration suites, Core Smoke, AI Eng Smoke and aggregate status checks pass. Merge data first, verify coherent production data sync, then merge/deploy the app and complete authenticated production readback. |
 | Data pipeline follow-up | Confirm a successful scheduled run and production sync for FC-04/FC-05; diagnose FC-10's unavailable provenance source. | Updated CI credential; inspect source timestamps and the consumed data revision. |
 | PRD/Design inventory fix | FC-11 data MR [!141](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/141), commit `12f66b2bb590407477e3a33a30723703352f69e8`, and app PR [#161](https://github.com/rh-ecosystem-edge/org-pulse/pull/161), latest commit `a41e159da39d6755bf4510161e327b7b82a8e6d9` (includes the normalized-design-status review fix). The collector publishes the full Feature inventory with project-qualified docs/PR/provenance joins; the app renders those rows and only verified AI-created tags. | Both merged. MR !141 pipeline [18192191](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18192191) passed; EP Review job [62683163](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/jobs/62683163) succeeded, and production data-sync published commit `fc17bb76` at 08:33Z. The full scheduled pipeline failed later in Release refresh; see FC-08/FC-10 follow-up. |
 | FC-11 app deployment | [MR !142](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/142), commit `7945d227fc72ea59ca6633071a0980b049020b07`: update only BACKEND_IMAGE and FRONTEND_IMAGE in the production template to successful #161 build tag `236524cf87a328003db9535bc55962db73fa3053`. | CI pipeline [18193093](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18193093) passed; MR is mergeable. Automatic GitHub image-tag update skipped due missing `APP_ID`/`APP_PRIVATE_KEY`. Production still runs `b618c7f1`; user merge and rollout/readback remain pending. |
@@ -436,52 +437,59 @@ Job 62694136 failed because the build registry retained profile revision `9e7d48
 
 The initial MR pipeline also detected profiles published ahead of their release registry/plan revisions. The checkpoint now waits for coherent registries, execution evidence and generated plans. Approved CI-only repair job 62699116 collected real sources successfully; generated snapshots were added in commit `4bbb09515f73a8ef4c071a079ed31940d6bc00d3`, and the temporary repair job was removed. Local checks: 237 collector/ordering tests and all 22 sidecar tests passed. Latest MR pipeline [18196589](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18196589) passed all three jobs. Pending user merge, full refresh and production image/data verification; production unchanged.
 
-## Shared Execute UI correction — review candidate
+## Shared Execute UI correction — MR !149 / PR #164
 
-Product clarification: OSAC is the reusable UI baseline; project selection must
-not substitute a different dashboard. The candidate uses the same Feature List,
-Feature Tracking and Epics by Release tabs for OSAC and Flight Control. OSAC
-stays first in the project catalog and remains the default when there is no
-saved project context. Both isolated branches are named
-`codex/shared-release-execute-20261005`: data is based on main
-`45e1af96fc293f4130a9af084c05fb4da064dfbc`, and app is based on main
-`a9acb03378f1e307fdc4071aed8b04c6e76e4a17`. The data base includes !146's
-build-collector recovery/ordering and !148's checkpoint transaction repair;
-the app base also includes merged Jira Hygiene PR #163. The data base also
-contains the 2026-10-05 legacy OSAC execution snapshot refresh; the candidate
-preserves those legacy files unchanged.
+Product clarification: OSAC is the reusable UI baseline; project selection changes
+the data and evidence states, not the dashboard. The candidate keeps the same
+Feature List, Feature Tracking and Epics by Release tabs for OSAC and Flight
+Control. OSAC stays first in the project catalog and remains the default when
+there is no saved project context. System Health → Release Execution remains a
+separate evidence view.
 
-The project-qualified contract publishes index, per-Feature detail and tracking
-artifacts with compatible profile/Execute revisions and generation identity.
-OSAC's established feature and pipeline-owned metrics remain unchanged. The
-last-collected Flight Control Jira payload contains 271 Features, 440 Jira Epics
-and 51 Epics without a linked Feature; the latter are reported in the hierarchy
-tab status because they cannot appear beneath a Feature. Missing Team
-attribution, compatible pipeline metrics, readiness and scope-baseline policy
-remain unknown. The separate System Health → Release Execution evidence remains
-available.
+The data MR [!149](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/merge_requests/149), head
+`71b36f58d4d1fbe2a796e6c09d3cb32dea69abe1`, targets data `main` from base
+`45e1af96fc293f4130a9af084c05fb4da064dfbc`. The app PR
+[#164](https://github.com/rh-ecosystem-edge/org-pulse/pull/164), current code head
+`8b121dd159f0fa8413b4aa565fca3bc1f5f2a981`, targets app `main` from base
+`a9acb03378f1e307fdc4071aed8b04c6e76e4a17`. Both use the isolated branch
+`codex/shared-release-execute-20261005`; the bases include the !146 build-collector
+recovery/ordering changes, !148 checkpoint transaction repair and merged Jira
+Hygiene PR #163. Legacy OSAC files remain intact.
 
-The refreshed profile revisions are OSAC `653d4e3d171383df` and Flight Control
-`84d6e4c515154de5`, while the current release/source envelopes still use
-`df41f77ef2a16e8d` and `c4526ee0fc8e869f`. The branch deliberately omits
-project-qualified Execute outputs until collectors regenerate compatible input
-and plan generations; temporary test copies preserve the real Jira payload but
-do not relabel checked-in data. The sidecar rejects the mixed generation, so
-the data change must be followed by a full refresh and coherent sync before app
-rollout.
+The project-qualified contract publishes an index, per-Feature details and
+tracking artifacts with compatible profile/Execute revisions and generation
+identity. OSAC's established feature and pipeline-owned metrics keep their
+existing meanings. The real Flight Control Jira payload contains 271 Features,
+440 Epics and 51 Epics without a linked Feature; 20 release entries carry Feature
+scope. Missing Team attribution, compatible pipeline metrics, readiness and
+scope-baseline policy remain unknown. The data MR does not fabricate new
+project-qualified outputs from mismatched source generations; a full ordered
+refresh must publish compatible profiles, registries, plans and Execute data.
 
-The branch fixtures cover OSAC parity, Feature rows without AI markers/PRs,
-partial and unavailable sources, generation validation, project switching and
-actions, plus a differently named third Jira project configured without
-project-specific code. Browser checks verify the same three tabs for both
-projects. Data CI tests: 349 passed; checkpoint contract: 9 passed; sidecar:
-24 passed, including stale-generation rejection. App `npm test`: 6,189 passed,
-9 skipped; lint, build, module/platform/OpenAPI checks passed. Browser checks
-passed all 3 cases across both projects, with six fixture screenshots. Remote
-CI is pending once the review requests open. No merge or deployment has been
-performed. Merge data first, run the full collection and verify both coherent
-generations and data sync, then merge/build/deploy the app and read back both
-projects.
+Fixtures cover OSAC parity, Features without AI markers or PRs, hierarchy and
+version attribution, empty/partial/unavailable/failure states, switching and
+actions, and a differently named third project configured without project
+specific code. Local checks: data CI unittest list 340 passed; release-plan
+contract 9 passed; sidecar 24 passed; app `npm test` 6,189 passed and 9 skipped;
+lint, build, module/platform and OpenAPI checks passed. Three Playwright cases
+cover the same three tabs for both projects, stale responses during switching,
+and unknown-project 404; six local fixture screenshots are linked in the
+verification report. These are not production readbacks.
+
+Remote CI: data pipeline
+[18199308](https://gitlab.cee.redhat.com/edge-infrastructure/org-pulse-data/-/pipelines/18199308)
+passed all three jobs. App Test & Build
+[37317770270](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37317770270)
+and all five integration suites
+[37317770283](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37317770283)
+passed on code head `8b121dd1`. Core Smoke, AI Eng Smoke and Smoke Test
+Status also passed in run [37317770270](https://github.com/rh-ecosystem-edge/org-pulse/actions/runs/37317770270).
+No merge, rollout or deployment has been performed.
+
+Merge order: merge !149 first, run a full collection and verify coherent OSAC/EDM
+generations and production data-sync readback; only then merge/build/deploy #164
+and read all three tabs for both projects in an authenticated production browser.
+Keep the same OSAC UI and preserve the System Health execution-evidence screen.
 
 ## CI checkpoint transaction repair — MR !148
 
