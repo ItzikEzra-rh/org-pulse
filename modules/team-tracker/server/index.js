@@ -2813,36 +2813,41 @@ module.exports = function registerRoutes(router, context) {
    *             schema:
    *               $ref: '#/components/schemas/RosterResponse'
    */
+  function readLegacyRosterResponse(req) {
+    const full = readRosterFull();
+    if (!full) return { orgs: [] };
+    const roster = deriveRoster();
+    const { mergedKeyMap: _mergedKeyMap, ...rosterResponse } = roster;
+
+    // Add permissions context for in-app mode
+    if (rosterResponse.teamDataSource === 'in-app') {
+      const managed = req.userUid
+        ? [...permissions.getManagedUids(req.userUid, managerMap)]
+        : [];
+      rosterResponse.permissions = {
+        roles: req.userRoles || [],
+        isManager: req.isManager || false,
+        uid: req.userUid,
+        managedUids: managed
+      };
+    }
+    return rosterResponse;
+  }
+
   router.get('/roster', requireScope('roster:read'), function(req, res) {
     try {
       const selection = resolveProjectSelection(context.projects, req.query);
       if (selection.status) return res.status(selection.status).json({ error: selection.error });
       if (selection.provided) {
-        const result = readProjectRoster(context.projects, selection.projectId);
+        const result = readProjectRoster(context.projects, selection.projectId, {
+          readLegacyOsacRoster: selection.projectId === 'osac'
+            ? () => readLegacyRosterResponse(req)
+            : undefined
+        });
         if (result.status !== 200) return res.status(result.status).json({ error: result.error });
         return res.json(result.roster);
       }
-      const full = readRosterFull();
-      if (!full) {
-        return res.json({ orgs: [] });
-      }
-      const roster = deriveRoster();
-      const { mergedKeyMap: _mergedKeyMap, ...rosterResponse } = roster;
-
-      // Add permissions context for in-app mode
-      if (rosterResponse.teamDataSource === 'in-app') {
-        const managed = req.userUid
-          ? [...permissions.getManagedUids(req.userUid, managerMap)]
-          : [];
-        rosterResponse.permissions = {
-          roles: req.userRoles || [],
-          isManager: req.isManager || false,
-          uid: req.userUid,
-          managedUids: managed
-        };
-      }
-
-      res.json(rosterResponse);
+      res.json(readLegacyRosterResponse(req));
     } catch (error) {
       console.error('Read roster error:', error);
       res.status(500).json({ error: error.message });

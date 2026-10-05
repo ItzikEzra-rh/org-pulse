@@ -103,32 +103,48 @@ const refreshState = {
  * @openapi
  * /api/modules/releases/hygiene/project-hygiene:
  *   get:
- *     summary: Get OSAC-style project-wide Jira hygiene results
- *     description: Read-only. Published by the org-pulse-data CI pipeline; the app performs no Jira calls or writes for this contract.
+ *     summary: Get the selected project's Jira hygiene results
+ *     description: Read-only. The selected project profile identifies one project-qualified source envelope published by org-pulse-data.
  *     tags: [Releases - Hygiene]
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Registered project profile whose Jira Hygiene capability is requested
  *     responses:
  *       200:
- *         description: Project hygiene result contract
+ *         description: One project's hygiene results, including a successful-empty state
+ *       400:
+ *         description: Invalid or missing project selection
  *       404:
- *         description: No results have been published yet
+ *         description: Unknown project
  *       503:
- *         description: Published results could not be read (e.g. malformed JSON)
+ *         description: Selected project's publication is invalid or unavailable
  */
 
 /**
  * @openapi
  * /api/modules/releases/hygiene/project-hygiene/config:
  *   get:
- *     summary: Get OSAC-style project-wide Jira hygiene rule configuration
- *     description: Read-only. Rule definitions are owned and committed by org-pulse-data.
+ *     summary: Get the selected project's Jira hygiene configuration
+ *     description: Read-only. Includes enabled rule scope, disabled-rule reasons, freshness, and collection status for one project.
  *     tags: [Releases - Hygiene]
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Registered project profile whose Jira Hygiene capability is requested
  *     responses:
  *       200:
- *         description: Project hygiene config contract
+ *         description: One selected project's resolved rule configuration
+ *       400:
+ *         description: Invalid or missing project selection
  *       404:
- *         description: No configuration has been published yet
+ *         description: Unknown project
  *       503:
- *         description: Published configuration could not be read (e.g. malformed JSON)
+ *         description: Selected project's publication is invalid or unavailable
  */
 
 module.exports = function registerHygieneRoutes(router, context) {
@@ -139,6 +155,19 @@ module.exports = function registerHygieneRoutes(router, context) {
     const selection = resolveReleaseProject(projects, req.query);
     if (sendProjectScopeError(res, selection)) return null;
     return selection;
+  }
+
+  function selectedHygieneProject(req, res) {
+    if (!req.query || !Object.prototype.hasOwnProperty.call(req.query, 'projectId')) {
+      res.status(400).json({
+        projectId: null,
+        state: 'unavailable',
+        reason: 'project-selection-required',
+        error: 'projectId query parameter is required'
+      });
+      return null;
+    }
+    return selectedProject(req, res);
   }
 
   function projectMessage(selection, template) {
@@ -158,21 +187,291 @@ module.exports = function registerHygieneRoutes(router, context) {
     return DATA_PREFIX + '/features-' + version + '.json';
   }
 
-  // Reads a data-side JSON contract file as-is. Distinct from the release-scoped
-  // `storage.readFromStorage` calls below — readFromStorage only catches ENOENT,
-  // so malformed JSON must be caught here and turned into an explicit 503.
-  function readHygieneContract(res, key, notFoundMessage) {
-    var data;
+  function projectHygieneUnavailable(selection, message, reason, extra = {}) {
+    const resolvedMessage = projectMessage(selection, message);
+    return {
+      projectId: selection.projectId,
+      state: 'unavailable',
+      reason,
+      capability: 'jira-hygiene',
+      freshness: 'unknown',
+      fetchedAt: null,
+      message: resolvedMessage,
+      error: extra.error || resolvedMessage,
+      ...extra
+    };
+  }
+
+  function readProjectHygieneStatus(selection, artifactKey) {
+    if (!projects || typeof projects.resolve !== 'function') return null;
+    const resolved = projects.resolve(selection.projectId);
+    if (!resolved) return null;
+    const key = `projects/${selection.projectId}/_publication/${encodeURIComponent(artifactKey)}.status.json`;
+    return storage.readFromStorage(key) || null;
+  }
+
+  function validateProjectHygieneEnvelope(selection, capability, envelope) {
+    const profile = selection.profile;
+    const profileRevision = profile && profile.profileRevision;
+    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
+      throw new Error('Published Jira Hygiene envelope must be an object');
+    }
+    if (!profileRevision || profileRevision === 'unversioned'
+        || envelope.projectId !== selection.projectId
+        || envelope.profileRevision !== profileRevision
+        || envelope.artifactKey !== capability.artifactKey) {
+      throw new Error('Published Jira Hygiene identity or profile revision does not match the selected project');
+    }
+    if (!['supported', 'empty'].includes(envelope.state)
+        || !['fresh', 'stale'].includes(envelope.freshness)
+        || typeof envelope.partial !== 'boolean'
+        || !envelope.source || envelope.source.id !== capability.sourceId
+        || envelope.source.kind !== 'jira'
+        || !envelope.source.revision || !envelope.data || typeof envelope.data !== 'object') {
+      throw new Error('Published Jira Hygiene envelope metadata is invalid');
+    }
+
+    const data = envelope.data;
+    const configuration = data.configuration;
+    const projectKey = profile.jiraProjectKey || profile.jira?.projectKey;
+    if (!configuration || typeof configuration !== 'object'
+        || data.projectId !== selection.projectId
+        || data.profileRevision !== profileRevision
+        || data.artifactKey !== capability.artifactKey
+        || data.projectKey !== projectKey
+        || configuration.projectId !== selection.projectId
+        || configuration.profileRevision !== profileRevision
+        || configuration.projectKey !== projectKey
+        || configuration.configRevision !== envelope.source.revision
+        || data.configRevision !== configuration.configRevision
+        || !Array.isArray(configuration.enabledRuleIds)
+        || !Array.isArray(configuration.rules)
+        || !Array.isArray(data.rules)
+        || !Array.isArray(data.errors)
+        || !Array.isArray(data.configuredRuleIds)
+        || !Array.isArray(data.evaluatedRuleIds)
+        || !Array.isArray(data.successfulRuleIds)
+        || !data.summary || typeof data.summary !== 'object'
+        || data.partial !== envelope.partial) {
+      throw new Error('Published Jira Hygiene configuration and result do not match');
+    }
+
+    const enabledIds = configuration.enabledRuleIds;
+    const configRuleIds = configuration.rules.map(rule => rule && rule.id);
+    const resultIds = data.rules.map(rule => rule && rule.id);
+    if (new Set(enabledIds).size !== enabledIds.length
+        || new Set(configRuleIds).size !== configRuleIds.length
+        || enabledIds.some(id => !configRuleIds.includes(id))
+        || JSON.stringify(enabledIds) !== JSON.stringify(data.configuredRuleIds)
+        || JSON.stringify(enabledIds) !== JSON.stringify(data.evaluatedRuleIds)
+        || JSON.stringify(enabledIds) !== JSON.stringify(resultIds)
+        || data.successfulRuleIds.some(id => !enabledIds.includes(id))) {
+      throw new Error('Published Jira Hygiene rule scope does not match its results');
+    }
+    for (const rule of configuration.rules) {
+      if (!rule || typeof rule.id !== 'string') throw new Error('Published Jira Hygiene rule catalog entry is invalid');
+      if (enabledIds.includes(rule.id)) {
+        if (rule.enabled !== true) throw new Error(`Configured Jira Hygiene rule ${rule.id} is not enabled`);
+      } else if (rule.enabled !== false || typeof rule.disabledReason !== 'string' || !rule.disabledReason.trim()) {
+        throw new Error(`Disabled Jira Hygiene rule ${rule.id} is missing its policy reason`);
+      }
+    }
+
+    for (const resultRule of data.rules) {
+      if (!resultRule || !Number.isInteger(resultRule.count) || !Array.isArray(resultRule.issues)
+          || resultRule.count < -1
+          || (resultRule.count === -1 && resultRule.issues.length !== 0)
+          || (resultRule.count >= 0 && resultRule.count !== resultRule.issues.length)) {
+        throw new Error('Published Jira Hygiene rule result is invalid');
+      }
+      for (const issue of resultRule.issues) {
+        if (!issue || typeof issue.key !== 'string' || !issue.key.startsWith(`${projectKey}-`)) {
+          throw new Error('Published Jira Hygiene result contains an issue from another Jira project');
+        }
+      }
+    }
+    const failedRuleIds = data.rules.filter(rule => rule.count === -1).map(rule => rule.id);
+    const successfulRuleIds = data.rules.filter(rule => rule.count >= 0).map(rule => rule.id);
+    const uniqueIssueKeys = new Set(data.rules.flatMap(rule => rule.count < 0 ? [] : rule.issues.map(issue => issue.key)));
+    const totalRuleMatches = data.rules.reduce((total, rule) => total + (rule.count < 0 ? 0 : rule.count), 0);
+    if (!envelope.generatedAt || data.generatedAt !== envelope.generatedAt
+        || data.summary.generatedAt !== envelope.generatedAt
+        || !Number.isInteger(data.summary.uniqueIssueCount)
+        || !Number.isInteger(data.summary.totalRuleMatches)
+        || !Number.isInteger(data.summary.affectedRuleCount)
+        || !Number.isInteger(data.summary.failedRuleCount)
+        || data.summary.failedRuleCount !== failedRuleIds.length
+        || data.summary.affectedRuleCount !== data.rules.filter(rule => rule.count > 0).length
+        || data.summary.uniqueIssueCount !== uniqueIssueKeys.size
+        || data.summary.totalRuleMatches !== totalRuleMatches
+        || JSON.stringify(data.successfulRuleIds) !== JSON.stringify(successfulRuleIds)
+        || JSON.stringify(data.errors.map(error => error && error.ruleId)) !== JSON.stringify(failedRuleIds)
+        || (envelope.state === 'empty'
+          && (envelope.partial || failedRuleIds.length > 0 || data.summary.totalRuleMatches !== 0))) {
+      throw new Error('Published Jira Hygiene generation or summary metadata is inconsistent');
+    }
+    return data;
+  }
+
+  function readLegacyOsacHygiene(selection, capability, status) {
+    const migration = capability && capability.legacyMigration;
+    const profile = selection.profile;
+    const projectKey = profile && (profile.jiraProjectKey || profile.jira?.projectKey);
+    if (!migration || selection.projectId !== 'osac' || migration.projectId !== 'osac'
+        || projectKey !== 'OSAC' || migration.projectKey !== 'OSAC'
+        || !migration.resultsArtifactKey || !migration.configArtifactKey) return null;
+
+    let resultsContract;
+    let configContract;
     try {
-      data = storage.readFromStorage(key);
-    } catch (err) {
-      console.error('[hygiene] Failed to read ' + key + ':', err.message);
-      return res.status(503).json({ error: 'Project hygiene data is temporarily unavailable' });
+      resultsContract = storage.readFromStorage(migration.resultsArtifactKey);
+      configContract = storage.readFromStorage(migration.configArtifactKey);
+    } catch (error) {
+      throw new Error(`Legacy OSAC Jira Hygiene artifacts could not be read: ${error.message}`, { cause: error });
     }
-    if (!data) {
-      return res.status(404).json({ error: notFoundMessage });
+    const project = resultsContract && resultsContract.results && resultsContract.results.OSAC;
+    const sourceConfig = configContract && configContract.projects && configContract.projects.OSAC;
+    if (!project || !sourceConfig || !Array.isArray(project.rules) || !Array.isArray(sourceConfig.rules)) return null;
+    if (resultsContract.configVersion && configContract.configVersion
+        && resultsContract.configVersion !== configContract.configVersion) {
+      throw new Error('Legacy OSAC Jira Hygiene configuration and results do not match');
     }
-    return res.json(data);
+    const configuredIds = sourceConfig.rules.map(rule => rule.id);
+    const resultIds = project.rules.map(rule => rule.id);
+    if (JSON.stringify(configuredIds) !== JSON.stringify(resultIds)) {
+      throw new Error('Legacy OSAC Jira Hygiene rule scope does not match its results');
+    }
+    if (new Set(configuredIds).size !== configuredIds.length
+        || project.rules.some(rule => (rule.issues || []).some(issue => !issue.key || !issue.key.startsWith('OSAC-')))) {
+      throw new Error('Legacy OSAC Jira Hygiene artifacts contain an invalid rule or foreign issue');
+    }
+
+    const configuration = {
+      ...sourceConfig,
+      projectId: 'osac',
+      profileRevision: profile.profileRevision,
+      projectKey: 'OSAC',
+      enabledRuleIds: configuredIds,
+      configRevision: configContract.configVersion || resultsContract.configVersion || 'legacy-osac-hygiene',
+      rules: sourceConfig.rules.map(rule => ({ ...rule, enabled: true, disabledReason: null }))
+    };
+    const dataProject = {
+      ...project,
+      projectId: 'osac',
+      profileRevision: profile.profileRevision,
+      artifactKey: capability.artifactKey,
+      configuration,
+      configRevision: configuration.configRevision,
+      configuredRuleIds: configuredIds,
+      evaluatedRuleIds: configuredIds,
+      successfulRuleIds: project.rules.filter(rule => Number.isInteger(rule.count) && rule.count >= 0).map(rule => rule.id),
+      generatedAt: project.summary?.generatedAt || resultsContract.generatedAt || null
+    };
+    const collectionFailure = status && status.state === 'error' ? status.error || null : null;
+    const hasFailedRule = project.rules.some(rule => Number.isInteger(rule.count) && rule.count < 0);
+    const partial = Boolean(project.partial || collectionFailure || hasFailedRule);
+    return {
+      schemaVersion: resultsContract.schemaVersion || 1,
+      projectId: 'osac',
+      profileRevision: profile.profileRevision,
+      artifactKey: capability.artifactKey,
+      generatedAt: dataProject.generatedAt,
+      fetchedAt: resultsContract.generatedAt || null,
+      source: resultsContract.source || 'legacy-osac-hygiene',
+      freshness: collectionFailure ? 'stale' : 'unknown',
+      state: !partial && project.summary?.totalRuleMatches === 0 ? 'empty' : 'supported',
+      partial,
+      collectionFailure,
+      legacyMigration: true,
+      results: { OSAC: dataProject },
+      configuration
+    };
+  }
+
+  function readSelectedProjectHygiene(selection) {
+    const profile = selection.profile;
+    const capability = profile && profile.capabilities && profile.capabilities.jiraHygiene;
+    if (!capability) {
+      return { contract: projectHygieneUnavailable(selection, 'Jira Hygiene is not configured for {project}.', 'capability-not-configured') };
+    }
+    if (capability.state === 'inapplicable') {
+      return { contract: { ...projectHygieneUnavailable(selection, capability.reason || 'Jira Hygiene is not applicable to {project}.', 'inapplicable'), state: 'inapplicable' } };
+    }
+    if (capability.state !== 'supported' || typeof capability.artifactKey !== 'string' || typeof capability.sourceId !== 'string') {
+      return { contract: projectHygieneUnavailable(selection, 'Jira Hygiene publication is unavailable for {project}.', 'capability-invalid'), status: 503 };
+    }
+    if (!projects || typeof projects.readArtifact !== 'function') {
+      return { contract: projectHygieneUnavailable(selection, 'Project-qualified Jira Hygiene storage is unavailable for {project}.', 'project-storage-unavailable'), status: 503 };
+    }
+
+    let artifact;
+    let status;
+    try {
+      artifact = projects.readArtifact(selection.projectId, capability.artifactKey);
+      status = readProjectHygieneStatus(selection, capability.artifactKey);
+    } catch (error) {
+      return {
+        contract: projectHygieneUnavailable(selection, 'Published Jira Hygiene data is invalid or temporarily unavailable for {project}.', 'publication-unavailable', { error: error.message }),
+        status: 503
+      };
+    }
+    const statusMatches = status && status.projectId === selection.projectId
+      && status.profileRevision === profile.profileRevision
+      && status.artifactKey === capability.artifactKey
+      && status.state === 'error';
+
+    if (!artifact || artifact.value === null || artifact.value === undefined) {
+      try {
+        const legacy = readLegacyOsacHygiene(selection, capability, statusMatches ? status : null);
+        if (legacy) return { contract: legacy };
+      } catch (error) {
+        return { contract: projectHygieneUnavailable(selection, 'Legacy OSAC Jira Hygiene data is invalid for {project}.', 'invalid-legacy-publication', { error: error.message }), status: 503 };
+      }
+      if (statusMatches) {
+        return {
+          contract: projectHygieneUnavailable(selection, 'The latest Jira Hygiene collection failed for {project}; no result snapshot for the current profile is available.', 'collection-failed', {
+          collectionFailure: status.error || null,
+          attemptedAt: status.generatedAt || status.attemptedAt || null,
+          error: status.error && status.error.message,
+          lastKnownGood: status.lastKnownGood || null
+          }),
+          status: 503
+        };
+      }
+      return { contract: projectHygieneUnavailable(selection, 'Jira Hygiene results have not been collected for {project}.', 'not-collected') };
+    }
+
+    let data;
+    try {
+      data = validateProjectHygieneEnvelope(selection, capability, artifact.value);
+    } catch (error) {
+      return { contract: projectHygieneUnavailable(selection, 'Published Jira Hygiene data is invalid for {project}.', 'invalid-publication', { error: error.message }), status: 503 };
+    }
+    const collectionFailure = statusMatches ? status.error || null : null;
+    const result = {
+      ...data,
+      partial: data.partial || Boolean(collectionFailure),
+      collectionFailure
+    };
+    return {
+      contract: {
+        schemaVersion: artifact.value.schemaVersion,
+        projectId: selection.projectId,
+        profileRevision: artifact.value.profileRevision,
+        artifactKey: capability.artifactKey,
+        generatedAt: artifact.value.generatedAt,
+        fetchedAt: artifact.value.fetchedAt || null,
+        observedAt: artifact.value.observedAt || null,
+        attemptedAt: statusMatches ? status.generatedAt || status.attemptedAt || null : artifact.value.attemptedAt || null,
+        source: artifact.value.source,
+        freshness: collectionFailure ? 'stale' : artifact.value.freshness,
+        state: artifact.value.state,
+        partial: result.partial,
+        collectionFailure,
+        results: { [result.projectKey]: result },
+        configuration: result.configuration
+      }
+    };
   }
 
   async function runHygieneRefreshAll(options) {
@@ -680,42 +979,25 @@ module.exports = function registerHygieneRoutes(router, context) {
     });
   });
 
-  // GET /project-hygiene — OSAC-style project-wide Jira hygiene results (read-only, data-side owned)
+  // GET /project-hygiene — selected-project Jira hygiene results (read-only, data-side owned)
   router.get('/project-hygiene', requireAuth, requireScope('releases:read'), function(req, res) {
-    const selection = selectedProject(req, res);
+    const selection = selectedHygieneProject(req, res);
     if (!selection) return;
-    if (selection.projectId !== 'osac') {
-      return sendUnavailable(
-        res,
-        selection,
-        'Jira Hygiene results have not been collected for {project}.',
-        404
-      );
-    }
-    readHygieneContract(
-      res,
-      DATA_PREFIX + '/project-hygiene-results.json',
-      'Project hygiene results have not been published yet'
-    );
+    const selected = readSelectedProjectHygiene(selection);
+    return res.status(selected.status || 200).json(selected.contract);
   });
 
-  // GET /project-hygiene/config — OSAC-style project-wide Jira hygiene rule config (read-only, data-side owned)
+  // GET /project-hygiene/config — selected-project Jira hygiene rules (read-only, data-side owned)
   router.get('/project-hygiene/config', requireAuth, requireScope('releases:read'), function(req, res) {
-    const selection = selectedProject(req, res);
+    const selection = selectedHygieneProject(req, res);
     if (!selection) return;
-    if (selection.projectId !== 'osac') {
-      return sendUnavailable(
-        res,
-        selection,
-        'Jira Hygiene rules have not been published for {project}.',
-        404
-      );
-    }
-    readHygieneContract(
-      res,
-      DATA_PREFIX + '/project-hygiene-config.json',
-      'Project hygiene configuration has not been published yet'
-    );
+    const selected = readSelectedProjectHygiene(selection);
+    const contract = selected.contract;
+    const configuration = contract && contract.configuration;
+    const projectsByKey = configuration && configuration.projectKey
+      ? { [configuration.projectKey]: configuration }
+      : {};
+    return res.status(selected.status || 200).json({ ...contract, projects: projectsByKey });
   });
 
   // Diagnostics

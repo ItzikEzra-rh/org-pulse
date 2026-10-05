@@ -12,7 +12,7 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function readProjectRoster(projects, projectId) {
+function readProjectRoster(projects, projectId, { readLegacyOsacRoster } = {}) {
   if (!projects || typeof projects.get !== 'function' || typeof projects.readArtifact !== 'function') {
     return { status: 503, error: 'Project publication reader is unavailable' };
   }
@@ -32,6 +32,15 @@ function readProjectRoster(projects, projectId) {
     return { status: 502, error: error.message };
   }
   if (!artifact || !isRecord(artifact.value)) {
+    // OSAC's roster still lives in the legacy root publication during migration.
+    // The caller supplies this reader only after project selection resolved to
+    // a registered OSAC profile; never use it for another or unknown project.
+    if (projectId === 'osac' && typeof readLegacyOsacRoster === 'function') {
+      const roster = readLegacyOsacRoster();
+      if (isRecord(roster)) {
+        return { status: 200, roster: { ...roster, projectId: 'osac' } };
+      }
+    }
     return { status: 404, error: 'Project roster publication is unavailable' };
   }
 

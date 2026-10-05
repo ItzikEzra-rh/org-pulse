@@ -26,68 +26,135 @@ function makeIssue(overrides = {}) {
 }
 
 function sampleResults(projectOverrides = {}) {
+  const rules = [
+    {
+      id: 'no-team',
+      name: 'Open issue without Team',
+      description: 'All issues that are not Done should have a Team assigned.',
+      category: 'ownership',
+      count: 2,
+      issues: [
+        makeIssue({ key: 'OSAC-1', team: null, components: ['Core'], jiraUrl: 'https://redhat.atlassian.net/browse/OSAC-1' }),
+        makeIssue({ key: 'OSAC-2', team: 'Platform', components: ['Core', 'API'], jiraUrl: 'https://redhat.atlassian.net/browse/OSAC-2' })
+      ]
+    },
+    {
+      id: 'no-component',
+      name: 'Open issue without Component',
+      description: 'All issues that are not Done should have at least one Component.',
+      category: 'classification',
+      count: 2,
+      issues: [
+        makeIssue({ key: 'OSAC-2', team: 'Platform', components: ['Core', 'API'], jiraUrl: 'https://redhat.atlassian.net/browse/OSAC-2' }),
+        makeIssue({ key: 'OSAC-3', team: 'Data', issueType: 'Bug', components: [], jiraUrl: 'https://redhat.atlassian.net/browse/OSAC-3' })
+      ]
+    },
+    { id: 'zero-rule', name: 'Zero Match Rule', description: 'Never matches in this fixture.', category: 'lifecycle', count: 0, issues: [] },
+    { id: 'failed-rule', name: 'Failed Rule', description: 'Query failed during collection.', category: 'lifecycle', count: -1, issues: [] }
+  ]
+  const project = {
+    projectKey: 'OSAC',
+    displayName: 'OSAC',
+    jiraBaseUrl: 'https://redhat.atlassian.net',
+    partial: true,
+    errors: [{ ruleId: 'failed-rule', message: 'Jira query timed out' }],
+    summary: {
+      uniqueIssueCount: 3,
+      totalRuleMatches: 4,
+      affectedRuleCount: 2,
+      failedRuleCount: 1,
+      generatedAt: '2026-08-09T00:00:00Z'
+    },
+    rules
+  }
+  const selectedProject = { ...project, ...projectOverrides }
+  const selectedRules = selectedProject.rules || []
+  const configRules = selectedRules.map(rule => ({ ...rule, enabled: true, disabledReason: null, jql: `project = OSAC AND ${rule.id}` }))
   return {
     schemaVersion: 1,
+    projectId: 'osac',
+    profileRevision: 'profile-osac-test',
+    artifactKey: 'sources/jira-hygiene/registry.json',
     generatedAt: '2026-08-09T00:00:00Z',
-    source: 'jira-dashboard-26582',
-    configVersion: 'abc123',
-    results: {
-      OSAC: {
-        projectKey: 'OSAC',
-        displayName: 'OSAC',
-        jiraBaseUrl: 'https://redhat.atlassian.net',
-        partial: true,
-        errors: [{ ruleId: 'failed-rule', message: 'Jira query timed out' }],
-        summary: {
-          uniqueIssueCount: 3,
-          totalRuleMatches: 4,
-          affectedRuleCount: 2,
-          failedRuleCount: 1,
-          generatedAt: '2026-08-09T00:00:00Z'
-        },
-        rules: [
-          {
-            id: 'no-team',
-            name: 'Open issue without Team',
-            description: 'All issues that are not Done should have a Team assigned.',
-            category: 'ownership',
-            count: 2,
-            issues: [
-              makeIssue({ key: 'OSAC-1', team: null, components: ['Core'], jiraUrl: 'https://redhat.atlassian.net/browse/OSAC-1' }),
-              makeIssue({ key: 'OSAC-2', team: 'Platform', components: ['Core', 'API'], jiraUrl: 'https://redhat.atlassian.net/browse/OSAC-2' })
-            ]
-          },
-          {
-            id: 'no-component',
-            name: 'Open issue without Component',
-            description: 'All issues that are not Done should have at least one Component.',
-            category: 'classification',
-            count: 2,
-            issues: [
-              makeIssue({ key: 'OSAC-2', team: 'Platform', components: ['Core', 'API'], jiraUrl: 'https://redhat.atlassian.net/browse/OSAC-2' }),
-              makeIssue({ key: 'OSAC-3', team: 'Data', issueType: 'Bug', components: [], jiraUrl: 'https://redhat.atlassian.net/browse/OSAC-3' })
-            ]
-          },
-          {
-            id: 'zero-rule',
-            name: 'Zero Match Rule',
-            description: 'Never matches in this fixture.',
-            category: 'lifecycle',
-            count: 0,
-            issues: []
-          },
-          {
-            id: 'failed-rule',
-            name: 'Failed Rule',
-            description: 'Query failed during collection.',
-            category: 'lifecycle',
-            count: -1,
-            issues: []
-          }
-        ],
-        ...projectOverrides
-      }
-    }
+    fetchedAt: '2026-08-09T00:00:00Z',
+    source: { id: 'jira-hygiene', kind: 'jira', revision: 'abc123' },
+    freshness: 'fresh',
+    state: 'supported',
+    partial: selectedProject.partial,
+    configuredRuleIds: selectedRules.map(rule => rule.id),
+    evaluatedRuleIds: selectedRules.map(rule => rule.id),
+    collectionFailure: null,
+    configuration: {
+      projectId: 'osac',
+      profileRevision: 'profile-osac-test',
+      projectKey: 'OSAC',
+      displayName: 'OSAC',
+      jiraBaseUrl: 'https://redhat.atlassian.net',
+      configRevision: 'abc123',
+      enabledRuleIds: selectedRules.map(rule => rule.id),
+      fieldMappings: { team: 'customfield_10001' },
+      rules: configRules
+    },
+    results: { OSAC: selectedProject }
+  }
+}
+
+function sampleEdmResults(overrides = {}) {
+  const disabledRules = [
+    ['in-progress-no-fix-version', 'In Progress Feature/Epic without Fix Version', 'Pending Flight Control owner confirmation that active Features and Epics require a release assignment.'],
+    ['epic-no-parent-feature', 'Open Epic without parent Feature', 'Pending Flight Control hierarchy policy confirmation for Epic parent requirements.'],
+    ['no-component', 'Open issue without Component', 'Pending Flight Control classification policy confirmation for Jira Components.'],
+    ['no-team', 'Open issue without Team', 'Pending Flight Control Team-field mapping and ownership policy confirmation; the collector does not request a Team field.']
+  ].map(([id, name, disabledReason]) => ({ id, name, description: name, category: 'policy', enabled: false, disabledReason, jql: null, fields: null }))
+  const enabledRule = {
+    id: 'in-progress-no-assignee',
+    name: 'In Progress issue without Assignee',
+    description: 'All In Progress issues must have an assignee.',
+    category: 'ownership',
+    enabled: true,
+    disabledReason: null,
+    jql: 'project = EDM AND statusCategory = "In Progress" AND assignee is EMPTY'
+  }
+  const data = {
+    projectKey: 'EDM',
+    displayName: 'Flight Control',
+    jiraBaseUrl: 'https://redhat.atlassian.net',
+    partial: false,
+    errors: [],
+    summary: { uniqueIssueCount: 1, totalRuleMatches: 1, affectedRuleCount: 1, failedRuleCount: 0, generatedAt: '2026-10-05T10:00:00Z' },
+    rules: [{
+      id: enabledRule.id,
+      name: enabledRule.name,
+      description: enabledRule.description,
+      category: enabledRule.category,
+      count: 1,
+      issues: [{ key: 'EDM-1', summary: 'Unassigned Flight Control issue', issueType: 'Feature', status: 'Active', assignee: null, components: [], jiraUrl: 'https://redhat.atlassian.net/browse/EDM-1' }]
+    }]
+  }
+  return {
+    schemaVersion: 1,
+    projectId: 'flightctl',
+    profileRevision: 'profile-flightctl-test',
+    artifactKey: 'sources/jira-hygiene/registry.json',
+    generatedAt: '2026-10-05T10:00:00Z',
+    fetchedAt: '2026-10-05T10:00:00Z',
+    source: { id: 'jira-hygiene', kind: 'jira', revision: 'edm-config-test' },
+    freshness: 'fresh',
+    state: 'supported',
+    partial: false,
+    collectionFailure: null,
+    configuration: {
+      projectId: 'flightctl',
+      profileRevision: 'profile-flightctl-test',
+      projectKey: 'EDM',
+      displayName: 'Flight Control',
+      jiraBaseUrl: 'https://redhat.atlassian.net',
+      configRevision: 'edm-config-test',
+      enabledRuleIds: [enabledRule.id],
+      fieldMappings: {},
+      rules: [enabledRule, ...disabledRules]
+    },
+    results: { EDM: { ...data, ...overrides } }
   }
 }
 
@@ -142,18 +209,20 @@ describe('ProgramHygieneReport (Jira Hygiene)', () => {
     expect(wrapper.find('button').exists()).toBe(true)
   })
 
-  it('requests the selected project and clears the report when switching away from OSAC', async () => {
+  it('switches the report between OSAC and EDM without retaining the previous project rows', async () => {
     setProjectId('flightctl')
     apiRequest.mockImplementation((url) => url.includes('projectId=flightctl')
-      ? Promise.reject(httpError(404, 'Jira Hygiene results have not been collected for Flight Control.'))
+      ? Promise.resolve(sampleEdmResults())
       : Promise.resolve(sampleResults()))
 
     const wrapper = mount(ProgramHygieneReport)
     await flushPromises()
 
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/project-hygiene?projectId=flightctl')
-    expect(wrapper.text()).toContain('Jira Hygiene results have not been collected for Flight Control.')
+    expect(wrapper.text()).toContain('Flight Control')
+    expect(wrapper.text()).toContain('EDM-1')
     expect(wrapper.text()).not.toContain('OSAC-1')
+    expect(wrapper.text()).toContain('Rules disabled pending policy confirmation')
 
     setProjectId('osac')
     await flushPromises()
@@ -162,11 +231,59 @@ describe('ProgramHygieneReport (Jira Hygiene)', () => {
     expect(wrapper.text()).toContain('OSAC-1')
   })
 
-  it('shows an empty state when no project results are published', async () => {
-    apiRequest.mockResolvedValue({ schemaVersion: 1, generatedAt: '2026-08-09T00:00:00Z', source: 'x', results: {} })
+  it('ignores a slow OSAC response after switching to Flight Control', async () => {
+    let resolveOsac
+    apiRequest.mockImplementation(url => url.includes('projectId=osac')
+      ? new Promise(resolve => { resolveOsac = resolve })
+      : Promise.resolve(sampleEdmResults()))
+    const wrapper = mount(ProgramHygieneReport)
+    setProjectId('flightctl')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('EDM-1')
+    resolveOsac(sampleResults())
+    await flushPromises()
+    expect(wrapper.text()).toContain('EDM-1')
+    expect(wrapper.text()).not.toContain('OSAC-1')
+  })
+
+  it('does not show Team controls or fabricate an Unassigned team for EDM', async () => {
+    apiRequest.mockResolvedValue(sampleEdmResults())
+    setProjectId('flightctl')
     const wrapper = mount(ProgramHygieneReport)
     await flushPromises()
-    expect(wrapper.text()).toContain('No hygiene results are available yet.')
+
+    expect(wrapper.text()).toContain('EDM-1')
+    expect(wrapper.text()).not.toContain('Team Accountability')
+    expect(wrapper.text()).not.toContain('Violations by Team')
+    expect(wrapper.findAllComponents(HygieneSelect).some(select => select.props('placeholder') === 'Team')).toBe(false)
+    expect(wrapper.findAll('th').map(th => th.text())).not.toContain('Team')
+    expect(sampleEdmResults().results.EDM.rules[0].issues[0]).not.toHaveProperty('team')
+    expect(wrapper.text()).toContain('Pending Flight Control Team-field mapping and ownership policy confirmation')
+  })
+
+  it('shows the source freshness state supplied by the publication envelope', async () => {
+    const contract = sampleEdmResults()
+    contract.freshness = 'stale'
+    apiRequest.mockResolvedValue(contract)
+    setProjectId('flightctl')
+    const wrapper = mount(ProgramHygieneReport)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Stale')
+  })
+
+  it('distinguishes successful empty results from unavailable collection', async () => {
+    const empty = sampleEdmResults()
+    empty.state = 'empty'
+    empty.results.EDM.rules[0].count = 0
+    empty.results.EDM.rules[0].issues = []
+    empty.results.EDM.summary = { uniqueIssueCount: 0, totalRuleMatches: 0, affectedRuleCount: 0, failedRuleCount: 0, generatedAt: empty.generatedAt }
+    apiRequest.mockResolvedValue(empty)
+    setProjectId('flightctl')
+    const wrapper = mount(ProgramHygieneReport)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="hygiene-empty-results"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('No issues matched the enabled rules.')
   })
 
   it('shows an empty-rules state when the project has no rules configured', async () => {
@@ -421,6 +538,7 @@ describe('ProgramHygieneReport (Jira Hygiene)', () => {
   it('does not silently render the first project when multiple projects are present', async () => {
     apiRequest.mockResolvedValue({
       schemaVersion: 1,
+      projectId: 'osac',
       generatedAt: '2026-08-09T00:00:00Z',
       source: 'jira-dashboard-26582',
       configVersion: 'abc123',
@@ -439,6 +557,7 @@ describe('ProgramHygieneReport (Jira Hygiene)', () => {
   it('renders arbitrary project/rule data generically, with no hardcoded OSAC or rule IDs', async () => {
     apiRequest.mockResolvedValue({
       schemaVersion: 1,
+      projectId: 'rhoai-eng',
       generatedAt: '2026-08-09T00:00:00Z',
       source: 'jira-dashboard-99999',
       configVersion: 'xyz',
@@ -461,6 +580,7 @@ describe('ProgramHygieneReport (Jira Hygiene)', () => {
         }
       }
     })
+    setProjectId('rhoai-eng')
     const wrapper = mount(ProgramHygieneReport)
     await flushPromises()
     expect(wrapper.text()).toContain('RHOAI Engineering')

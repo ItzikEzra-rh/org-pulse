@@ -31,7 +31,7 @@ async function fetchReport() {
   try {
     const data = await apiRequest(`/modules/releases/hygiene/project-hygiene${projectQuery(requestedProjectId)}`)
     if (requestId !== latestRequestId || projectId.value !== requestedProjectId) return
-    if (data?.projectId && requestedProjectId && data.projectId !== requestedProjectId) {
+    if (!requestedProjectId || data?.projectId !== requestedProjectId) {
       throw new Error('Jira Hygiene response project identity mismatch')
     }
     if (data?.state === 'unavailable') {
@@ -77,12 +77,21 @@ const hasMultipleProjects = computed(() => projectEntries.value.length > 1)
 const project = computed(() => (projectEntries.value.length === 1 ? projectEntries.value[0][1] : null))
 const rules = computed(() => (project.value && project.value.rules) || [])
 const summary = computed(() => (project.value && project.value.summary) || null)
+const configuration = computed(() => (contract.value && contract.value.configuration) || null)
+const disabledRules = computed(() => (configuration.value?.rules || []).filter(rule => rule.enabled === false))
+const configuredRuleCount = computed(() => (configuration.value?.rules || []).length)
+const evaluatedRuleCount = computed(() => (configuration.value?.enabledRuleIds || contract.value?.evaluatedRuleIds || []).length)
+const hasTeamField = computed(() => Boolean(configuration.value?.fieldMappings?.team))
+const latestCollectionFailure = computed(() => contract.value?.collectionFailure || null)
 
 // ── Header / freshness ──
 
 const generatedAt = computed(() => (summary.value && summary.value.generatedAt) || (contract.value && contract.value.generatedAt) || null)
 
+const freshness = computed(() => contract.value?.freshness || 'unknown')
+
 const isStale = computed(() => {
+  if (freshness.value === 'stale') return true
   if (!generatedAt.value) return false
   const then = new Date(generatedAt.value).getTime()
   if (Number.isNaN(then)) return false
@@ -142,7 +151,9 @@ function uniqueSorted(values) {
   return [...new Set(values.filter(Boolean))].sort()
 }
 
-const teamOptions = computed(() => uniqueSorted(dedupedIssues.value.map(i => i.team || 'Unassigned')))
+const teamOptions = computed(() => hasTeamField.value
+  ? uniqueSorted(dedupedIssues.value.map(i => i.team || 'Unassigned'))
+  : [])
 const componentOptions = computed(() => uniqueSorted(dedupedIssues.value.flatMap(i => i.components || [])))
 const issueTypeOptions = computed(() => uniqueSorted(dedupedIssues.value.map(i => i.issueType)))
 
@@ -198,6 +209,7 @@ const sortedRuleViolations = computed(() => rules.value
 const maxRuleCount = computed(() => sortedRuleViolations.value[0]?.count || 1)
 
 const sortedTeamViolations = computed(() => {
+  if (!hasTeamField.value) return []
   const byTeam = {}
   for (const issue of dedupedIssues.value) {
     const team = issue.team || 'Unassigned'
@@ -213,6 +225,7 @@ const maxTeamCount = computed(() => sortedTeamViolations.value[0]?.count || 1)
 // ── Team Accountability ──
 
 const teamAccountability = computed(() => {
+  if (!hasTeamField.value) return []
   const teamMap = {}
   for (const issue of dedupedIssues.value) {
     const team = issue.team || 'Unassigned'
@@ -239,6 +252,7 @@ const tabs = [
   { id: 'issues', label: 'Issues' },
   { id: 'teams', label: 'Team Accountability' }
 ]
+const visibleTabs = computed(() => tabs.filter(tab => tab.id !== 'teams' || hasTeamField.value))
 </script>
 
 <template>
@@ -262,6 +276,10 @@ const tabs = [
         class="px-3 py-1.5 text-xs font-medium rounded-md border border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/20"
         @click="fetchReport"
       >Retry</button>
+    </div>
+
+    <div v-else-if="contract?.state === 'inapplicable'" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-gray-700 dark:text-gray-300 text-sm">
+      {{ contract.message || 'Jira Hygiene is not applicable to this project.' }}
     </div>
 
     <!-- Multiple projects — not supported in this iteration, do not silently pick one -->
@@ -290,13 +308,22 @@ const tabs = [
             </span>
           </div>
           <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-            <span v-if="contract.source">Source: {{ contract.source }}</span>
+            <span v-if="contract.source">Source: {{ contract.source.id || contract.source }}</span>
             <span>Last updated {{ formatRelativeTime(generatedAt) }}</span>
             <span
-              v-if="isStale"
-              class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-            >Stale</span>
+              class="px-1.5 py-0.5 text-[10px] font-medium rounded"
+              :class="isStale
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                : freshness === 'fresh'
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'"
+            >{{ isStale ? 'Stale' : freshness === 'fresh' ? 'Fresh' : `Freshness ${freshness}` }}</span>
           </div>
+        </div>
+
+        <div class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Evaluated {{ evaluatedRuleCount }} of {{ configuredRuleCount }} configured rules
+          <span v-if="disabledRules.length"> · {{ disabledRules.length }} disabled by project policy</span>
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -321,14 +348,39 @@ const tabs = [
         </div>
       </div>
 
+      <div
+        v-if="disabledRules.length"
+        data-testid="hygiene-disabled-rule-scope"
+        class="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-lg p-4 mb-6 text-blue-800 dark:text-blue-300 text-sm"
+      >
+        <div class="font-medium mb-2">Rules disabled pending policy confirmation</div>
+        <ul class="list-disc list-inside space-y-1">
+          <li v-for="rule in disabledRules" :key="rule.id">
+            <span class="font-medium">{{ rule.name }}</span>: {{ rule.disabledReason }}
+          </li>
+        </ul>
+      </div>
+
+      <div
+        v-if="contract.state === 'empty'"
+        data-testid="hygiene-empty-results"
+        class="bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-lg p-4 mb-6 text-green-800 dark:text-green-300 text-sm"
+      >
+        Collection succeeded at {{ formatRelativeTime(generatedAt) }}. No issues matched the enabled rules.
+      </div>
+
       <!-- Partial-failure banner -->
       <div
-        v-if="project.partial"
+        v-if="project.partial || latestCollectionFailure"
         class="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg p-4 mb-6 text-amber-800 dark:text-amber-300 text-sm"
       >
         <div class="font-medium mb-1">Some hygiene rules could not be collected</div>
-        <ul class="list-disc list-inside space-y-0.5">
-          <li v-for="err in project.errors" :key="err.ruleId">
+        <div v-if="latestCollectionFailure" class="mb-1">
+          Latest collection failed: {{ latestCollectionFailure.message || latestCollectionFailure }}
+          <span v-if="contract.attemptedAt"> ({{ formatRelativeTime(contract.attemptedAt) }})</span>
+        </div>
+        <ul v-if="(project.errors || []).length" class="list-disc list-inside space-y-0.5">
+          <li v-for="err in project.errors || []" :key="err.ruleId">
             <span class="font-medium">{{ ruleNameById(err.ruleId) }}</span>: {{ err.message }}
           </li>
         </ul>
@@ -377,7 +429,7 @@ const tabs = [
         </div>
 
         <!-- Two-column layout: by rule + by team bar charts -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="grid grid-cols-1 gap-6 mb-8" :class="hasTeamField ? 'lg:grid-cols-2' : 'lg:grid-cols-1'">
           <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">Violations by Rule</h3>
             <div v-if="sortedRuleViolations.length === 0" class="text-sm text-gray-400">No violations found.</div>
@@ -397,7 +449,7 @@ const tabs = [
             </div>
           </div>
 
-          <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+          <div v-if="hasTeamField" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">Violations by Team</h3>
             <div v-if="sortedTeamViolations.length === 0" class="text-sm text-gray-400">No violations found.</div>
             <div v-else class="space-y-2.5">
@@ -422,7 +474,7 @@ const tabs = [
           <div class="border-b border-gray-200 dark:border-gray-700 px-4">
             <div class="flex gap-4">
               <button
-                v-for="tab in tabs"
+                v-for="tab in visibleTabs"
                 :key="tab.id"
                 @click="activeTab = tab.id"
                 class="py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
@@ -436,7 +488,7 @@ const tabs = [
           <!-- Tab: Issues -->
           <div v-if="activeTab === 'issues'">
             <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-              <HygieneSelect v-model="teamFilter" :options="teamOptions" placeholder="Team" mode="multi" />
+              <HygieneSelect v-if="hasTeamField" v-model="teamFilter" :options="teamOptions" placeholder="Team" mode="multi" />
               <HygieneSelect v-model="componentFilter" :options="componentOptions" placeholder="Component" mode="multi" />
               <HygieneSelect v-model="issueTypeFilter" :options="issueTypeOptions" placeholder="Issue Type" mode="multi" />
               <button
@@ -460,7 +512,7 @@ const tabs = [
                     <th class="px-4 py-2 font-medium">Issue Type</th>
                     <th class="px-4 py-2 font-medium">Status</th>
                     <th class="px-4 py-2 font-medium">Assignee</th>
-                    <th class="px-4 py-2 font-medium">Team</th>
+                    <th v-if="hasTeamField" class="px-4 py-2 font-medium">Team</th>
                     <th class="px-4 py-2 font-medium">Components</th>
                     <th class="px-4 py-2 font-medium">Matched Rules</th>
                   </tr>
@@ -479,7 +531,7 @@ const tabs = [
                     <td class="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ issue.issueType || '—' }}</td>
                     <td class="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ issue.status || '—' }}</td>
                     <td class="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ issue.assignee || 'Unassigned' }}</td>
-                    <td class="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ issue.team || 'Unassigned' }}</td>
+                    <td v-if="hasTeamField" class="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ issue.team || 'Unassigned' }}</td>
                     <td class="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ (issue.components || []).join(', ') || '—' }}</td>
                     <td class="px-4 py-2">
                       <div class="flex flex-wrap gap-1">
