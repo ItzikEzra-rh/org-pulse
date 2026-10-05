@@ -872,7 +872,7 @@ export default {
         // Preserve the project context across module navigation: dropping it
         // would make hash-query listeners (useProjectId) read a stale or
         // empty projectId and refetch screens for the wrong project.
-        const preservedProjectId = this.routeParams?.projectId
+        const preservedProjectId = useProjectId().value
         this.routeParams = preservedProjectId ? { projectId: preservedProjectId } : {}
         window.location.hash = `#/${manifest.slug}/${resolvedViewId}${preservedProjectId ? `?projectId=${encodeURIComponent(preservedProjectId)}` : ''}`
         return
@@ -881,7 +881,7 @@ export default {
       // Fallback: treat as a view within the active module
       if (this.activeModule && this.builtInManifests.find(m => m.slug === this.activeModule)) {
         this.activeViewId = target
-        const preservedProjectId = this.routeParams?.projectId
+        const preservedProjectId = useProjectId().value
         this.routeParams = preservedProjectId ? { projectId: preservedProjectId } : {}
         window.location.hash = `#/${this.activeModule}/${target}${preservedProjectId ? `?projectId=${encodeURIComponent(preservedProjectId)}` : ''}`
       }

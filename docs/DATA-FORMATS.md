@@ -2175,3 +2175,38 @@ The `fixtures/` directory provides read-only demo data used when `DEMO_MODE=true
 3. **Verify against real data.** If you're unsure of a data file's format, check the actual files in `data/` (symlinked from the main worktree) rather than trusting fixtures alone.
 4. **Generate pipeline-derived fields from the producer, not by hand.** The `executionIssueCount`/`doneExecutionIssueCount`/`executionState`/`executionCoverage`/`executionCoverageReason`/`preparationReadiness` values on a representative subset of `fixtures/releases/execution/` features (e.g. `TEST1-1131`, `TEST1-1045`, `TEST1-284`, `TEST1-15`, `TEST1-157`, `TEST1-576`) were produced by calling org-pulse-data's `compute_metrics`/`compute_preparation_readiness` with controlled epic/issue inputs, one per execution/coverage/readiness state. The same six fixtures' `epics[].issues[].isPreparation` and per-epic `executionIssueCount`/`doneExecutionIssueCount` were produced by calling `is_preparation_issue()` against each fixture's own issue titles. The remaining fixtures intentionally omit these fields to keep covering the pre-contract/missing-metrics case.
 5. **Epic status-completion override fixtures.** `TEST1-9101`–`TEST1-9104` (OSAC-5234) were produced by calling org-pulse-data's `enrich_epics_with_provenance`/`compute_metrics`/`build_index_entry`/`build_detail_json` against hand-built Epic/issue inputs, one per scenario: `TEST1-9101` (zero-child completed-via-status Epic: raw `insufficient-data`, effective `complete`/0/0), `TEST1-9102` (completed-via-status Epic with open children, mixed with a normal Epic — weighted effective total across differently-sized Epics), `TEST1-9103` (a Won't Do-closed Epic with real open work credited complete alongside an already fully-done Epic), and `TEST1-9104` (a Duplicate-closed Epic with zero real progress credited fully complete). Trimmed to the same minimal field set as the other representative fixtures (no `aiReview`, no epic `fixVersionSource`/`componentSource`/`pct`/`progress` — unused by any consuming view).
+
+
+## Releases — Project execution evidence
+
+`GET /api/modules/releases/execution/evidence?projectId=<id>` reads
+`projects/<id>/sources/release-execution/registry.json` through the shared
+project publication reader. The response preserves the source envelope
+(`projectId`, `state`, `freshness`, `partial`, timestamps and `data`) and adds
+`projectDisplayName` from the selected profile. Unknown projects return 404;
+missing evidence returns a project-qualified unavailable response. Envelope
+and nested data identities must match the selected project.
+
+`data.releases` contains `releaseId`, `version`, tags, GitHub releases, explicit
+`execution.workflowRunIds`, `jobIds`, `artifactIds`, and unmatched diagnostics.
+`data.workflowRuns`, `jobs`, and `artifacts` retain source IDs, repositories and
+source URLs. Execute filters by these published IDs rather than inferring joins
+from names or timestamps. Workflow conclusions take precedence over lifecycle
+status (`completed` does not imply success). Partial coverage and freshness are
+shown explicitly. A release with no linked evidence has unknown execution;
+feature completion and product readiness remain unknown.
+
+`GET /api/modules/releases/execution/presentation?projectId=<id>` returns the
+selected profile's `capabilities.releaseExecution` presentation. The capability
+uses `state`, `view` (`feature-execution` or `release-evidence`), an `artifactKey`
+for evidence, and an optional `reason`. Existing evidence capabilities with an
+artifact key default to `release-evidence`. Profiles without a supported
+presentation show an explicit unavailable state, never a legacy fallback.
+Only installations without published profiles retain the legacy presentation.
+The configured `artifactKey` is read through the project-scoped storage reader.
+
+OSAC explicitly selects its existing `feature-execution` presentation in its
+profile. Flight Control selects `release-evidence`. Other projects using the
+standard release-evidence collector configure the same capability and source;
+no new project-name condition, route or screen is needed. Example: `fixtures/releases/project-execution-evidence.json`
+contains a deliberately small subset of collected Flight Control evidence.

@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "projectId": "flightctl",
+  "profileRevision": "9e7d48c94586ac48",
+  "artifactKey": "sources/release-execution/registry.json",
+  "source": {
+    "id": "flightctl-release-execution",
+    "kind": "github",
+    "revision": "f1a779b26c8bbcb2bb6b19c775a5de37b82c27794e728a911c76e0cf0be85c4f",
+    "runId": "18191341"
+  },
+  "generatedAt": "2026-10-05T07:37:05Z",
+  "fetchedAt": "2026-10-05T07:37:05Z",
+  "attemptedAt": "2026-10-05T07:37:05Z",
+  "publishedAt": "2026-10-05T07:37:05Z",
+  "state": "supported",
+  "freshness": "fresh",
+  "partial": true,
+  "error": null,
+  "lastKnownGood": null,
+  "data": {
+    "projectId": "flightctl",
+    "releases": [
+      {
+        "releaseId": "flightctl-0.10.0",
+        "version": "0.10.0",
+        "jira": {
+          "released": true,
+          "releaseDate": "2025-10-31",
+          "startDate": null,
+          "archived": false
+        },
+        "tags": [
+          {
+            "repository": "flightctl/flightctl",
+            "name": "v0.10.0",
+            "sha": "f147e4121aecc7729d86de8ee1056faa19abab36",
+            "match": "exact",
+            "sourceUrl": "https://github.com/flightctl/flightctl/tree/v0.10.0"
+          },
+          {
+            "repository": "flightctl/flightctl",
+            "name": "v0.10.0-rc7",
+            "sha": "f147e4121aecc7729d86de8ee1056faa19abab36",
+            "match": "version-prefix",
+            "sourceUrl": "https://github.com/flightctl/flightctl/tree/v0.10.0-rc7"
+          }
+        ],
+        "githubReleases": [
+          {
+            "repository": "flightctl/flightctl",
+            "tagName": "v0.10.0",
+            "prerelease": false,
+            "draft": false,
+            "publishedAt": "2025-10-31T12:19:12Z",
+            "match": "exact",
+            "sourceUrl": "https://github.com/flightctl/flightctl/releases/tag/v0.10.0"
+          },
+          {
+            "repository": "flightctl/flightctl",
+            "tagName": "v0.10.0-rc7",
+            "prerelease": true,
+            "draft": false,
+            "publishedAt": "2025-10-24T15:24:39Z",
+            "match": "version-prefix",
+            "sourceUrl": "https://github.com/flightctl/flightctl/releases/tag/v0.10.0-rc7"
+          }
+        ],
+        "execution": {
+          "workflowRunIds": [],
+          "jobIds": [],
+          "artifactIds": []
+        },
+        "confidence": "high",
+        "unmatched": []
+      }
+    ],
+    "repositories": [
+      {
+        "repository": "flightctl/flightctl",
+        "role": "delivery",
+        "tagCount": 100,
+        "githubReleaseCount": 90,
+        "workflowRunCount": 100,
+        "jobCount": 39,
+        "artifactCount": 21,
+        "totalWorkflowRuns": 2500,
+        "totalArtifacts": null
+      },
+      {
+        "repository": "flightctl/flightctl-ui",
+        "role": "delivery",
+        "tagCount": 97,
+        "githubReleaseCount": 96,
+        "workflowRunCount": 100,
+        "jobCount": 200,
+        "artifactCount": 0,
+        "totalWorkflowRuns": 160,
+        "totalArtifacts": 0
+      },
+      {
+        "repository": "flightctl/flightctl-ui-tests",
+        "role": "capability",
+        "tagCount": 0,
+        "githubReleaseCount": 0,
+        "workflowRunCount": 0,
+        "jobCount": 0,
+        "artifactCount": 0,
+        "totalWorkflowRuns": 0,
+        "totalArtifacts": 0
+      }
+    ],
+    "tags": [],
+    "githubReleases": [],
+    "workflowRuns": [
+      {
+        "repository": "flightctl/flightctl",
+        "repositoryRole": "delivery",
+        "id": 37121210626,
+        "name": "PR release labels",
+        "workflowId": 279360196,
+        "runNumber": 7422,
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "branch": "t3code/fix-helm-delta-e2e",
+        "headSha": "517f4c2c9ffd770a8ed44ebd741027267fe2c5bb",
+        "createdAt": "2026-10-03T11:55:43Z",
+        "startedAt": "2026-10-03T11:55:43Z",
+        "updatedAt": "2026-10-03T11:55:49Z",
+        "attempt": 1,
+        "sourceUrl": "https://github.com/flightctl/flightctl/actions/runs/37121210626"
+      },
+      {
+        "repository": "flightctl/flightctl",
+        "repositoryRole": "delivery",
+        "id": 37121210573,
+        "name": "Helm Chart Quality",
+        "workflowId": 208524476,
+        "runNumber": 11046,
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "branch": "t3code/fix-helm-delta-e2e",
+        "headSha": "517f4c2c9ffd770a8ed44ebd741027267fe2c5bb",
+        "createdAt": "2026-10-03T11:55:42Z",
+        "startedAt": "2026-10-03T11:55:42Z",
+        "updatedAt": "2026-10-03T11:55:51Z",
+        "attempt": 1,
+        "sourceUrl": "https://github.com/flightctl/flightctl/actions/runs/37121210573"
+      }
+    ],
+    "jobs": [
+      {
+        "repository": "flightctl/flightctl",
+        "repositoryRole": "delivery",
+        "workflowRunId": 37121210626,
+        "id": 111197524161,
+        "name": "Release labels",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-10-03T11:55:45Z",
+        "completedAt": "2026-10-03T11:55:47Z",
+        "sourceUrl": "https://github.com/flightctl/flightctl/actions/runs/37121210626/job/111197524161"
+      },
+      {
+        "repository": "flightctl/flightctl",
+        "repositoryRole": "delivery",
+        "workflowRunId": 37121210573,
+        "id": 111197524482,
+        "name": "lint-helm",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-10-03T11:55:44Z",
+        "completedAt": "2026-10-03T11:55:50Z",
+        "sourceUrl": "https://github.com/flightctl/flightctl/actions/runs/37121210573/job/111197524482"
+      }
+    ],
+    "artifacts": [
+      {
+        "repository": "flightctl/flightctl",
+        "repositoryRole": "delivery",
+        "id": 11270060749,
+        "name": "flightctl-darwin-amd64-sha256.txt",
+        "sizeBytes": 235,
+        "expired": false,
+        "createdAt": "2026-10-03T08:38:57Z",
+        "expiresAt": "2027-01-01T08:37:30Z",
+        "workflowRunId": 37110330616,
+        "sourceUrl": "https://api.github.com/repos/flightctl/flightctl/actions/artifacts/11270060749"
+      },
+      {
+        "repository": "flightctl/flightctl",
+        "repositoryRole": "delivery",
+        "id": 11270005905,
+        "name": "flightctl-darwin-amd64",
+        "sizeBytes": 10829497,
+        "expired": false,
+        "createdAt": "2026-10-03T08:38:57Z",
+        "expiresAt": "2027-01-01T08:37:30Z",
+        "workflowRunId": 37110330616,
+        "sourceUrl": "https://api.github.com/repos/flightctl/flightctl/actions/artifacts/11270005905"
+      }
+    ],
+    "reports": [],
+    "diagnostics": {
+      "fixture": true
+    }
+  }
+}

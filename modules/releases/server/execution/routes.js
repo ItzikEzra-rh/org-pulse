@@ -211,6 +211,7 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   const { storage, requireAuth, requireScope } = context;
   const projects = context.projects || null;
+  require('./evidence-routes')(router, context);
 
   function selectedProject(req, res) {
     const selection = resolveReleaseProject(projects, req.query);

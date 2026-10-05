@@ -1,5 +1,11 @@
 <template>
-  <div>
+  <p v-if="presentationLoading" class="p-6" role="status">Loading execution configuration…</p>
+  <div v-else-if="presentationError" class="p-6" role="alert">{{ presentationError }}</div>
+  <div v-else-if="!['supported', 'empty'].includes(presentation?.state) || !presentation?.view" class="p-6" role="status">
+    {{ presentation?.message || `Release execution is ${presentation?.state || 'unavailable'} for this project.` }}
+  </div>
+  <ProjectExecutionEvidenceView v-else-if="presentation.view === 'release-evidence'" />
+  <div v-else-if="presentation.view === 'feature-execution'">
     <div class="border-b border-gray-200 dark:border-gray-700">
       <nav class="flex -mb-px px-4" aria-label="Execute sub-tabs">
         <button
@@ -25,13 +31,40 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, inject } from 'vue'
+import { ref, watch, nextTick, inject, onMounted } from 'vue'
+import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
+import ProjectExecutionEvidenceView from '../execute/views/ProjectExecutionEvidenceView.vue'
 import OverviewView from '../execute/views/OverviewView.vue'
 import HygieneView from '../execute/views/HygieneView.vue'
 import FeatureTrackingView from '../execute/views/FeatureTrackingView.vue'
 import EpicsByReleaseView from '../execute/views/EpicsByReleaseView.vue'
 
 const nav = inject('moduleNav')
+const projectId = useProjectId()
+const presentation = ref(null)
+const presentationLoading = ref(true)
+const presentationError = ref(null)
+let presentationSequence = 0
+async function loadPresentation() {
+  const requestedProjectId = projectId.value
+  const sequence = ++presentationSequence
+  presentation.value = null
+  presentationError.value = null
+  presentationLoading.value = true
+  try {
+    const result = await apiRequest(`/modules/releases/execution/presentation${projectQuery(requestedProjectId)}`)
+    if (sequence !== presentationSequence || requestedProjectId !== projectId.value) return
+    if (requestedProjectId && result?.projectId !== requestedProjectId) throw new Error('Execution configuration project identity mismatch')
+    presentation.value = result
+  } catch (error) {
+    if (sequence === presentationSequence && requestedProjectId === projectId.value) presentationError.value = error.message || 'Execution configuration is unavailable'
+  } finally {
+    if (sequence === presentationSequence && requestedProjectId === projectId.value) presentationLoading.value = false
+  }
+}
+onMounted(loadPresentation)
+watch(projectId, loadPresentation, { flush: 'sync' })
 
 const ALL_TABS = [
   { id: 'feature-list', label: 'Feature List' },

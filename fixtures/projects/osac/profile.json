@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "profileRevision": "a385b84453828321",
+  "profileRevision": "888b545aa66f884a",
   "projectId": "osac",
   "displayName": "OSAC",
   "jiraProjectKey": "OSAC",
@@ -173,6 +173,10 @@
     "releaseRegistry": {
       "state": "supported",
       "artifactKey": "releases/registry.json"
+    },
+    "releaseExecution": {
+      "state": "supported",
+      "view": "feature-execution"
     }
   },
   "provenance": {
