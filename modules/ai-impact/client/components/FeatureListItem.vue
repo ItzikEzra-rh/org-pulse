@@ -24,7 +24,7 @@ const hasDesignArtifact = computed(() => designArtifactPresence.value === 'prese
 const designStatusLabel = computed(() => {
   if (designArtifactPresence.value === 'missing') return 'Missing Design'
   if (designArtifactPresence.value === 'unavailable') return 'Design unavailable'
-  if (props.feature.designArtifactPresence === 'present') {
+  if (designArtifactPresence.value === 'present') {
     if (props.feature.designPrStatus === 'No PR') return 'Design doc, no linked PR'
     if (props.feature.designPrStatus) return `Design ${props.feature.designPrStatus}`
     return 'Design available'
