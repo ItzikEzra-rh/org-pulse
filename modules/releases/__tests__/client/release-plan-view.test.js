@@ -147,6 +147,12 @@ describe('ReleasePlanView', () => {
     window.location.hash = '#/releases?projectId=flightctl'
     window.dispatchEvent(new Event('hashchange'))
     apiRequest.mockImplementation((path) => {
+      if (path === '/projects') {
+        return Promise.resolve({ projects: [
+          { projectId: 'flightctl', displayName: 'Flight Control' },
+          { projectId: 'osac', displayName: 'OSAC' }
+        ] })
+      }
       if (path === '/modules/releases/release-plans?projectId=flightctl'
           || path === '/modules/releases/release-plans?projectId=osac') {
         return Promise.resolve({ versions: [makeIndexEntry('0.3')] })
@@ -164,6 +170,7 @@ describe('ReleasePlanView', () => {
     await flushPromises()
     await flushPromises()
     expect(wrapper.text()).toContain('Flight Control plan.')
+    expect(wrapper.findAll('h2').map(heading => heading.text())).toContain('Flight Control 0.3')
 
     window.location.hash = '#/releases?projectId=osac'
     window.dispatchEvent(new Event('hashchange'))
@@ -174,6 +181,8 @@ describe('ReleasePlanView', () => {
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/release-plan?version=0.3&projectId=osac')
     expect(wrapper.text()).toContain('OSAC plan.')
     expect(wrapper.text()).not.toContain('Flight Control plan.')
+    expect(wrapper.findAll('h2').map(heading => heading.text())).toContain('OSAC 0.3')
+    expect(wrapper.findAll('h2').map(heading => heading.text())).not.toContain('Flight Control 0.3')
   })
 
   it('refetches the plan when the version picker changes', async () => {

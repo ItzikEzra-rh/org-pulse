@@ -8,6 +8,7 @@ const selectedVersion = ref('')
 const plan = ref(null)
 const loading = ref(true)
 const error = ref(null)
+const selectedProjectName = ref('')
 const projectId = useProjectId()
 
 function jiraLink(key) {
@@ -16,7 +17,28 @@ function jiraLink(key) {
 
 let bootstrapRequestId = 0
 let planRequestId = 0
+let projectNameRequestId = 0
 let settingVersionFromBootstrap = false
+
+async function loadProjectName(requestedProjectId) {
+  const requestId = ++projectNameRequestId
+  selectedProjectName.value = ''
+  try {
+    const data = await apiRequest('/projects')
+    if (requestId !== projectNameRequestId || projectId.value !== requestedProjectId) return
+    const projects = Array.isArray(data?.projects) ? data.projects : []
+    const selectedProject = requestedProjectId
+      ? projects.find(project => project?.projectId === requestedProjectId)
+      : projects.length === 1
+        ? projects[0]
+        : null
+    selectedProjectName.value = typeof selectedProject?.displayName === 'string'
+      ? selectedProject.displayName
+      : ''
+  } catch {
+    // Keep the heading generic when project discovery is unavailable.
+  }
+}
 
 async function loadPlan(version, requestedProjectId = projectId.value) {
   const requestId = ++planRequestId
@@ -51,6 +73,7 @@ async function bootstrap() {
   const requestedProjectId = projectId.value
   const requestId = ++bootstrapRequestId
   planRequestId += 1
+  void loadProjectName(requestedProjectId)
   versions.value = []
   plan.value = null
   error.value = null
@@ -155,7 +178,7 @@ function isUnfinishedPriorWork(item) {
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Release Plan</h1>
         <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Forward-looking view of what an OSAC version will deliver
+          Forward-looking view of what a version will deliver for the selected project
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -204,7 +227,7 @@ function isUnfinishedPriorWork(item) {
       <!-- Vision -->
       <section class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
         <div class="flex items-center gap-2 mb-2">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">OSAC {{ plan.metadata?.version }}</h2>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ selectedProjectName || 'Release' }} {{ plan.metadata?.version }}</h2>
           <span
             v-if="plan.metadata?.badge"
             class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300"
