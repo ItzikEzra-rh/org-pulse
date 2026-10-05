@@ -306,7 +306,8 @@ module.exports = function registerHygieneRoutes(router, context) {
         || data.summary.totalRuleMatches !== totalRuleMatches
         || JSON.stringify(data.successfulRuleIds) !== JSON.stringify(successfulRuleIds)
         || JSON.stringify(data.errors.map(error => error && error.ruleId)) !== JSON.stringify(failedRuleIds)
-        || (envelope.state === 'empty' && (envelope.partial || data.summary.totalRuleMatches !== 0))) {
+        || (envelope.state === 'empty'
+          && (envelope.partial || failedRuleIds.length > 0 || data.summary.totalRuleMatches !== 0))) {
       throw new Error('Published Jira Hygiene generation or summary metadata is inconsistent');
     }
     return data;
@@ -367,7 +368,8 @@ module.exports = function registerHygieneRoutes(router, context) {
       generatedAt: project.summary?.generatedAt || resultsContract.generatedAt || null
     };
     const collectionFailure = status && status.state === 'error' ? status.error || null : null;
-    const partial = Boolean(project.partial || collectionFailure);
+    const hasFailedRule = project.rules.some(rule => Number.isInteger(rule.count) && rule.count < 0);
+    const partial = Boolean(project.partial || collectionFailure || hasFailedRule);
     return {
       schemaVersion: resultsContract.schemaVersion || 1,
       projectId: 'osac',

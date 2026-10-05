@@ -153,6 +153,26 @@ describe('hygiene routes — GET /project-hygiene', () => {
     expect(res._json.results.EDM.summary.totalRuleMatches).toBe(0)
   })
 
+  it('rejects empty envelopes that contain failed rules', () => {
+    const envelope = structuredClone(FLIGHTCTL_ENVELOPE)
+    envelope.state = 'empty'
+    envelope.data.rules[0].count = -1
+    envelope.data.rules[0].issues = []
+    envelope.data.successfulRuleIds = []
+    envelope.data.errors = [{ ruleId: 'in-progress-no-assignee', message: 'EDM query failed' }]
+    envelope.data.summary = { uniqueIssueCount: 0, totalRuleMatches: 0, affectedRuleCount: 0, failedRuleCount: 1, generatedAt: envelope.generatedAt }
+    const projects = makeProjects({ artifacts: { 'flightctl/sources/jira-hygiene/registry.json': envelope } })
+    const router = makeRouter()
+    registerHygieneRoutes(router, makeContext(makeStorage(), projects))
+
+    const handler = router._routes.get['/project-hygiene'].at(-1)
+    const res = makeRes()
+    handler({ query: { projectId: 'flightctl' } }, res)
+
+    expect(res._status).toBe(503)
+    expect(res._json.reason).toBe('invalid-publication')
+  })
+
   it('returns 404 for an unknown project without reading OSAC data', () => {
     const projects = makeProjects({ artifacts: { 'osac/sources/jira-hygiene/registry.json': OSAC_ENVELOPE } })
     const router = makeRouter()
@@ -280,6 +300,25 @@ describe('hygiene routes — GET /project-hygiene', () => {
     expect(res._json.legacyMigration).toBe(true)
     expect(res._json.freshness).toBe('unknown')
     expect(Object.keys(res._json.results)).toEqual(['OSAC'])
+  })
+
+  it('marks legacy OSAC results partial when a failed rule count is negative', () => {
+    const legacyResults = structuredClone(LEGACY_RESULTS)
+    const project = legacyResults.results.OSAC
+    project.partial = false
+    project.summary.totalRuleMatches = 0
+    project.rules.find(rule => rule.id === 'no-team').count = -2
+    const router = makeRouter()
+    registerHygieneRoutes(router, makeContext(makeStorage({
+      'releases/hygiene/project-hygiene-results.json': legacyResults,
+      'releases/hygiene/project-hygiene-config.json': LEGACY_CONFIG
+    }), makeProjects()))
+    const res = makeRes()
+    router._routes.get['/project-hygiene'].at(-1)({ query: { projectId: 'osac' } }, res)
+
+    expect(res._status).toBe(200)
+    expect(res._json.partial).toBe(true)
+    expect(res._json.state).toBe('supported')
   })
 })
 

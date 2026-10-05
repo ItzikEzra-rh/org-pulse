@@ -142,8 +142,8 @@ describe('server project profiles', () => {
     const payload = response.json.mock.calls[0][0]
     expect(payload.projects).toHaveLength(2)
     expect(payload.projects.map(project => [project.projectId, project.displayName])).toEqual([
-      ['flightctl', 'Flight Control'],
-      ['osac', 'OSAC']
+      ['osac', 'OSAC'],
+      ['flightctl', 'Flight Control']
     ])
   })
 
