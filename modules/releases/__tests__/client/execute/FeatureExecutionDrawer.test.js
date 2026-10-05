@@ -39,6 +39,36 @@ describe('FeatureExecutionDrawer', () => {
     expect(dialog.text()).toContain('Ready')
   })
 
+  it('renders unsupported feature metrics and absent team attribution as Unknown', () => {
+    const wrapper = mountDrawer({
+      featureKey: 'EDM-100',
+      card: makeCard({
+        feature: {
+          key: 'EDM-100',
+          summary: 'Jira inventory item',
+          status: 'Closed',
+          team: null,
+          coverage: { team: 'unknown', pipelineMetrics: 'unavailable' },
+          issueCount: null,
+          blockerCount: null
+        },
+        progress: {
+          kind: 'unavailable',
+          caption: 'No compatible execution producer',
+          detail: 'Pipeline execution is unavailable.'
+        },
+        readiness: { label: 'Unknown', class: 'bg-gray-100' }
+      }),
+      detail: { key: 'EDM-100', epics: [] }
+    })
+
+    expect(wrapper.text()).toContain('Team')
+    expect(wrapper.text()).toContain('Unknown')
+    expect(wrapper.text()).toContain('Total issues')
+    expect(wrapper.text()).toContain('Blockers')
+    expect(wrapper.text()).toContain('No compatible execution producer')
+  })
+
   it('shows the loading state and hides epic content while loading', () => {
     const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), loading: true })
     expect(wrapper.text()).toContain('Loading epics')

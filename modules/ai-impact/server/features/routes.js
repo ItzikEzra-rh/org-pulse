@@ -33,13 +33,13 @@ function internalHeaders(contentType) {
  * @param {object[]} features - Array of { key, aiReview } objects
  * @returns {Promise<{ created: number, updated: number, unchanged: number }>}
  */
-async function forwardToReleases(features) {
+async function forwardToReleases(features, projectId = 'osac') {
   // eslint-disable-next-line org-pulse/no-cross-module-imports -- sanctioned internal API (Option B)
-  const url = 'http://localhost:' + API_PORT + '/api/modules/releases/execution/ai-review/bulk';
+  const url = 'http://localhost:' + API_PORT + '/api/modules/releases/execution/ai-review/bulk?projectId=' + encodeURIComponent(projectId);
   const resp = await fetch(url, {
     method: 'POST',
     headers: internalHeaders('application/json'),
-    body: JSON.stringify({ features })
+    body: JSON.stringify({ projectId, features })
   });
   if (!resp.ok) {
     const body = await resp.text();
@@ -52,9 +52,9 @@ async function forwardToReleases(features) {
  * Forward a delete request to remove AI review data from releases store.
  * @returns {Promise<void>}
  */
-async function forwardDeleteToReleases() {
+async function forwardDeleteToReleases(projectId = 'osac') {
   // eslint-disable-next-line org-pulse/no-cross-module-imports -- sanctioned internal API (Option B)
-  const url = 'http://localhost:' + API_PORT + '/api/modules/releases/execution/ai-review';
+  const url = 'http://localhost:' + API_PORT + '/api/modules/releases/execution/ai-review?projectId=' + encodeURIComponent(projectId);
   const resp = await fetch(url, {
     method: 'DELETE',
     headers: internalHeaders()
@@ -222,7 +222,8 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
     // Forward all validated data to the releases store
     if (releasesPayload.length > 0) {
       try {
-        const result = await forwardToReleases(releasesPayload);
+        const projectId = req.query.projectId || req.body.projectId || 'osac';
+        const result = await forwardToReleases(releasesPayload, projectId);
         counts.created = result.created || 0;
         counts.updated = result.updated || 0;
         counts.unchanged = result.unchanged || 0;
@@ -255,7 +256,7 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
     }
 
     // Forward delete to releases (async, don't block response)
-    forwardDeleteToReleases().catch(function(err) {
+    forwardDeleteToReleases(req.query.projectId || req.body?.projectId || 'osac').catch(function(err) {
       console.error('[ai-impact] Forward delete to releases failed:', err.message);
     });
 
@@ -426,7 +427,7 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
 
     // Forward to releases store
     try {
-      const fwdResult = await forwardToReleases([toAiReviewPayload(result.data)]);
+      const fwdResult = await forwardToReleases([toAiReviewPayload(result.data)], req.query.projectId || req.body.projectId || 'osac');
       const status = fwdResult.created > 0 ? 'created' : fwdResult.updated > 0 ? 'updated' : 'unchanged';
       res.json({ status });
     } catch (err) {

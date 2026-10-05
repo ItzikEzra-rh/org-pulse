@@ -406,11 +406,74 @@
       "state": "supported",
       "sourceId": "jira-hygiene",
       "artifactKey": "sources/jira-hygiene/registry.json"
+    },
+    "execute": {
+      "state": "supported",
+      "artifactKey": "releases/execution/index.json"
     }
   },
+  "execution": {
+    "schemaVersion": 1,
+    "inventory": {
+      "source": "jira-issues",
+      "artifact": "sources/jira-issues/issues.json"
+    },
+    "featureIssueTypes": [
+      "Feature"
+    ],
+    "epicIssueTypes": [
+      "Epic"
+    ],
+    "hierarchy": {
+      "epicParentField": "parentKey",
+      "epicChildParentField": "parentKey"
+    },
+    "fieldMappings": {
+      "team": "team"
+    },
+    "versionAttribution": {
+      "feature": "direct",
+      "epic": "direct"
+    },
+    "metrics": {
+      "producer": null,
+      "pipeline": {
+        "state": "unavailable",
+        "reason": "no-compatible-feature-producer"
+      },
+      "jiraChildren": {
+        "state": "supported",
+        "definition": "Direct Jira children of a parented Epic, grouped by Jira status category",
+        "doesNotCertify": [
+          "pipeline-success",
+          "feature-completion",
+          "release-readiness"
+        ]
+      }
+    },
+    "scopeBaseline": {
+      "policy": "unconfigured",
+      "outputDir": "projects/{projectId}/releases/execution",
+      "includeArchived": true
+    },
+    "readiness": {
+      "policy": "unconfigured"
+    },
+    "traceability": {
+      "sourceArtifact": "sources/traceability/joins.json",
+      "joinKey": "jiraKey",
+      "role": "delivery"
+    },
+    "aiReview": {
+      "source": "sources/ep-review/features.json",
+      "joinKey": "key",
+      "markerRequired": true
+    }
+  },
+  "executeRevision": "3e276deefdcc706e",
   "provenance": {
     "configPath": "config/projects/flightctl.json",
     "repositoryRevision": null,
-    "publishedAt": "2026-10-05T10:48:17.484817Z"
+    "publishedAt": "2026-10-05T13:03:50.750758Z"
   }
 }

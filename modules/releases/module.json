@@ -71,7 +71,19 @@
     "files": [
       { "path": "releases/registry.json", "notes": "Canonical release registry" },
       { "path": "releases/execution/index.json", "notes": "Feature index with summary metrics" },
-      { "path": "releases/execution/features/*.json", "notes": "Per-feature detail files" }
+      { "path": "releases/execution/features/*.json", "notes": "Per-feature detail files" },
+      { "path": "projects/index.json", "notes": "Published project index for qualified Execute data" },
+      { "path": "projects/*/profile.json", "notes": "Project profile used by qualified Execute data" },
+      { "path": "projects/*/current.json", "notes": "Pinned project publication generation" },
+      { "path": "projects/*/generations/*/profile.json", "notes": "Project profile in an immutable publication generation" },
+      { "path": "projects/*/generations/*/releases/registry.json", "notes": "Project-qualified release registry" },
+      { "path": "projects/*/generations/*/releases/execution/index.json", "notes": "Project-qualified Execute feature index" },
+      { "path": "projects/*/generations/*/releases/execution/features/*.json", "notes": "Project-qualified Execute feature details" },
+      { "path": "projects/*/generations/*/releases/execution/tracking-data-*.json", "notes": "Project-qualified release tracking details" },
+      { "path": "projects/*/releases/registry.json", "notes": "Project-qualified release registry in direct data-repo mode" },
+      { "path": "projects/*/releases/execution/index.json", "notes": "Project-qualified Execute feature index in direct data-repo mode" },
+      { "path": "projects/*/releases/execution/features/*.json", "notes": "Project-qualified Execute details in direct data-repo mode" },
+      { "path": "projects/*/releases/execution/tracking-data-*.json", "notes": "Project-qualified release tracking details in direct data-repo mode" }
     ]
   }
 }

@@ -18,6 +18,7 @@ const registerFeaturePressureRoutes = require('./feature-pressure/routes');
 const registerPmHubRoutes = require('./pm-hub/routes');
 const registerReleasePlanRoutes = require('./release-plan/routes');
 const { getAuditLog } = require('./planning/audit-log');
+const { resolveReleaseProject, sendProjectScopeError } = require('./project-scope');
 
 /**
  * Migrate storage paths from old module-specific prefixes to unified
@@ -202,6 +203,7 @@ module.exports = function registerRoutes(router, context) {
     secrets,
     jira,
     smartsheet,
+    projects: context.projects || null,
     registerDiagnostics: context.registerDiagnostics || null
   });
   router.use('/planning', planningRouter);
@@ -298,9 +300,14 @@ module.exports = function registerRoutes(router, context) {
    * /api/modules/releases/audit-log:
    *   get:
    *     tags: [Releases]
-   *     summary: Get unified audit log across all release domains
-   *     parameters:
-   *       - in: query
+ *     summary: Get unified audit log across all release domains
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         required: false
+ *         schema: { type: string }
+ *         description: Project whose audit entries should be returned.
+ *       - in: query
    *         name: version
    *         schema: { type: string }
    *         description: Filter by release version
@@ -323,7 +330,10 @@ module.exports = function registerRoutes(router, context) {
    *         description: Audit log entries
    */
   router.get('/audit-log', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = resolveReleaseProject(context.projects || null, req.query);
+    if (sendProjectScopeError(res, selection)) return;
     const options = {};
+    options.projectId = selection.projectId;
     if (req.query.version) options.version = req.query.version;
     if (req.query.action) options.action = req.query.action;
     if (req.query.domain) options.domain = req.query.domain;
@@ -331,7 +341,7 @@ module.exports = function registerRoutes(router, context) {
     if (req.query.offset) options.offset = parseInt(req.query.offset, 10) || 0;
 
     const result = getAuditLog(storage.readFromStorage, options);
-    res.json(result);
+    res.json({ ...result, projectId: selection.projectId });
   });
 
   // ─── Admin: Migrate Storage Cleanup ───

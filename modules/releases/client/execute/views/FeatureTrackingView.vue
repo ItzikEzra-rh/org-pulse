@@ -7,6 +7,7 @@ import {
   collectComponentOptions,
   collectStatusOptions,
   collectTeamOptions,
+  teamFilterValue,
   matchesComponents,
   matchesStatus,
   matchesTeam
@@ -21,6 +22,8 @@ const {
   error,
   state: trackingState,
   message: trackingMessage,
+  partial: trackingPartial,
+  indexPartial,
   loadReleases,
   loadTrackingData
 } = useFeatureTracking()
@@ -50,6 +53,8 @@ const releaseNames = computed(() => {
 const currentData = computed(() => trackingData.value)
 const features = computed(() => (currentData.value && currentData.value.features) || [])
 const counts = computed(() => (currentData.value && currentData.value.counts) || null)
+const hasUnknownTeam = computed(() => features.value.some(f => f.coverage?.team === 'unknown' || f.coverage?.team === 'unavailable'))
+const canRenderTrackingData = computed(() => currentData.value && Array.isArray(currentData.value.features))
 const baselineDate = computed(() => currentData.value ? currentData.value.baselineDate : null)
 const baselineSource = computed(() => currentData.value ? (currentData.value.baselineSource || 'unknown') : null)
 const wasQueryFailed = computed(() => !!(currentData.value && currentData.value.wasQueryFailed))
@@ -62,7 +67,7 @@ const baselineNotYetReached = computed(() => {
 // no active filter, can confidently be read as "this release genuinely has no
 // Feature-level scope" rather than a failed/incomplete/not-yet-evaluable collection.
 const isGenuineZeroScope = computed(() => {
-  if (!currentData.value) return false
+  if (!canRenderTrackingData.value) return false
   if (activeFilter.value) return false
   if (isComponentStatusFiltered.value) return false
   if (wasQueryFailed.value) return false
@@ -75,7 +80,7 @@ const isGenuineZeroScope = computed(() => {
 // current filter selection, so narrowing one field never hides options for the other.
 const componentOptions = computed(() => collectComponentOptions(features.value, f => f.components))
 const statusOptions = computed(() => collectStatusOptions(features.value, f => f.status))
-const teamOptions = computed(() => collectTeamOptions(features.value, f => f.team))
+const teamOptions = computed(() => collectTeamOptions(features.value, teamFilterValue))
 
 const tableEmptyMessage = computed(() => {
   return isGenuineZeroScope.value
@@ -89,8 +94,17 @@ const tableEmptyMessageDetail = computed(() => {
     : ''
 })
 
+function isKnownCount(value) {
+  return Number.isInteger(value) && value >= 0
+}
+
+function displayCount(value) {
+  return isKnownCount(value) ? value : 'Unknown'
+}
+
 function baselineSourceLabel(source) {
   if (source === 'override') return 'manual override'
+  if (source === 'unknown' && currentData.value?.scopePolicyState === 'unconfigured') return 'policy not configured'
   if (source === 'unknown') return 'unknown'
   var match = /^releaseStart\+(\d+)d$/.exec(source || '')
   if (match) return 'release start + ' + match[1] + 'd'
@@ -109,7 +123,7 @@ const filteredFeatures = computed(() => {
     result = result.filter(function (f) {
       return matchesComponents(f.components, selectedComponents.value) &&
         matchesStatus(f.status, selectedStatuses.value) &&
-        matchesTeam(f.team, selectedTeams.value)
+        matchesTeam(f.team, selectedTeams.value, f.coverage?.team)
     })
   }
   return result
@@ -186,8 +200,16 @@ watch(projectId, async () => {
       </div>
     </div>
 
+    <div
+      v-if="indexPartial"
+      role="status"
+      class="mb-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300"
+    >
+      Some release tracking artifacts are partial or unavailable. Their counts stay Unknown and their details are labeled unavailable.
+    </div>
+
     <ComponentStatusFilterBar
-      v-if="currentData && !loading"
+      v-if="canRenderTrackingData && !loading"
       class="mb-5 rounded-xl border border-gray-200 dark:border-gray-700"
       :component-options="componentOptions"
       :status-options="statusOptions"
@@ -203,6 +225,22 @@ watch(projectId, async () => {
 
     <!-- WAS-query-failed warning -->
     <div
+      v-if="currentData && trackingPartial"
+      role="status"
+      class="mb-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300"
+    >
+      This release tracking artifact is partial. Values without complete source coverage remain Unknown.
+    </div>
+
+    <div
+      v-if="canRenderTrackingData && hasUnknownTeam"
+      role="status"
+      class="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-4 py-2.5 text-xs text-gray-600 dark:text-gray-400"
+    >
+      Team attribution is unknown for some features. The Team filter keeps these rows under Unknown.
+    </div>
+
+    <div
       v-if="currentData && wasQueryFailed"
       class="mb-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2"
     >
@@ -214,7 +252,7 @@ watch(projectId, async () => {
 
     <!-- Baseline not yet reached -->
     <div
-      v-if="currentData && baselineNotYetReached"
+      v-if="canRenderTrackingData && baselineNotYetReached"
       class="mb-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-2.5 text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2"
     >
       <svg class="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -224,7 +262,7 @@ watch(projectId, async () => {
     </div>
 
     <!-- Summary cards -->
-    <div v-if="currentData && !loading" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+    <div v-if="canRenderTrackingData && !loading" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
       <div
         @click="setFilter(null)"
         class="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border px-4 py-3.5 cursor-pointer transition-all duration-150 hover:shadow-md"
@@ -234,7 +272,7 @@ watch(projectId, async () => {
       >
         <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500 rounded-l-xl" />
         <div class="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Features</div>
-        <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ currentData.featureCount }}</div>
+        <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ displayCount(currentData.featureCount) }}</div>
       </div>
 
       <div class="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3.5">
@@ -248,65 +286,73 @@ watch(projectId, async () => {
 
       <div
         v-if="counts"
-        @click="counts.added > 0 ? setFilter('added') : undefined"
+        @click="isKnownCount(counts.added) && counts.added > 0 ? setFilter('added') : undefined"
         class="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border px-4 py-3.5 transition-all duration-150"
         :class="[
           activeFilter === 'added' ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-200 dark:ring-blue-800 shadow-sm' : 'border-gray-200 dark:border-gray-700',
-          counts.added > 0 ? 'cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600' : ''
+          isKnownCount(counts.added) && counts.added > 0 ? 'cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600' : ''
         ]"
       >
         <div class="absolute top-0 left-0 w-1 h-full bg-blue-500 rounded-l-xl" />
         <div class="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Added</div>
-        <div class="text-2xl font-bold" :class="counts.added > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'">{{ counts.added }}</div>
+        <div class="text-2xl font-bold" :class="counts.added > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'">{{ displayCount(counts.added) }}</div>
       </div>
 
       <div
         v-if="counts"
-        @click="counts.dropped > 0 ? setFilter('dropped') : undefined"
+        @click="isKnownCount(counts.dropped) && counts.dropped > 0 ? setFilter('dropped') : undefined"
         class="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border px-4 py-3.5 transition-all duration-150"
         :class="[
           activeFilter === 'dropped' ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-200 dark:ring-amber-800 shadow-sm' : 'border-gray-200 dark:border-gray-700',
-          counts.dropped > 0 ? 'cursor-pointer hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600' : ''
+          isKnownCount(counts.dropped) && counts.dropped > 0 ? 'cursor-pointer hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600' : ''
         ]"
       >
         <div class="absolute top-0 left-0 w-1 h-full bg-amber-500 rounded-l-xl" />
         <div class="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Dropped</div>
-        <div class="text-2xl font-bold" :class="counts.dropped > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'">{{ counts.dropped }}</div>
+        <div class="text-2xl font-bold" :class="counts.dropped > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'">{{ displayCount(counts.dropped) }}</div>
       </div>
 
       <div
         v-if="counts"
-        @click="counts.moved > 0 ? setFilter('moved') : undefined"
+        @click="isKnownCount(counts.moved) && counts.moved > 0 ? setFilter('moved') : undefined"
         class="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border px-4 py-3.5 transition-all duration-150"
         :class="[
           activeFilter === 'moved' ? 'border-purple-400 dark:border-purple-500 ring-2 ring-purple-200 dark:ring-purple-800 shadow-sm' : 'border-gray-200 dark:border-gray-700',
-          counts.moved > 0 ? 'cursor-pointer hover:shadow-md hover:border-purple-300 dark:hover:border-purple-600' : ''
+          isKnownCount(counts.moved) && counts.moved > 0 ? 'cursor-pointer hover:shadow-md hover:border-purple-300 dark:hover:border-purple-600' : ''
         ]"
       >
         <div class="absolute top-0 left-0 w-1 h-full bg-purple-500 rounded-l-xl" />
         <div class="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Moved</div>
-        <div class="text-2xl font-bold" :class="counts.moved > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-900 dark:text-gray-100'">{{ counts.moved }}</div>
+        <div class="text-2xl font-bold" :class="counts.moved > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-900 dark:text-gray-100'">{{ displayCount(counts.moved) }}</div>
       </div>
 
       <div
-        v-if="counts && counts.blockerPriority > 0"
-        @click="setFilter('blocker')"
-        class="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border px-4 py-3.5 cursor-pointer transition-all duration-150 hover:shadow-md hover:border-red-300 dark:hover:border-red-600"
+        v-if="counts && (!isKnownCount(counts.blockerPriority) || counts.blockerPriority > 0)"
+        @click="isKnownCount(counts.blockerPriority) ? setFilter('blocker') : undefined"
+        class="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border px-4 py-3.5 transition-all duration-150"
         :class="activeFilter === 'blocker' ? 'border-red-400 dark:border-red-500 ring-2 ring-red-200 dark:ring-red-800 shadow-sm' : 'border-gray-200 dark:border-gray-700'"
         title="Priority == Blocker (not a live blocked-state signal)"
       >
         <div class="absolute top-0 left-0 w-1 h-full bg-red-500 rounded-l-xl" />
         <div class="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Blocker Priority</div>
-        <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ counts.blockerPriority }}</div>
+        <div class="text-2xl font-bold" :class="isKnownCount(counts.blockerPriority) ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'">{{ displayCount(counts.blockerPriority) }}</div>
       </div>
     </div>
 
     <!-- Unknown-baseline notice -->
     <div
-      v-if="currentData && baselineSource === 'unknown'"
+      v-if="canRenderTrackingData && baselineSource === 'unknown' && currentData.scopePolicyState !== 'unconfigured'"
       class="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-4 py-2.5 text-xs text-gray-600 dark:text-gray-400"
     >
       No baseline could be established for this release (no override configured and no release-start date in the registry), so features can't be classified as committed/added/dropped/moved. All {{ currentData.featureCount }} features are shown as scope Unknown.
+    </div>
+
+    <div
+      v-if="canRenderTrackingData && currentData.scopePolicyState === 'unconfigured'"
+      role="status"
+      class="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-4 py-2.5 text-xs text-gray-600 dark:text-gray-400"
+    >
+      A scope-baseline policy is not configured for this project. Committed, added, dropped, and moved counts remain Unknown; observed Features are shown with scope Unknown.
     </div>
 
     <!-- Loading state -->
@@ -335,7 +381,15 @@ watch(projectId, async () => {
     </div>
 
     <!-- Data table -->
-    <template v-else-if="currentData">
+    <div
+      v-else-if="currentData && !canRenderTrackingData"
+      role="status"
+      class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-5 py-4 text-sm text-gray-600 dark:text-gray-300"
+    >
+      {{ currentData.message || currentData.error?.message || 'Feature tracking data is unavailable for this release.' }}
+    </div>
+
+    <template v-else-if="canRenderTrackingData">
       <div
         v-if="activeFilter"
         class="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300"

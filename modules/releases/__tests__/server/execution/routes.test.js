@@ -7,11 +7,18 @@ const mockFetchArtifacts = vi.fn()
 
 function makeStorage(data = {}) {
   const store = { ...data }
+  const reads = []
+  const writes = []
   return {
+    store,
+    reads,
+    writes,
     readFromStorage(key) {
+      reads.push(key)
       return store[key] ? JSON.parse(JSON.stringify(store[key])) : null
     },
     writeToStorage(key, value) {
+      writes.push(key)
       store[key] = value
     },
     listStorageFiles(prefix) {
@@ -56,6 +63,52 @@ function makeProjects(projectIds = ['osac', 'flightctl']) {
   return {
     get: (projectId) => profiles.find(profile => profile.projectId === projectId) || null,
     list: () => profiles
+  }
+}
+
+function makePublishedProjects() {
+  const osac = {
+    projectId: 'osac',
+    displayName: 'OSAC',
+    profileRevision: '1111111111111111',
+    executeRevision: '2222222222222222',
+    execution: { inventory: { source: 'legacy-feature-store' } },
+    capabilities: { execute: { state: 'supported', artifactKey: 'releases/execution/index.json', legacyFallback: true } }
+  }
+  const flightctl = {
+    projectId: 'flightctl',
+    displayName: 'Flight Control',
+    profileRevision: '3333333333333333',
+    executeRevision: '4444444444444444',
+    execution: { inventory: { source: 'jira-issues' } },
+    capabilities: { execute: { state: 'supported', artifactKey: 'releases/execution/index.json' } }
+  }
+  return {
+    get: id => [osac, flightctl].find(profile => profile.projectId === id),
+    list: () => [osac, flightctl]
+  }
+}
+
+function makeFlightctlIndex() {
+  return {
+    schemaVersion: 1,
+    projectId: 'flightctl',
+    profileRevision: '3333333333333333',
+    executeRevision: '4444444444444444',
+    generationId: 'flightctl-generation-1',
+    artifactKey: 'releases/execution/index.json',
+    state: 'supported',
+    freshness: 'fresh',
+    partial: false,
+    data: {
+      schemaVersion: 1,
+      projectId: 'flightctl',
+      profileRevision: '3333333333333333',
+      executeRevision: '4444444444444444',
+      generationId: 'flightctl-generation-1',
+      featureCount: 1,
+      features: [{ key: 'EDM-100', summary: 'Flight Control Feature' }]
+    }
   }
 }
 
@@ -388,7 +441,7 @@ describe('execution routes', () => {
       expect(res._json.metrics.executionCoverageReason).toBeNull()
     })
 
-    it('returns 404 for a non-OSAC project instead of serving OSAC feature detail', () => {
+    it('returns unavailable detail for a project without that feature instead of serving OSAC detail', () => {
       storage = makeStorage({
         'releases/execution/features/OSAC-100.json': {
           key: 'OSAC-100', summary: 'Add streaming inference endpoint', status: 'In Progress',
@@ -402,8 +455,11 @@ describe('execution routes', () => {
       const res = makeRes()
       handler({ params: { key: 'OSAC-100' }, query: { projectId: 'flightctl' } }, res)
 
-      expect(res._status).toBe(404)
-      expect(res._json.error).toContain('flightctl')
+      expect(res._status).toBe(200)
+      expect(res._json.projectId).toBe('flightctl')
+      expect(res._json.state).toBe('unavailable')
+      expect(res._json.epics).toEqual([])
+      expect(res._json.summary).toBeUndefined()
     })
 
     it('leaves an old/missing payload feature detail visible without the new fields', () => {
@@ -556,6 +612,79 @@ describe('execution routes', () => {
     })
   })
 
+  describe('project isolation for execution mutations', () => {
+    it('blocks Flight Control refresh, config and feature/AI edits before touching OSAC storage', async () => {
+      const osacIndex = { fetchedAt: '2026-10-05T00:00:00Z', features: [{ key: 'OSAC-1', summary: 'OSAC feature' }] }
+      const initial = {
+        'releases/execution/index.json': osacIndex,
+        'releases/execution/config.json': { enabled: true, projectPath: 'osac-project/osac' },
+        'releases/execution/features/OSAC-1.json': { key: 'OSAC-1', summary: 'OSAC feature' },
+        'projects/flightctl/releases/execution/index.json': makeFlightctlIndex()
+      }
+      const isolatedStorage = makeStorage(initial)
+      const r = makeRouter()
+      registerExecutionRoutes(r, {
+        storage: isolatedStorage,
+        projects: makePublishedProjects(),
+        requireAdmin: vi.fn(),
+        requireScope: () => (req, res, next) => next(),
+        registerDiagnostics: vi.fn(),
+        secrets: { GITLAB_TOKEN: 'must-not-be-used' },
+        jira: { jiraRequest: vi.fn(), fetchAllJqlResults: vi.fn() }
+      })
+
+      const actions = [
+        [r._routes.post['/refresh'].at(-1), { query: { projectId: 'flightctl' } }, 'manual-refresh-not-configured'],
+        [r._routes.get['/config'].at(-1), { query: { projectId: 'flightctl' } }, 'execution-config-not-configured'],
+        [r._routes.post['/config'].at(-1), { query: { projectId: 'flightctl' }, body: { enabled: false } }, 'execution-config-not-configured'],
+        [r._routes.post['/features/:key/refresh'].at(-1), { params: { key: 'EDM-100' }, query: { projectId: 'flightctl' } }, 'feature-refresh-not-configured'],
+        [r._routes.post['/ai-review/bulk'].at(-1), { query: { projectId: 'flightctl' }, body: { projectId: 'flightctl', features: [] } }, 'ai-review-edit-not-configured'],
+        [r._routes.delete['/ai-review'].at(-1), { query: { projectId: 'flightctl' } }, 'ai-review-edit-not-configured']
+      ]
+
+      for (const [handler, request, reason] of actions) {
+        const res = makeRes()
+        await handler(request, res)
+        expect(res._status).toBe(409)
+        expect(res._json).toMatchObject({ projectId: 'flightctl', reason })
+      }
+
+      expect(isolatedStorage.reads).not.toContain('releases/execution/index.json')
+      expect(isolatedStorage.reads).not.toContain('releases/execution/config.json')
+      expect(isolatedStorage.reads).not.toContain('releases/execution/features/OSAC-1.json')
+      expect(isolatedStorage.writes).toEqual([])
+      expect(isolatedStorage.store['releases/execution/config.json']).toEqual({ enabled: true, projectPath: 'osac-project/osac' })
+      expect(isolatedStorage.store['releases/execution/features/OSAC-1.json']).toEqual({ key: 'OSAC-1', summary: 'OSAC feature' })
+      expect(mockFetchArtifacts).not.toHaveBeenCalled()
+    })
+
+    it('rejects conflicting project identity in query and mutation body', async () => {
+      const isolatedStorage = makeStorage({
+        'projects/flightctl/releases/execution/index.json': makeFlightctlIndex(),
+        'releases/execution/config.json': { enabled: true }
+      })
+      const r = makeRouter()
+      registerExecutionRoutes(r, {
+        storage: isolatedStorage,
+        projects: makePublishedProjects(),
+        requireAdmin: vi.fn(),
+        requireScope: () => (req, res, next) => next(),
+        registerDiagnostics: vi.fn()
+      })
+      const res = makeRes()
+
+      await r._routes.post['/config'].at(-1)(
+        { query: { projectId: 'flightctl' }, body: { projectId: 'osac', enabled: false } },
+        res
+      )
+
+      expect(res._status).toBe(400)
+      expect(res._json.reason).toBe('project-context-mismatch')
+      expect(isolatedStorage.writes).toEqual([])
+      expect(isolatedStorage.reads).not.toContain('releases/execution/config.json')
+    })
+  })
+
   describe('diagnostics', () => {
     it('registers diagnostics hook', () => {
       expect(context.registerDiagnostics).toHaveBeenCalledWith(expect.any(Function))
@@ -678,7 +807,9 @@ describe('execution routes', () => {
       const res = makeRes()
       handler({ query: {} }, res)
 
-      expect(res._json).toEqual({ versions: [] })
+      expect(res._json).toMatchObject({
+        projectId: 'osac', state: 'unavailable', reason: 'artifact-missing', versions: []
+      })
     })
   })
 
@@ -687,6 +818,7 @@ describe('execution routes', () => {
       storage = makeStorage({
         'releases/execution/index.json': {
           fetchedAt: '2026-08-01T00:00:00Z',
+          hierarchy: { epicCount: 3, unparentedEpicCount: 1, relationshipField: 'parentKey' },
           features: [
             { key: 'OSAC-100', summary: 'Feature A', status: 'In Progress', statusCategory: 'In Progress', fixVersions: ['0.4'], components: ['Storage'], team: 'OSAC-Core' },
             { key: 'OSAC-200', summary: 'Feature B', status: 'To Do', statusCategory: 'To Do', fixVersions: ['0.5'] }
@@ -739,6 +871,7 @@ describe('execution routes', () => {
       handler({ query: { version: '0.4' } }, res)
 
       expect(res._json.featureCount).toBe(1)
+      expect(res._json.hierarchy).toEqual({ epicCount: 3, unparentedEpicCount: 1, relationshipField: 'parentKey' })
       expect(res._json.features[0].key).toBe('OSAC-100')
       expect(res._json.features[0].isContext).toBe(false)
       expect(res._json.features[0].totalEpicCount).toBe(2)
@@ -807,7 +940,10 @@ describe('execution routes', () => {
       const res = makeRes()
       handler({ query: { version: '0.4' } }, res)
 
-      expect(res._json).toEqual({ version: '0.4', fetchedAt: null, featureCount: 0, features: [] })
+      expect(res._json).toMatchObject({
+        projectId: 'osac', state: 'unavailable', reason: 'artifact-missing',
+        version: '0.4', fetchedAt: null, featureCount: 0, features: []
+      })
     })
 
     // Feature represents the overall release; its Epics may be spread across that

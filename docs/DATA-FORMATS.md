@@ -75,6 +75,69 @@ profile contains `schemaVersion`, `profileRevision`, `projectId`, Jira identity,
 source-qualified repositories/sources, team IDs, capability metadata, and
 provenance. Credentials and access grants are not profile fields.
 
+## Shared Releases → Execute contract
+
+The Releases Execute page keeps one OSAC-baseline layout for every project:
+Feature List, Feature Tracking, and Epics by Release. Selecting a project changes
+the project-qualified data and policy coverage shown in those tabs. It does not
+select a second presentation. Feature Status remains hidden as in the existing
+OSAC experience.
+
+The data repository publishes the consumer snapshot below
+`projects/{projectId}/releases/execution/`:
+
+| Artifact | Purpose |
+| --- | --- |
+| `index.json` | Feature summaries, version options, hierarchy/coverage summaries, source references, and tracking release index |
+| `features/{KEY}.json` | Feature detail, explicit Epic/child relationships, Jira fields, traceability, and provenance |
+| `tracking-data-{URI-encoded-releaseId}.json` | Scope tracking and its baseline, history coverage, feature rows, and counts |
+
+Each artifact is a project-qualified publication envelope. The `projects/index.json`
+entry, the sanitized project profile, and all Execute artifacts must agree on
+`projectId`, `profileRevision`, and `executeRevision`. Artifacts in one immutable
+project generation must also share `generationId`; each carries its own
+`artifactKey`, state, freshness, partial flag, timestamps, source references,
+and data. The Execute revision fingerprints the profile's `execution`
+configuration. Sidecar publication exposes only a coherent generation; direct
+data-repository paths support local development.
+
+The shared consumer reads the same Jira issue and project release publications
+as other collectors. It uses profile-configured Feature/Epic types, parent
+fields, field mappings, repository roles, optional producers, and scope-baseline
+policy. OSAC's established feature store remains the authoritative source for
+its pipeline/Jira merge rules and existing metrics; migration carries those
+values forward without recalculating them with different semantics. Flight
+Control includes the Jira Feature inventory, including rows without AI markers
+or pull requests. Direct Feature and Epic version assignments retain their
+source; an inherited display value is not reclassified as a direct assignment.
+
+`GET /execution/epics` also returns the project-wide `hierarchy` summary from
+the selected index. `unparentedEpicCount` counts observed Epics that have no
+configured Feature parent; the same Epics are called out in Epics by Release
+because they cannot appear under a Feature. A missing or incomplete hierarchy
+summary is shown as Unknown.
+
+`null` means the value is unknown or its producer is unavailable; it is not
+zero. An empty array with `state: "empty"` is a successful empty collection.
+`state: "unavailable"`, `"error"`, or `partial: true` preserves that coverage
+distinction. In particular, missing team attribution, an unsupported pipeline
+producer, and unconfigured readiness or baseline policy stay Unknown. Jira
+child status is separate from pipeline execution, Feature completion, and
+release readiness. Workflow success never certifies any of those metrics.
+
+The app's feature, detail, version, hierarchy, tracking, refresh, and config
+routes resolve the requested `projectId` before reading or mutating project
+data. Unknown project IDs return 404. Generated-project refresh/config edits
+return a project-scoped unsupported response when no interactive producer is
+configured. Per-feature refresh cooldown keys include both project and Feature
+ID; the shared manual refresh lock is only reached after the OSAC legacy-writer
+guard, so it cannot refresh or overwrite generated-project data. Exports and
+audit events retain project identity. The Execute pages reject stale project
+responses and never use another project's artifact as a fallback. Release
+Planning keeps its separate config lock and storage path. The `/evidence`
+endpoint remains a bounded release/workflow evidence reader; System Health's
+Release Execution surface remains separate from the shared Execute tabs.
+
 ## Person Metrics — `data/people/{name}.json`
 
 Filename is the person's display name lowercased with non-alphanumeric chars replaced by `_`.
@@ -2141,17 +2204,10 @@ status (`completed` does not imply success). Partial coverage and freshness are
 shown explicitly. A release with no linked evidence has unknown execution;
 feature completion and product readiness remain unknown.
 
-`GET /api/modules/releases/execution/presentation?projectId=<id>` returns the
-selected profile's `capabilities.releaseExecution` presentation. The capability
-uses `state`, `view` (`feature-execution` or `release-evidence`), an `artifactKey`
-for evidence, and an optional `reason`. Existing evidence capabilities with an
-artifact key default to `release-evidence`. Profiles without a supported
-presentation show an explicit unavailable state, never a legacy fallback.
-Only installations without published profiles retain the legacy presentation.
-The configured `artifactKey` is read through the project-scoped storage reader.
-
-OSAC explicitly selects its existing `feature-execution` presentation in its
-profile. Flight Control selects `release-evidence`. Other projects using the
-standard release-evidence collector configure the same capability and source;
-no new project-name condition, route or screen is needed. Example: `fixtures/releases/project-execution-evidence.json`
-contains a deliberately small subset of collected Flight Control evidence.
+This is a project-qualified evidence API, not an Execute presentation selector.
+There is no `/presentation` endpoint and no profile field that selects a
+different Releases Execute screen. `capabilities.releaseExecution` describes
+availability of this bounded evidence source only. Example:
+`fixtures/releases/project-execution-evidence.json` contains a small collected
+Flight Control evidence subset. System Health retains its own Release Execution
+evidence view and project-qualified reader.

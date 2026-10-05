@@ -7,7 +7,7 @@ function setup(envelope) {
   const projects = { get: id => profiles.find(row => row.projectId === id), list: () => profiles, readArtifact: vi.fn(() => envelope ? { value: envelope } : null) }
   register({ get: (path, ...routeHandlers) => { handlers[path] = routeHandlers.at(-1) } }, { projects, requireAuth: () => {}, requireScope: () => () => {} })
   const res = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this }, json(value) { this.body = value; return this } }
-  return { projects, res, request: (query, path = '/evidence') => handlers[path]({ query }, res) }
+  return { projects, handlers, res, request: (query, path = '/evidence') => handlers[path]?.({ query }, res) }
 }
 
 describe('project release execution evidence', () => {
@@ -35,46 +35,10 @@ describe('project release execution evidence', () => {
       expect(t.res.body).not.toHaveProperty('data')
     }
   })
-  it('selects the renderer from profile capabilities for any configured project', () => {
-    for (const [projectId, view] of [['osac', 'feature-execution'], ['flightctl', 'release-evidence'], ['microshift', 'release-evidence']]) {
-      const t = setup(null)
-      t.request({ projectId }, '/presentation')
-      expect(t.res.body).toMatchObject({ projectId, state: 'supported', view })
-      expect(t.projects.readArtifact).not.toHaveBeenCalled()
-    }
-  })
-  it.each([
-    { state: 'supported' },
-    { state: 'empty', view: null },
-    { state: 'supported', view: '' },
-    { state: 'supported', view: 'unknown' },
-    { state: 'supported', view: 'unknown', artifactKey: 'sources/release-execution/registry.json' },
-  ])('reports unavailable for an unsupported presentation: %j', capability => {
+  it('does not expose an Execute presentation switch endpoint', () => {
     const t = setup(null)
-    t.projects.get('flightctl').capabilities.releaseExecution = capability
-    t.request({ projectId: 'flightctl' }, '/presentation')
-    expect(t.res.body).toMatchObject({ projectId: 'flightctl', state: 'unavailable', view: null })
-    expect(t.projects.readArtifact).not.toHaveBeenCalled()
-  })
-  it.each(['feature-execution', 'release-evidence'])('preserves capability states for %s', view => {
-    for (const state of ['supported', 'empty', 'disabled', 'error', undefined]) {
-      const t = setup(null)
-      t.projects.get('flightctl').capabilities.releaseExecution = { state, view }
-      t.request({ projectId: 'flightctl' }, '/presentation')
-      expect(t.res.body).toMatchObject({ state: state || 'unavailable', view })
-    }
-  })
-  it('preserves the artifact-key presentation fallback', () => {
-    const t = setup(null)
-    t.projects.get('flightctl').capabilities.releaseExecution = { state: 'empty', artifactKey: 'sources/release-execution/registry.json' }
-    t.request({ projectId: 'flightctl' }, '/presentation')
-    expect(t.res.body).toMatchObject({ state: 'empty', view: 'release-evidence' })
-  })
-  it('preserves supported legacy presentation without published profiles', () => {
-    const t = setup(null)
-    t.projects.list = () => []
-    t.request({}, '/presentation')
-    expect(t.res.body).toMatchObject({ projectId: 'osac', state: 'supported', view: 'feature-execution' })
+    expect(t.handlers['/presentation']).toBeUndefined()
+    expect(t.handlers['/evidence']).toBeDefined()
   })
   it('reads the third project publication through the same configured evidence path', () => {
     const t = setup({ projectId: 'microshift', state: 'empty', data: { projectId: 'microshift', releases: [] } })

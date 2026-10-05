@@ -127,6 +127,7 @@ const RELEASES_MANIFEST = {
 };
 
 const REGISTRY_DATA = { releases: [], versions: [], meta: {} };
+const PROJECTS_DATA = { projects: [{ projectId: 'osac', displayName: 'OSAC' }] };
 
 // ---------------------------------------------------------------------------
 // Route mocking
@@ -145,6 +146,12 @@ async function mockAllApis(page, fpData) {
   // Catch-all (lowest priority)
   await page.route('**/api/**', route => {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+  });
+
+  // The app shell discovers project context before rendering module views.
+  // Keep this legacy OSAC-only fixture independent of the Releases data mocks.
+  await page.route('**/api/projects', route => {
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PROJECTS_DATA) });
   });
 
   // Module manifest
@@ -229,6 +236,9 @@ test.describe('Feature Pressure - View Loading @feature-pressure', () => {
     let apiCalled = false;
     await page.route('**/api/**', route => {
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+    });
+    await page.route('**/api/projects', route => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PROJECTS_DATA) });
     });
     await page.route('**/api/modules/releases/feature-pressure', route => {
       apiCalled = true;
@@ -403,6 +413,9 @@ test.describe('Feature Pressure - Refresh @feature-pressure', () => {
     await page.route('**/api/**', route => {
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
     });
+    await page.route('**/api/projects', route => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PROJECTS_DATA) });
+    });
     await page.route('**/api/modules/releases/feature-pressure', route => {
       route.fulfill({
         status: 202,
@@ -434,6 +447,9 @@ test.describe('Feature Pressure - No Data State @feature-pressure', () => {
     // Delay the API response
     await page.route('**/api/**', route => {
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+    });
+    await page.route('**/api/projects', route => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PROJECTS_DATA) });
     });
     await page.route('**/api/modules/releases/feature-pressure', async route => {
       await new Promise(r => setTimeout(r, 2000));

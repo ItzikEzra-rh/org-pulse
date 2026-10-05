@@ -99,4 +99,36 @@ describe('FeatureTrackingView empty-state messaging', function() {
     await flushPromises()
     expect(wrapper.text()).not.toContain('No Feature-level scope was found for this release or milestone.')
   })
+
+  it('keeps unconfigured baseline counts and absent team attribution explicitly Unknown', async function() {
+    const wrapper = await mountWith(withData({
+      projectId: 'flightctl',
+      partial: true,
+      scopePolicyState: 'unconfigured',
+      baselineDate: null,
+      baselineSource: 'unknown',
+      featureCount: 1,
+      counts: { committed: null, added: null, dropped: null, moved: null, unknown: 1, blockerPriority: 0 },
+      features: [{
+        key: 'EDM-100', summary: 'Jira-only Feature', status: 'Closed', team: null,
+        coverage: { team: 'unknown' }, components: ['FlightCtl-Core'], scopeChange: 'unknown'
+      }]
+    }))
+
+    expect(wrapper.text()).toContain('A scope-baseline policy is not configured')
+    expect(wrapper.text()).toContain('Team attribution is unknown for some features')
+    expect(wrapper.text()).toContain('Added')
+    expect(wrapper.text()).toContain('Dropped')
+    expect(wrapper.text()).toContain('Moved')
+    expect(wrapper.text()).toContain('Unknown')
+    expect(wrapper.text()).toContain('EDM-100')
+    expect(wrapper.text()).toContain('This release tracking artifact is partial')
+
+    const teamFilter = wrapper.findAll('button[aria-haspopup="listbox"]').find(button => button.text().includes('All teams'))
+    await teamFilter.trigger('click')
+    const unknownOption = wrapper.findAll('label').find(label => label.text() === 'Unknown')
+    await unknownOption.find('input[type="checkbox"]').setValue(true)
+    expect(wrapper.text()).toContain('EDM-100')
+    expect(wrapper.text()).not.toContain('No features match this filter.')
+  })
 })

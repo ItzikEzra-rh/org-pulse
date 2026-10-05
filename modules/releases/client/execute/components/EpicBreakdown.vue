@@ -36,7 +36,20 @@ function epicStats(epic) {
   // Jira priority "Blocker" is not reliable as a blocked signal.
   const blocked = issues.filter(i => !isClosedOrResolvedStatus(i.status) && i.isBlocked === true).length
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
-  return { issues, total, done, inProgress, todo, blocked, pct }
+  const unknownStatus = issues.filter(i => !['Done', 'In Progress', 'To Do'].includes(i.statusCategory)).length
+  return {
+    issues,
+    total,
+    done,
+    inProgress,
+    todo,
+    blocked,
+    pct,
+    unknownStatus,
+    jiraStatusProgress: epic.jiraStatusProgress === true,
+    issueStatusCoverage: epic.issueStatusCoverage || 'unknown',
+    blockedUnknown: epic.blockedCoverage === 'unavailable' || epic.blockedCoverage === 'unknown'
+  }
 }
 
 function ageDays(isoDate) {
@@ -109,22 +122,45 @@ const epicData = computed(() =>
         <h4 class="text-gray-900 dark:text-gray-100 text-sm font-medium leading-snug">{{ epic.summary }}</h4>
       </div>
 
-      <!-- Progress bar -->
+      <!-- Legacy OSAC percentage retains its established presentation. Projects
+           carrying the Jira-status-only marker get an explicit, non-readiness label. -->
       <div class="px-4 pb-2">
-        <div class="flex items-center gap-2">
-          <div class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all"
-              :class="progressBarColor(stats.pct)"
-              :style="{ width: stats.pct + '%' }"
-            />
+        <template v-if="!stats.jiraStatusProgress">
+          <div class="flex items-center gap-2">
+            <div class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all"
+                :class="progressBarColor(stats.pct)"
+                :style="{ width: stats.pct + '%' }"
+              />
+            </div>
+            <span class="text-xs font-bold w-10 text-right" :class="{
+              'text-green-600 dark:text-green-400': stats.pct >= 70,
+              'text-yellow-600 dark:text-yellow-400': stats.pct >= 40 && stats.pct < 70,
+              'text-red-600 dark:text-red-400': stats.pct < 40
+            }">{{ stats.pct }}%</span>
           </div>
-          <span class="text-xs font-bold w-10 text-right" :class="{
-            'text-green-600 dark:text-green-400': stats.pct >= 70,
-            'text-yellow-600 dark:text-yellow-400': stats.pct >= 40 && stats.pct < 70,
-            'text-red-600 dark:text-red-400': stats.pct < 40
-          }">{{ stats.pct }}%</span>
-        </div>
+        </template>
+        <template v-else-if="stats.total === 0">
+          <p class="text-xs italic text-gray-500 dark:text-gray-400">No Jira child issues.</p>
+        </template>
+        <template v-else-if="stats.issueStatusCoverage === 'complete'">
+          <div class="flex items-center gap-2" :title="`${stats.done} of ${stats.total} observed Jira child issues have Done status`">
+            <div class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div class="h-full rounded-full bg-slate-500" :style="{ width: stats.pct + '%' }" />
+            </div>
+            <span class="text-xs font-semibold text-gray-600 dark:text-gray-300 w-28 text-right">{{ stats.done }}/{{ stats.total }} Jira Done</span>
+          </div>
+        </template>
+        <template v-else>
+          <p class="text-xs italic text-gray-500 dark:text-gray-400">
+            Jira child statuses are partial; only observed statuses are counted.
+            <span v-if="stats.unknownStatus > 0">{{ stats.unknownStatus }} observed status{{ stats.unknownStatus === 1 ? '' : 'es' }} Unknown.</span>
+          </p>
+        </template>
+        <p v-if="stats.jiraStatusProgress" class="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
+          Jira child status only; this does not measure pipeline execution or release readiness.
+        </p>
       </div>
 
       <!-- Counts breakdown -->
@@ -145,6 +181,10 @@ const epicData = computed(() =>
           <span class="text-red-600 dark:text-red-400 font-semibold">
             {{ stats.blocked }} Blocked
           </span>
+        </template>
+        <template v-else-if="stats.blockedUnknown">
+          <span class="text-gray-300 dark:text-gray-600">|</span>
+          <span class="text-gray-500 dark:text-gray-400 font-semibold">Blocked: Unknown</span>
         </template>
       </div>
 

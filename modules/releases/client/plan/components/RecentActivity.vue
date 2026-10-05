@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, inject } from 'vue'
 import { useAuditLog } from '../composables/useAuditLog'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 
 const props = defineProps({
   version: { type: String, default: '' }
@@ -8,6 +9,7 @@ const props = defineProps({
 
 const moduleNav = inject('moduleNav')
 const { entries, loading, loadAuditLog } = useAuditLog()
+const projectId = useProjectId()
 const collapsed = ref(true)
 
 const ACTION_META = {
@@ -82,9 +84,9 @@ function viewAll() {
   }
 }
 
-watch(function() { return props.version }, function(v) {
-  if (v) loadAuditLog({ version: v, limit: 5 })
-}, { immediate: true })
+watch([function() { return props.version }, projectId], function([version]) {
+  loadAuditLog({ version: version || undefined, limit: 5 })
+}, { immediate: true, flush: 'sync' })
 </script>
 
 <template>

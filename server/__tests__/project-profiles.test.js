@@ -131,7 +131,7 @@ describe('server project profiles', () => {
     expect(projectProfiles.get('rhoai')).toBeNull()
   })
 
-  it('serves the checked-in multi-project discovery fixture through the projects API handler', () => {
+  it('serves OSAC and Flight Control with shared Execute profile revisions', () => {
     const projectProfiles = createServerProjectProfiles(demoStorage)
     const response = createResponse()
     const handler = createProjectListHandler(projectProfiles)
@@ -145,6 +145,13 @@ describe('server project profiles', () => {
       ['osac', 'OSAC'],
       ['flightctl', 'Flight Control']
     ])
+    for (const projectId of ['osac', 'flightctl']) {
+      const profile = projectProfiles.get(projectId)
+      expect(profile.executeRevision).toMatch(/^[0-9a-f]{16}$/)
+      expect(profile.capabilities.execute).toMatchObject({
+        state: 'supported', artifactKey: 'releases/execution/index.json'
+      })
+    }
   })
 
   it('publishes only the project-qualified Operational Metrics disposition', () => {

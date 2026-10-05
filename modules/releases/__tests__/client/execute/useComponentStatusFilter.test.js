@@ -8,6 +8,7 @@ import {
   collectStatusOptions,
   collectTeamOptions,
   collectAssigneeOptions,
+  teamFilterValue,
   matchesComponents,
   matchesStatus,
   matchesTeam,
@@ -82,6 +83,15 @@ describe('collectTeamOptions', () => {
     const items = [{ team: 'OSAC-Core' }]
     expect(collectTeamOptions(items, i => i.team)).toEqual(['OSAC-Core'])
   })
+
+  it('keeps absent team attribution under Unknown when the producer marks coverage unknown', () => {
+    const items = [
+      { team: null, coverage: { team: 'unknown' } },
+      { team: null, coverage: { team: 'unavailable' } },
+      { team: null }
+    ]
+    expect(collectTeamOptions(items, teamFilterValue)).toEqual(['Unknown', UNASSIGNED_TEAM])
+  })
 })
 
 describe('matchesTeam', () => {
@@ -92,6 +102,12 @@ describe('matchesTeam', () => {
   it('matches a missing team only via the Unassigned sentinel', () => {
     expect(matchesTeam(null, [UNASSIGNED_TEAM])).toBe(true)
     expect(matchesTeam(null, ['OSAC-Core'])).toBe(false)
+  })
+
+  it('matches unknown team attribution only via Unknown', () => {
+    expect(matchesTeam(null, ['Unknown'], 'unknown')).toBe(true)
+    expect(matchesTeam(null, [UNASSIGNED_TEAM], 'unknown')).toBe(false)
+    expect(matchesTeam(null, [UNASSIGNED_TEAM], 'unavailable')).toBe(false)
   })
 
   it('matches an exact team value', () => {

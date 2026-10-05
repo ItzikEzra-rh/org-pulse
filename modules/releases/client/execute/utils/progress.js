@@ -4,6 +4,10 @@ export function isValidProgressCount(n) {
 
 // Keyed by executionCoverageReason; caption is short card/table wording, detail is the fuller explanation.
 const EXECUTION_UNAVAILABLE_REASONS = {
+  'no-compatible-feature-producer': {
+    caption: 'No compatible execution producer',
+    detail: 'No compatible pipeline execution producer is configured. Jira Feature or child status is shown separately and does not establish pipeline progress or release readiness.'
+  },
   'preparation-only': {
     caption: 'Only planning issues found',
     detail: 'The collected issues cover planning, such as PRD or Design. No execution issues were found to calculate progress.'

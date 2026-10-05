@@ -1,17 +1,19 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-05T10:48:17.489596Z",
+  "generatedAt": "2026-10-05T13:03:50.751761Z",
   "projects": [
     {
       "projectId": "osac",
       "displayName": "OSAC",
       "profileRevision": "653d4e3d171383df",
+      "executeRevision": "50521dcc3d4a9386",
       "profileKey": "projects/osac/profile.json"
     },
     {
       "projectId": "flightctl",
       "displayName": "Flight Control",
       "profileRevision": "84d6e4c515154de5",
+      "executeRevision": "3e276deefdcc706e",
       "profileKey": "projects/flightctl/profile.json"
     }
   ]

@@ -15,6 +15,7 @@ function logAudit(readFromStorage, writeToStorage, entry) {
       id: generateId(),
       timestamp: new Date().toISOString(),
       domain: entry.domain || 'planning',
+      projectId: entry.projectId || null,
       version: entry.version || null,
       action: entry.action,
       user: entry.user,
@@ -46,6 +47,12 @@ function getAuditLog(readFromStorage, options) {
 
   if (options && options.domain) {
     entries = entries.filter(function(e) { return e.domain === options.domain })
+  }
+
+  if (options && options.projectId) {
+    // Entries created before project qualification belong to the legacy OSAC
+    // store, preserving the existing OSAC audit history during migration.
+    entries = entries.filter(function(e) { return (e.projectId || 'osac') === options.projectId })
   }
 
   const total = entries.length

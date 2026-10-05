@@ -89,6 +89,12 @@ describe('logAudit', () => {
     expect(_store[STORAGE_KEY].entries[0].details).toBeNull()
   })
 
+  it('stores the selected project on an execution action', () => {
+    const { readFromStorage, writeToStorage, _store } = createMockStorage()
+    logAudit(readFromStorage, writeToStorage, makeEntry({ domain: 'execution', projectId: 'flightctl' }))
+    expect(_store[STORAGE_KEY].entries[0].projectId).toBe('flightctl')
+  })
+
   it('truncates entries to MAX_ENTRIES when exceeded', () => {
     const existing = Array.from({ length: 5000 }, (_, i) => ({
       id: `audit-old-${i}`,
@@ -221,6 +227,19 @@ describe('getAuditLog', () => {
 
     const result = getAuditLog(readFromStorage, { domain: 'planning' })
     expect(result.total).toBe(2)
+  })
+
+  it('filters project actions without exposing Flight Control events in OSAC audit views', () => {
+    const { readFromStorage } = createMockStorage(buildLog([
+      { projectId: 'osac', action: 'manual_refresh' },
+      { projectId: 'flightctl', action: 'manual_refresh' },
+      { action: 'config_save' }
+    ]))
+
+    const osac = getAuditLog(readFromStorage, { projectId: 'osac' })
+    const flightctl = getAuditLog(readFromStorage, { projectId: 'flightctl' })
+    expect(osac.entries.map(entry => entry.action).sort()).toEqual(['config_save', 'manual_refresh'])
+    expect(flightctl.entries.map(entry => entry.action)).toEqual(['manual_refresh'])
   })
 
   it('returns empty result for no data', () => {

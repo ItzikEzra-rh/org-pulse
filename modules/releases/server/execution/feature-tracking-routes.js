@@ -1,53 +1,54 @@
 /**
- * Feature Tracking routes for the releases module.
+ * Project-qualified Feature Tracking routes.
  *
- * Read-only consumer of org-pulse-data's tracking-data-<releaseId>.json
- * files (produced by fetch-releases-feature-tracking.py). This app does no
- * Jira querying, no Product Pages lookups, and no writes here — baseline
- * configuration is owned entirely by org-pulse-data.
+ * The data repository owns baseline collection and scope classification. These
+ * routes read the Execute index and each tracker from one pinned project
+ * generation; they do not recompute baselines in the app.
  */
 
 const { readRegistry } = require('../registry')
+const { resolveReleaseProject, sendProjectScopeError } = require('../project-scope')
 const {
-  resolveReleaseProject,
-  sendProjectScopeError,
-  unavailableProjectData
-} = require('../project-scope')
+  resolveExecutionScope,
+  readExecutionIndex,
+  readTrackingArtifact
+} = require('./project-artifacts')
 
 const TRACKING_DIR = 'releases/execution'
 const TRACKING_PREFIX = 'tracking-data-'
-const VALID_RELEASE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+const VALID_RELEASE_ID = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,255}$/
+
+function encodeReleaseId(releaseId) {
+  return encodeURIComponent(releaseId).replace(/[!'()*]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
+}
 
 function trackingFileKey(releaseId) {
-  return TRACKING_DIR + '/' + TRACKING_PREFIX + releaseId + '.json'
+  return `${TRACKING_DIR}/${TRACKING_PREFIX}${encodeReleaseId(releaseId)}.json`
+}
+
+function decodeReleaseId(value) {
+  try { return decodeURIComponent(value) } catch { return value }
 }
 
 function listTrackingReleaseIds(storage) {
-  var fileNames = storage.listStorageFiles ? storage.listStorageFiles(TRACKING_DIR) : []
-  var ids = []
-  for (var i = 0; i < fileNames.length; i++) {
-    var name = fileNames[i]
+  const fileNames = storage.listStorageFiles ? storage.listStorageFiles(TRACKING_DIR) : []
+  const ids = []
+  for (let i = 0; i < fileNames.length; i++) {
+    const name = fileNames[i]
     if (name.indexOf(TRACKING_PREFIX) === 0 && name.endsWith('.json')) {
-      ids.push(name.slice(TRACKING_PREFIX.length, -'.json'.length))
+      ids.push(decodeReleaseId(name.slice(TRACKING_PREFIX.length, -'.json'.length)))
     }
   }
-  return ids
+  return [...new Set(ids)]
 }
 
-/**
- * Order release IDs by their position in the registry (registry.json is
- * maintained in a sensible release sequence); anything present in tracking
- * data but absent from the registry sorts after, alphabetically.
- */
 function orderReleaseIds(releaseIds, registry) {
-  var registryOrder = {}
-  var releases = registry.releases || []
-  for (var i = 0; i < releases.length; i++) {
-    registryOrder[releases[i].id] = i
-  }
-  return releaseIds.slice().sort(function (a, b) {
-    var aIdx = registryOrder[a]
-    var bIdx = registryOrder[b]
+  const registryOrder = {}
+  const releases = registry.releases || []
+  for (let i = 0; i < releases.length; i++) registryOrder[releases[i].id] = i
+  return releaseIds.slice().sort((a, b) => {
+    const aIdx = registryOrder[a]
+    const bIdx = registryOrder[b]
     if (aIdx !== undefined && bIdx !== undefined) return aIdx - bIdx
     if (aIdx !== undefined) return -1
     if (bIdx !== undefined) return 1
@@ -56,121 +57,183 @@ function orderReleaseIds(releaseIds, registry) {
 }
 
 module.exports = function registerFeatureTrackingRoutes(router, context) {
-  const storage = context.storage
-  const requireAuth = context.requireAuth
-  const requireScope = context.requireScope
-  const projects = context.projects || null
+  const { storage, requireAuth, requireScope, projects = null } = context
 
-  function selectedProject(req, res) {
+  function selectedExecution(req, res) {
     const selection = resolveReleaseProject(projects, req.query)
     if (sendProjectScopeError(res, selection)) return null
-    return selection
+    try {
+      const scope = resolveExecutionScope(storage, projects, selection)
+      return { selection, scope, publication: readExecutionIndex(scope) }
+    } catch (error) {
+      const status = error.code === 'PROJECT_NOT_FOUND' ? 404 : error.code === 'PROJECT_SELECTION_REQUIRED' ? 400 : 503
+      res.status(status).json({
+        projectId: selection.projectId,
+        state: 'unavailable',
+        freshness: 'unknown',
+        partial: true,
+        reason: error.code || 'project-publication-unavailable',
+        error: error.message
+      })
+      return null
+    }
+  }
+
+  function legacySummaries(scope) {
+    if (!scope.legacyAdapter) return []
+    const ids = orderReleaseIds(
+      listTrackingReleaseIds(storage),
+      readRegistry(storage.readFromStorage)
+    )
+    return ids.map(releaseId => ({
+      releaseId,
+      artifactKey: trackingFileKey(releaseId),
+      displayName: releaseId,
+      fixVersions: [],
+      baselineDate: null,
+      baselineSource: 'unknown',
+      scopePolicyState: 'legacy',
+      historyCoverage: 'unknown',
+      featureCount: null,
+      counts: null
+    }))
   }
 
   /**
    * @openapi
    * /api/modules/releases/execution/tracking/releases:
    *   get:
-   *     summary: List releases with feature tracking data, with summary counts
+   *     summary: List release tracking summaries for the selected project
    *     tags: [Releases - Feature Tracking]
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         schema: { type: string }
    *     responses:
    *       200:
-   *         description: Array of release tracking summaries
-  */
-  router.get('/tracking/releases', requireAuth, requireScope('releases:read'), function (req, res) {
-    const selection = selectedProject(req, res)
-    if (!selection) return
-    if (selection.projectId !== 'osac') {
-      return res.json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'feature-tracking',
-          'Feature tracking has not been collected for this project.'
-        ),
-        releases: []
-      })
-    }
-    const registry = readRegistry(storage.readFromStorage)
-    const releaseIds = orderReleaseIds(listTrackingReleaseIds(storage), registry)
+   *         description: Project-qualified release tracking summaries
+   *       404:
+   *         description: Unknown project
+   */
+  router.get('/tracking/releases', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selected = selectedExecution(req, res)
+    if (!selected) return
+    const { scope, publication } = selected
+    if (!publication.ok) return res.json({ ...publication.meta, releases: [] })
 
+    const summaries = Array.isArray(publication.data.trackingReleases)
+      ? publication.data.trackingReleases
+      : legacySummaries(scope)
     const releases = []
-    for (let i = 0; i < releaseIds.length; i++) {
-      let data
-      try {
-        data = storage.readFromStorage(trackingFileKey(releaseIds[i]))
-      } catch (err) {
-        console.error('[feature-tracking] Failed to read tracking data for', releaseIds[i], err.message)
+    let partial = publication.meta.partial
+    for (const summary of summaries) {
+      const result = readTrackingArtifact(scope, summary, publication)
+      if (!result.ok) {
+        partial = true
+        releases.push({
+          ...summary,
+          featureCount: null,
+          counts: { committed: null, added: null, dropped: null, moved: null, unknown: null, blockerPriority: null },
+          state: 'unavailable',
+          reason: result.reason || 'tracking-artifact-unavailable'
+        })
         continue
       }
-      if (!data) continue
+      const data = result.data
       releases.push({
         releaseId: data.releaseId,
-        displayName: data.displayName || data.releaseId,
-        fixVersions: data.fixVersions || [],
-        baselineDate: data.baselineDate || null,
-        baselineSource: data.baselineSource || 'unknown',
-        fetchedAt: data.fetchedAt || null,
-        featureCount: data.featureCount || 0,
-        counts: data.counts || null,
-        wasQueryFailed: !!data.wasQueryFailed
+        displayName: data.displayName || summary.displayName || data.releaseId,
+        fixVersions: data.fixVersions || summary.fixVersions || [],
+        baselineDate: data.baselineDate ?? summary.baselineDate ?? null,
+        baselineSource: data.baselineSource || summary.baselineSource || 'unknown',
+        scopePolicyState: data.scopePolicyState || summary.scopePolicyState || 'unknown',
+        historyCoverage: data.historyCoverage || summary.historyCoverage || 'unknown',
+        fetchedAt: data.fetchedAt || summary.fetchedAt || null,
+        featureCount: data.featureCount ?? summary.featureCount ?? null,
+        counts: data.counts ?? summary.counts ?? null,
+        wasQueryFailed: data.wasQueryFailed === true,
+        state: result.envelope.state || 'supported',
+        freshness: result.envelope.freshness || publication.meta.freshness,
+        partial: result.envelope.partial === true
       })
+      if (result.envelope.partial || result.envelope.state === 'error') partial = true
     }
 
-    res.json({ releases: releases })
+    res.json({
+      ...publication.meta,
+      partial,
+      baselinePolicy: publication.data.coverage?.scopeBaseline || 'unknown',
+      releases
+    })
   })
 
   /**
    * @openapi
    * /api/modules/releases/execution/tracking/data:
    *   get:
-   *     summary: Get feature tracking data for a release
+   *     summary: Get scope tracking data for one selected-project release
    *     tags: [Releases - Feature Tracking]
    *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         schema: { type: string }
    *       - in: query
    *         name: releaseId
    *         required: true
    *         schema: { type: string }
    *     responses:
    *       200:
-   *         description: Feature tracking data for the release
+   *         description: Project-qualified release scope tracking data
    *       400:
-   *         description: Missing releaseId parameter
+   *         description: Invalid or missing releaseId parameter
    *       404:
-   *         description: No tracking data found for this release
-  */
-  router.get('/tracking/data', requireAuth, requireScope('releases:read'), function (req, res) {
-    const selection = selectedProject(req, res)
-    if (!selection) return
-    if (selection.projectId !== 'osac') {
-      return res.status(404).json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'feature-tracking',
-          'Feature tracking has not been collected for this project.'
-        ),
-        error: `No project-qualified feature tracking data for ${selection.projectId}`
-      })
-    }
+   *         description: Project or release tracking data not found
+   */
+  router.get('/tracking/data', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selected = selectedExecution(req, res)
+    if (!selected) return
+    const { scope, publication } = selected
     const releaseId = req.query.releaseId
     if (typeof releaseId !== 'string' || !VALID_RELEASE_ID.test(releaseId)) {
-      return res.status(400).json({ error: 'releaseId query parameter must be a non-empty string' })
+      return res.status(400).json({ error: 'releaseId query parameter must be a non-empty release ID' })
+    }
+    if (!publication.ok) return res.json({ ...publication.meta, releaseId, features: [] })
+
+    let summary = (publication.data.trackingReleases || []).find(item => item.releaseId === releaseId)
+    if (!summary && scope.legacyAdapter && listTrackingReleaseIds(storage).includes(releaseId)) {
+      summary = { releaseId, artifactKey: trackingFileKey(releaseId) }
+    }
+    if (!summary) {
+      return res.status(404).json({
+        ...publication.meta,
+        error: `No feature tracking data found for ${releaseId}`
+      })
     }
 
-    let data
-    try {
-      data = storage.readFromStorage(trackingFileKey(releaseId))
-    } catch (err) {
-      console.error('[feature-tracking] Failed to read tracking data for', releaseId, err.message)
-      return res.status(500).json({ error: 'Feature tracking data for release is unreadable: ' + releaseId })
+    const result = readTrackingArtifact(scope, summary, publication)
+    if (!result.ok) {
+      return res.json({
+        ...publication.meta,
+        releaseId,
+        state: 'unavailable',
+        partial: true,
+        reason: result.reason || 'tracking-artifact-unavailable',
+        features: []
+      })
     }
-    if (!data) {
-      return res.status(404).json({ error: 'No feature tracking data found for release: ' + releaseId })
-    }
-
-    res.json(data)
+    res.json({
+      ...result.data,
+      ...publication.meta,
+      state: result.envelope.state || publication.meta.state,
+      freshness: result.envelope.freshness || publication.meta.freshness,
+      partial: publication.meta.partial || result.envelope.partial === true,
+      releaseId,
+      artifactKey: summary.artifactKey
+    })
   })
 }
 
 module.exports.trackingFileKey = trackingFileKey
 module.exports.listTrackingReleaseIds = listTrackingReleaseIds
 module.exports.orderReleaseIds = orderReleaseIds
+module.exports.encodeReleaseId = encodeReleaseId

@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "projectId": "osac",
+  "profileRevision": "653d4e3d171383df",
+  "executeRevision": "50521dcc3d4a9386",
+  "generationId": "osac-fixture-generation-1",
+  "artifactKey": "releases/registry.json",
+  "source": {
+    "id": "execute-demo-fixture",
+    "kind": "fixture"
+  },
+  "generatedAt": "2026-10-05T00:00:00Z",
+  "fetchedAt": "2026-10-05T00:00:00Z",
+  "observedAt": "2026-10-05T00:00:00Z",
+  "state": "supported",
+  "freshness": "unknown",
+  "partial": false,
+  "error": null,
+  "lastKnownGood": null,
+  "data": {
+    "schemaVersion": 1,
+    "releases": [
+      {
+        "id": "rhoai-2.14",
+        "displayName": "RHOAI 2.14",
+        "fixVersions": [
+          "RHOAI-2.14",
+          "rhoai-2.14"
+        ],
+        "productPagesShortname": "red_hat_openshift_ai",
+        "productPagesVersion": "2.14",
+        "milestones": {
+          "planningFreeze": "2026-04-15",
+          "codeFreeze": "2026-06-01",
+          "ea1": "2026-06-15",
+          "ga": "2026-07-01"
+        },
+        "state": "active",
+        "source": "product-pages",
+        "createdAt": "2026-05-01T00:00:00Z",
+        "updatedAt": "2026-05-01T00:00:00Z"
+      },
+      {
+        "id": "rhoai-2.15",
+        "displayName": "RHOAI 2.15",
+        "fixVersions": [
+          "RHOAI-2.15",
+          "rhoai-2.15"
+        ],
+        "productPagesShortname": "red_hat_openshift_ai",
+        "productPagesVersion": "2.15",
+        "milestones": {
+          "planningFreeze": "2026-06-15",
+          "codeFreeze": "2026-08-01",
+          "ga": "2026-09-01"
+        },
+        "state": "active",
+        "source": "product-pages",
+        "createdAt": "2026-05-01T00:00:00Z",
+        "updatedAt": "2026-05-01T00:00:00Z"
+      },
+      {
+        "id": "rhoai-2.13",
+        "displayName": "RHOAI 2.13",
+        "fixVersions": [
+          "RHOAI-2.13"
+        ],
+        "productPagesShortname": "red_hat_openshift_ai",
+        "productPagesVersion": "2.13",
+        "milestones": {
+          "ga": "2026-04-15"
+        },
+        "state": "archived",
+        "source": "manual",
+        "createdAt": "2026-03-01T00:00:00Z",
+        "updatedAt": "2026-04-20T00:00:00Z"
+      }
+    ],
+    "projectId": "osac"
+  }
+}

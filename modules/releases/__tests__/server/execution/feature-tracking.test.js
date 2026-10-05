@@ -4,7 +4,13 @@ const registerFeatureTrackingRoutes = require('../../../server/execution/feature
 const { trackingFileKey, listTrackingReleaseIds, orderReleaseIds } = registerFeatureTrackingRoutes
 
 function makeStorage(data = {}, throwOnKeys = []) {
-  const store = { ...data }
+  const store = {
+    'releases/execution/index.json': {
+      fetchedAt: '2026-08-01T00:00:00Z',
+      features: []
+    },
+    ...data
+  }
   return {
     readFromStorage(key) {
       if (throwOnKeys.includes(key)) {
@@ -150,7 +156,7 @@ describe('registerFeatureTrackingRoutes', () => {
       handler({}, res)
 
       expect(res._json.releases.map(r => r.releaseId)).toEqual(['osac-0.1', 'osac-0.2'])
-      expect(res._json.releases[1]).toEqual({
+      expect(res._json.releases[1]).toMatchObject({
         releaseId: 'osac-0.2',
         displayName: 'OSAC 0.2',
         fixVersions: ['0.2'],
@@ -159,7 +165,11 @@ describe('registerFeatureTrackingRoutes', () => {
         fetchedAt: '2026-08-13T07:56:10Z',
         featureCount: 2,
         counts: { committed: 1, added: 1, dropped: 0, moved: 0, unknown: 0, blockerPriority: 0 },
-        wasQueryFailed: false
+        wasQueryFailed: false,
+        state: 'supported',
+        partial: false,
+        scopePolicyState: 'legacy',
+        historyCoverage: 'unknown'
       })
     })
 
@@ -179,7 +189,7 @@ describe('registerFeatureTrackingRoutes', () => {
       const handler = router._routes.get['/tracking/releases'].at(-1)
       const res = makeRes()
       handler({}, res)
-      expect(res._json).toEqual({ releases: [] })
+      expect(res._json).toMatchObject({ projectId: 'osac', state: 'empty', releases: [] })
     })
 
     it('surfaces wasQueryFailed per release', () => {
@@ -193,7 +203,7 @@ describe('registerFeatureTrackingRoutes', () => {
       expect(res._json.releases[0].wasQueryFailed).toBe(true)
     })
 
-    it('skips a release whose tracking-data file is corrupt/unreadable, without failing the rest', () => {
+    it('marks a release with corrupt tracking data unavailable without failing the rest', () => {
       context.storage = makeStorage({
         'releases/execution/tracking-data-osac-0.1.json': makeTrackingData({ releaseId: 'osac-0.1' }),
         'releases/execution/tracking-data-osac-0.2.json': makeTrackingData({ releaseId: 'osac-0.2' })
@@ -203,7 +213,15 @@ describe('registerFeatureTrackingRoutes', () => {
       const res = makeRes()
       handler({}, res)
       expect(res._status).toBe(200)
-      expect(res._json.releases.map(r => r.releaseId)).toEqual(['osac-0.1'])
+      expect(res._json.releases.map(r => r.releaseId)).toEqual(['osac-0.1', 'osac-0.2'])
+      expect(res._json.releases[0].state).toBe('supported')
+      expect(res._json.releases[1]).toMatchObject({
+        releaseId: 'osac-0.2',
+        state: 'unavailable',
+        featureCount: null,
+        counts: { committed: null, added: null, dropped: null, moved: null, unknown: null, blockerPriority: null },
+        reason: 'artifact-read-failed'
+      })
     })
 
     it('does not list OSAC tracking releases for Flight Control', () => {
@@ -278,10 +296,10 @@ describe('registerFeatureTrackingRoutes', () => {
       const res = makeRes()
       handler({ query: { releaseId: 'osac-0.2', projectId: 'flightctl' } }, res)
 
-      expect(res._status).toBe(404)
+      expect(res._status).toBe(200)
       expect(res._json.projectId).toBe('flightctl')
       expect(res._json.state).toBe('unavailable')
-      expect(res._json.features).toBeUndefined()
+      expect(res._json.features).toEqual([])
     })
 
     it('rejects a path-traversal releaseId with 400', () => {
@@ -300,8 +318,7 @@ describe('registerFeatureTrackingRoutes', () => {
       expect(res._status).toBe(400)
     })
 
-    it('returns a clean 500 and logs when the tracking file is corrupt', () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    it('surfaces a corrupt tracking file as unavailable', () => {
       context.storage = makeStorage({
         'releases/execution/tracking-data-osac-0.2.json': makeTrackingData()
       }, ['releases/execution/tracking-data-osac-0.2.json'])
@@ -310,11 +327,14 @@ describe('registerFeatureTrackingRoutes', () => {
       const res = makeRes()
       handler({ query: { releaseId: 'osac-0.2' } }, res)
 
-      expect(res._status).toBe(500)
-      expect(res._json).toEqual({ error: 'Feature tracking data for release is unreadable: osac-0.2' })
-      expect(errorSpy).toHaveBeenCalledWith('[feature-tracking] Failed to read tracking data for', 'osac-0.2', expect.any(String))
-
-      errorSpy.mockRestore()
+      expect(res._status).toBe(200)
+      expect(res._json).toMatchObject({
+        releaseId: 'osac-0.2',
+        state: 'unavailable',
+        partial: true,
+        reason: 'artifact-read-failed',
+        features: []
+      })
     })
   })
 })
