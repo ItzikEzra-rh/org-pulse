@@ -8,6 +8,8 @@ const loading = ref(false)
 const error = ref(null)
 const state = ref(null)
 const message = ref(null)
+const partial = ref(false)
+const indexPartial = ref(false)
 const projectId = useProjectId()
 let releasesRequestId = 0
 let trackingRequestId = 0
@@ -20,6 +22,8 @@ export function useFeatureTracking() {
     trackingData.value = null
     state.value = null
     message.value = null
+    partial.value = false
+    indexPartial.value = false
     error.value = null
     try {
       var data = await apiRequest(`/modules/releases/execution/tracking/releases${projectQuery(requestedProjectId)}`)
@@ -27,6 +31,7 @@ export function useFeatureTracking() {
       releases.value = data.releases || []
       state.value = data.state || 'supported'
       message.value = data.message || data.error || null
+      indexPartial.value = data.partial === true
     } catch (err) {
       if (requestId !== releasesRequestId || projectId.value !== requestedProjectId) return
       releases.value = []
@@ -40,6 +45,7 @@ export function useFeatureTracking() {
     loading.value = true
     error.value = null
     trackingData.value = null
+    partial.value = false
 
     try {
       var params = new URLSearchParams({ releaseId })
@@ -48,11 +54,13 @@ export function useFeatureTracking() {
       var data = await apiRequest(url)
       if (requestId !== trackingRequestId || projectId.value !== requestedProjectId) return null
       trackingData.value = data
+      partial.value = data.partial === true
       return data
     } catch (err) {
       if (requestId !== trackingRequestId || projectId.value !== requestedProjectId) return null
       error.value = err.message
       trackingData.value = null
+      partial.value = false
       return null
     } finally {
       if (requestId === trackingRequestId && projectId.value === requestedProjectId) loading.value = false
@@ -66,6 +74,8 @@ export function useFeatureTracking() {
     error,
     state,
     message,
+    partial,
+    indexPartial,
     loadReleases,
     loadTrackingData
   }

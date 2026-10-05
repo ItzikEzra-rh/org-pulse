@@ -1,94 +1,310 @@
 const { test, expect } = require('@playwright/test');
-const evidence = require('../../fixtures/releases/project-execution-evidence.json');
-const express = require('express');
-const registerEvidenceRoutes = require('../../modules/releases/server/execution/evidence-routes');
+const fs = require('fs');
+const path = require('path');
 
-test('execution presentation API reports unavailable for unsupported views @releases', async ({ request }) => {
-  const profile = { projectId: 'flightctl', capabilities: {} };
-  let profiles = [profile];
-  const app = express();
-  const router = express.Router();
-  registerEvidenceRoutes(router, {
-    projects: { get: id => profiles.find(row => row.projectId === id), list: () => profiles },
-    requireAuth: (_req, _res, next) => next(),
-    requireScope: () => (_req, _res, next) => next()
+const osacIndex = require('../../fixtures/releases/execution/index.json');
+const osacFeatureDetail = require('../../fixtures/releases/execution/features/TEST1-52.json');
+const osacTrackingData = require('../../fixtures/releases/execution/tracking-data-rhoai-2.14.json');
+const flightctlIndexEnvelope = require('../../fixtures/projects/flightctl/releases/execution/index.json');
+const flightctlFeatureOneEnvelope = require('../../fixtures/projects/flightctl/releases/execution/features/EDM-1001.json');
+const flightctlFeatureTwoEnvelope = require('../../fixtures/projects/flightctl/releases/execution/features/EDM-1002.json');
+const flightctlTrackingEnvelope = require('../../fixtures/projects/flightctl/releases/execution/tracking-data-flightctl-0.10.0.json');
+
+const flightctlIndex = flightctlIndexEnvelope.data;
+const flightctlFeatureDetails = {
+  'EDM-1001': flightctlFeatureOneEnvelope.data,
+  'EDM-1002': flightctlFeatureTwoEnvelope.data
+};
+const osacFeature = osacIndex.features.find(feature => feature.key === 'TEST1-52');
+const osacRelease = 'rhoai-3.0';
+const flightctlRelease = '0.10.0';
+const screenshotDir = path.resolve(__dirname, '../../docs/onboarding/flightctl/shared-execute-verification-assets');
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+async function captureSharedExecuteScreenshot(page, projectId, tabId) {
+  if (process.env.CAPTURE_SHARED_EXECUTE_SCREENSHOTS !== '1') return;
+  fs.mkdirSync(screenshotDir, { recursive: true });
+  await page.screenshot({
+    path: path.join(screenshotDir, `${projectId}-${tabId}.png`),
+    fullPage: true
   });
-  app.use('/api/modules/releases/execution', router);
-  const server = await new Promise(resolve => {
-    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
-  });
-  const url = `http://127.0.0.1:${server.address().port}/api/modules/releases/execution/presentation`;
-  try {
-    for (const [capability, state, view] of [
-      [{ state: 'supported' }, 'unavailable', null],
-      [{ state: 'supported', view: 'unknown' }, 'unavailable', null],
-      [{ state: 'empty', view: 'feature-execution' }, 'empty', 'feature-execution'],
-      [{ state: 'disabled', view: 'release-evidence' }, 'disabled', 'release-evidence'],
-      [{ state: 'supported', artifactKey: 'sources/release-execution/registry.json' }, 'supported', 'release-evidence']
-    ]) {
-      profile.capabilities.releaseExecution = capability;
-      const response = await request.get(url, { params: { projectId: 'flightctl' } });
-      expect(response.status()).toBe(200);
-      expect(await response.json()).toMatchObject({ projectId: 'flightctl', state, view });
-    }
-    profiles = [];
-    const legacy = await request.get(url);
-    expect(legacy.status()).toBe(200);
-    expect(await legacy.json()).toMatchObject({ projectId: 'osac', state: 'supported', view: 'feature-execution' });
-  } finally {
-    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+}
+
+function detailFor(projectId, key) {
+  if (projectId === 'flightctl') return clone(flightctlFeatureDetails[key]);
+  return clone(key === osacFeature.key ? osacFeatureDetail : null);
+}
+
+function getFeatureIndex(projectId) {
+  if (projectId === 'flightctl') return flightctlIndex.features;
+  return osacIndex.features;
+}
+
+function featureVersions(projectId, scope) {
+  if (projectId === 'flightctl') {
+    return scope === 'epics'
+      ? flightctlIndex.versionOptions.epics
+      : flightctlIndex.versionOptions.feature;
   }
-});
+  const versions = new Set(osacIndex.features.flatMap(feature => feature.fixVersions || []));
+  return [osacRelease, ...[...versions].filter(version => version !== osacRelease).sort()];
+}
 
-test.describe('Release execution evidence @releases', () => {
+function trackingReleases(projectId) {
+  if (projectId === 'flightctl') return flightctlIndex.trackingReleases;
+  return [{
+    releaseId: osacTrackingData.releaseId,
+    displayName: osacTrackingData.displayName,
+    fixVersions: osacTrackingData.fixVersions,
+    baselineDate: osacTrackingData.baselineDate,
+    baselineSource: osacTrackingData.baselineSource,
+    featureCount: osacTrackingData.featureCount,
+    counts: osacTrackingData.counts,
+    state: 'supported',
+    partial: false
+  }];
+}
+
+function installExecuteApi(page, { delayOsacFeatures = false } = {}) {
+  const requests = [];
+  let notifyOsacFeaturesRequested = () => {};
+  let releaseOsacFeatures;
+  const osacFeaturesRequested = new Promise(resolve => { notifyOsacFeaturesRequested = resolve; });
+  const osacFeaturesGate = new Promise(resolve => { releaseOsacFeatures = resolve; });
+
+  // The dev server runs Vite only. Return harmless empty responses for shell APIs
+  // that are unrelated to this browser contract; specific routes below override it.
+  page.route('**/api/**', route => route.fulfill({ json: {} }));
+  page.route('**/api/projects', route => route.fulfill({ json: { projects: [
+    { projectId: 'osac', displayName: 'OSAC' },
+    { projectId: 'flightctl', displayName: 'Flight Control' }
+  ] } }));
+  page.route('**/api/roster?**', route => {
+    const projectId = new URL(route.request().url()).searchParams.get('projectId');
+    return route.fulfill({ json: { projectId, availability: 'available', orgs: [], people: [] } });
+  });
+  page.route('**/api/modules/releases/execution/**', async route => {
+    const url = new URL(route.request().url());
+    const projectId = url.searchParams.get('projectId');
+    const pathname = url.pathname.replace('/api/modules/releases/execution', '');
+    requests.push({ pathname, projectId, url: route.request().url() });
+
+    if (delayOsacFeatures && pathname === '/features' && projectId === 'osac') {
+      notifyOsacFeaturesRequested();
+      await osacFeaturesGate;
+    }
+
+    if (pathname === '/features') {
+      const features = clone(getFeatureIndex(projectId));
+      const partial = projectId === 'flightctl' && flightctlIndexEnvelope.partial === true;
+      return route.fulfill({ json: {
+        projectId,
+        state: 'supported',
+        freshness: projectId === 'flightctl' ? flightctlIndexEnvelope.freshness : 'fresh',
+        partial,
+        fetchedAt: projectId === 'flightctl' ? flightctlIndex.fetchedAt : osacIndex.fetchedAt,
+        featureCount: features.length,
+        totalFeatureCount: features.length,
+        features
+      } });
+    }
+
+    const detailMatch = pathname.match(/^\/features\/([^/]+)$/);
+    if (detailMatch) {
+      const key = decodeURIComponent(detailMatch[1]);
+      const detail = detailFor(projectId, key);
+      return detail
+        ? route.fulfill({ json: { ...detail, projectId, state: 'supported', detailState: 'supported' } })
+        : route.fulfill({ status: 404, json: { error: `Feature ${key} not found` } });
+    }
+
+    if (pathname === '/versions') {
+      return route.fulfill({ json: {
+        projectId,
+        state: 'supported',
+        partial: false,
+        versions: featureVersions(projectId, url.searchParams.get('scope'))
+      } });
+    }
+
+    if (pathname === '/epics') {
+      const version = url.searchParams.get('version');
+      const features = getFeatureIndex(projectId)
+        .filter(feature => (feature.fixVersions || []).includes(version))
+        .map(feature => {
+          const detail = detailFor(projectId, feature.key);
+          const epics = detail?.epics || [];
+          return {
+            key: feature.key,
+            summary: feature.summary,
+            status: feature.status,
+            statusCategory: feature.statusCategory,
+            fixVersions: feature.fixVersions || [],
+            components: feature.components || [],
+            team: feature.team || null,
+            coverage: feature.coverage || null,
+            isContext: false,
+            detailState: detail ? 'supported' : 'unavailable',
+            totalEpicCount: detail ? epics.length : null,
+            epics
+          };
+        });
+      return route.fulfill({ json: {
+        projectId,
+        version,
+        state: 'supported',
+        partial: false,
+        fetchedAt: projectId === 'flightctl' ? flightctlIndex.fetchedAt : osacIndex.fetchedAt,
+        featureCount: features.length,
+        hierarchyCoverage: 'complete',
+        hierarchy: clone(projectId === 'flightctl' ? flightctlIndex.hierarchy : osacIndex.hierarchy || null),
+        features
+      } });
+    }
+
+    if (pathname === '/tracking/releases') {
+      return route.fulfill({ json: {
+        projectId,
+        state: 'supported',
+        freshness: 'fresh',
+        partial: false,
+        baselinePolicy: projectId === 'flightctl' ? 'unconfigured' : 'configured',
+        releases: trackingReleases(projectId)
+      } });
+    }
+
+    if (pathname === '/tracking/data') {
+      const releaseId = url.searchParams.get('releaseId');
+      const data = projectId === 'flightctl'
+        ? clone(flightctlTrackingEnvelope.data)
+        : clone(osacTrackingData);
+      return route.fulfill({ json: {
+        ...data,
+        projectId,
+        state: 'supported',
+        freshness: projectId === 'flightctl' ? flightctlTrackingEnvelope.freshness : 'fresh',
+        partial: projectId === 'flightctl' && flightctlTrackingEnvelope.partial === true,
+        releaseId
+      } });
+    }
+
+    return route.fulfill({ status: 404, json: { projectId, error: 'Unknown Execute test endpoint' } });
+  });
+
+  return {
+    requests,
+    osacFeaturesRequested,
+    releaseOsacFeatures: () => releaseOsacFeatures()
+  };
+}
+
+async function expectSharedTabs(page) {
+  const tabs = page.locator('nav[aria-label="Execute sub-tabs"] button');
+  await expect(tabs).toHaveText(['Feature List', 'Feature Tracking', 'Epics by Release']);
+}
+
+test.describe('Shared Releases Execute @releases', () => {
   test.setTimeout(60000);
-  test.beforeEach(async ({ page }) => {
-    await page.route('**/api/roster?**', route => route.fulfill({ json: { projectId: new URL(route.request().url()).searchParams.get('projectId'), orgs: [], people: [] } }));
-    await page.route('**/api/projects', route => route.fulfill({ json: { projects: [
-      { projectId: 'osac', displayName: 'OSAC' },
-      { projectId: 'flightctl', displayName: 'Flight Control' }
-    ] } }));
-    await page.route('**/api/modules/releases/execution/presentation?**', route => {
-      const projectId = new URL(route.request().url()).searchParams.get('projectId');
-      return route.fulfill({ json: { projectId, state: 'supported', view: projectId === 'osac' ? 'feature-execution' : 'release-evidence' } });
-    });
-    await page.route('**/api/modules/releases/execution/evidence?**', route => {
-      const projectId = new URL(route.request().url()).searchParams.get('projectId');
-      return projectId === 'flightctl'
-        ? route.fulfill({ json: { ...evidence, projectDisplayName: 'Flight Control' } })
-        : route.fulfill({ status: 404, json: { error: 'Unknown project' } });
-    });
+
+  test('keeps the OSAC tabs and interactions for OSAC and Flight Control', async ({ page }) => {
+    const api = installExecuteApi(page);
+    await page.goto('/#/releases/execute?projectId=osac');
+    await expect(page.locator('#project-selector')).toHaveValue('osac');
+    await expectSharedTabs(page);
+
+    for (const projectId of ['osac', 'flightctl']) {
+      if (projectId === 'flightctl') {
+        await page.locator('#project-selector').selectOption('flightctl');
+        await expect(page).toHaveURL(/projectId=flightctl/);
+      }
+
+      await expectSharedTabs(page);
+      await page.getByRole('button', { name: 'Feature List', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Feature Execution Overview' })).toBeVisible();
+      await page.getByRole('button', { name: 'List', exact: true }).click();
+
+      if (projectId === 'osac') {
+        await page.getByLabel('Search').fill(osacFeature.key);
+        const detailButton = page.getByRole('button', { name: `Open details for ${osacFeature.key}`, exact: true });
+        await expect(detailButton).toBeVisible();
+        await captureSharedExecuteScreenshot(page, projectId, 'feature-list');
+        await detailButton.click();
+        const drawer = page.getByRole('dialog', { name: `Feature details for ${osacFeature.key}` });
+        await expect(drawer).toBeVisible();
+        await expect(drawer.getByText('Details', { exact: true })).toBeVisible();
+        await drawer.getByRole('button', { name: 'Close detail panel' }).click();
+      } else {
+        await expect(page.getByText(/No compatible pipeline execution producer is configured/)).toBeVisible();
+        await page.getByLabel('Search').fill('EDM-1002');
+        const row = page.getByRole('row').filter({ hasText: 'EDM-1002' });
+        await expect(row).toBeVisible();
+        await expect(row.getByRole('cell').nth(7)).toHaveText('Unknown');
+        await captureSharedExecuteScreenshot(page, projectId, 'feature-list');
+        await page.getByRole('button', { name: 'Open details for EDM-1002', exact: true }).click();
+        const drawer = page.getByRole('dialog', { name: 'Feature details for EDM-1002' });
+        await expect(drawer).toBeVisible();
+        await expect(drawer.locator('dt:has-text("Team") + dd')).toHaveText('Unknown');
+        await drawer.getByRole('button', { name: 'Close detail panel' }).click();
+      }
+
+      await page.getByRole('button', { name: 'Feature Tracking', exact: true }).click();
+      await expect(page.getByText("Features committed to each release's baseline scope, and what changed since.")).toBeVisible();
+      if (projectId === 'flightctl') {
+        await expect(page.getByText(/scope-baseline policy is not configured/i)).toBeVisible();
+        await expect(page.getByText('Team attribution is unknown for some features.')).toBeVisible();
+      } else {
+        await expect(page.getByRole('button', { name: 'RHOAI 2.14', exact: true })).toBeVisible();
+      }
+      await captureSharedExecuteScreenshot(page, projectId, 'feature-tracking');
+
+      await page.getByRole('button', { name: 'Epics by Release', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Epics by Release' })).toBeVisible();
+      await expect(page.locator('#epics-by-release-version')).toHaveValue(projectId === 'flightctl' ? flightctlRelease : osacRelease);
+      if (projectId === 'flightctl') {
+        await expect(page.getByRole('link', { name: 'EDM-1001' }).first()).toBeVisible();
+        await expect(page.getByText('EDM-2001', { exact: true })).toBeVisible();
+        await expect(page.getByText('Jira child status only; this does not measure pipeline execution or release readiness.')).toBeVisible();
+        await expect(page.getByText(/2 Jira Epics observed;\s*Epics without a linked Feature:\s*1 \(not shown in the tree\)\./)).toBeVisible();
+      } else {
+        await expect(page.getByText(osacFeature.key, { exact: true })).toBeVisible();
+        await expect(page.getByText('TEST2-33439', { exact: true })).toBeVisible();
+      }
+      await captureSharedExecuteScreenshot(page, projectId, 'epics-by-release');
+    }
+
+    expect(api.requests.length).toBeGreaterThan(0);
+    expect(api.requests.every(request => ['osac', 'flightctl'].includes(request.projectId))).toBe(true);
+    expect(api.requests.some(request => request.pathname === '/presentation')).toBe(false);
   });
 
-  test('renders collected release evidence and restores OSAC execution tabs on switching', async ({ page }) => {
-    const legacyRequests = [];
-    page.on('request', request => {
-      if (/\/api\/modules\/releases\/execution\/(features|versions)(\?|$)/.test(request.url())) legacyRequests.push(request.url());
-    });
-    await page.goto('/#/?projectId=flightctl');
-    await expect(page.locator('#project-selector')).toHaveValue('flightctl');
-    await page.getByRole('button', { name: 'Releases', exact: true }).click();
-    await page.getByRole('button', { name: 'Execute', exact: true }).click();
-    await expect(page.getByTestId('project-execution-evidence')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Flight Control — Release Execution' })).toBeVisible();
-    await expect(page.getByText(/Partial coverage:/)).toBeVisible();
-    expect(legacyRequests).toEqual([]);
-    await page.getByTestId('execution-release-filter').selectOption(evidence.data.releases[0].releaseId);
-    await expect(page.getByText('Readiness: unknown · Feature completion: unknown')).toBeVisible();
-    await expect(page.getByText(/No evidence linked to this release/).first()).toBeVisible();
-    await page.locator('#project-selector').selectOption('osac');
-    await expect(page.getByTestId('project-execution-evidence')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Feature List', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Feature Tracking', exact: true })).toBeVisible();
-    await page.locator('#project-selector').selectOption('flightctl');
-    await expect(page.getByTestId('execution-release-filter')).toHaveValue('');
-    await expect(page.getByTestId('project-execution-evidence')).toBeVisible();
+  test('discards an OSAC response that arrives after switching to Flight Control', async ({ page }) => {
+    const api = installExecuteApi(page, { delayOsacFeatures: true });
+    await page.goto('/#/releases/execute?projectId=osac');
+    await api.osacFeaturesRequested;
+
+    try {
+      await page.locator('#project-selector').selectOption('flightctl');
+      await expect(page).toHaveURL(/projectId=flightctl/);
+      await page.getByRole('button', { name: 'List', exact: true }).click();
+      await expect(page.getByRole('row').filter({ hasText: 'EDM-1002' })).toBeVisible();
+    } finally {
+      api.releaseOsacFeatures();
+    }
+
+    await page.waitForResponse(response => response.url().includes('/execution/features?projectId=osac'));
+    await expect(page.getByRole('row').filter({ hasText: 'EDM-1002' })).toBeVisible();
+    await expect(page.getByText('TEST1-52', { exact: true })).toHaveCount(0);
+    expect(api.requests.some(request => request.pathname === '/features' && request.projectId === 'flightctl')).toBe(true);
   });
 
-  test('unknown project shows an error and never renders OSAC tabs', async ({ page }) => {
+  test('unknown project shows not found and does not load OSAC Execute data', async ({ page }) => {
+    const api = installExecuteApi(page);
     await page.goto('/#/releases/execute?projectId=unknown');
     await expect(page.getByRole('heading', { name: 'Project not found' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Feature List', exact: true })).toHaveCount(0);
-    await expect(page.getByTestId('execution-release-filter')).toHaveCount(0);
+    await expect(page.locator('nav[aria-label="Execute sub-tabs"]')).toHaveCount(0);
+    expect(api.requests).toEqual([]);
   });
 });

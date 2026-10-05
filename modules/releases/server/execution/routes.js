@@ -21,9 +21,14 @@ const { writeFeatures } = require('./feature-store');
 const { getInvalidPullRequestUrlFields } = require('../../../../shared/server/feature-links');
 const {
   resolveReleaseProject,
-  sendProjectScopeError,
-  unavailableProjectData
+  sendProjectScopeError
 } = require('../project-scope');
+const {
+  resolveExecutionScope,
+  readExecutionIndex,
+  readExecutionDetail,
+  isLegacyInteractiveScope
+} = require('./project-artifacts');
 
 const DATA_PREFIX = 'releases/execution';
 const jsonLimit = express.json({ limit: '10mb' });
@@ -58,6 +63,9 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *     tags: [Releases - Execution]
  *     parameters:
  *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
+ *       - in: query
  *         name: status
  *         schema: { type: string }
  *       - in: query
@@ -84,6 +92,9 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *     summary: Full feature detail
  *     tags: [Releases - Execution]
  *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
  *       - in: path
  *         name: key
  *         required: true
@@ -103,6 +114,10 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *   get:
  *     summary: Data freshness and sync info
  *     tags: [Releases - Execution]
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Status info
@@ -118,6 +133,9 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *       whose tree can surface a Feature as context via such an Epic (see GET /epics).
  *     tags: [Releases - Execution]
  *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
  *       - in: query
  *         name: scope
  *         schema: { type: string, enum: [epics] }
@@ -139,6 +157,9 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *     tags: [Releases - Execution]
  *     parameters:
  *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
+ *       - in: query
  *         name: version
  *         required: true
  *         schema: { type: string }
@@ -147,6 +168,7 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *         description: Features matching the release or included as context, each with its
  *           applicable epics array, its own Jira Components (array, may be empty), and its
  *           Jira Team (string name, or null when unset — Epics carry no Team of their own).
+ *           hierarchy reports the project-wide Epic count and count without a linked Feature.
  *           featureCount is the total number of features returned, including context features.
  *       400:
  *         description: Missing version query parameter
@@ -158,6 +180,10 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *   post:
  *     summary: Trigger manual data refresh (admin only)
  *     tags: [Releases - Execution]
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Refresh result
@@ -171,12 +197,20 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *   get:
  *     summary: Get current fetch configuration (admin only)
  *     tags: [Releases - Execution]
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Config data
  *   post:
  *     summary: Save fetch configuration (admin only)
  *     tags: [Releases - Execution]
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Save result
@@ -189,6 +223,9 @@ function epicDirectlyMatchesVersion(epic, normalizedFilter) {
  *     summary: On-demand single-feature refresh from Jira
  *     tags: [Releases - Execution]
  *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
  *       - in: path
  *         name: key
  *         required: true
@@ -214,9 +251,56 @@ module.exports = function registerExecutionRoutes(router, context) {
   require('./evidence-routes')(router, context);
 
   function selectedProject(req, res) {
-    const selection = resolveReleaseProject(projects, req.query);
+    const queryProjectId = req.query?.projectId;
+    const bodyProjectId = req.body?.projectId;
+    if (queryProjectId && bodyProjectId && queryProjectId !== bodyProjectId) {
+      res.status(400).json({
+        projectId: null,
+        state: 'unavailable',
+        reason: 'project-context-mismatch',
+        error: 'projectId query and body values must match'
+      });
+      return null;
+    }
+    const query = queryProjectId || bodyProjectId
+      ? { ...(req.query || {}), projectId: queryProjectId || bodyProjectId }
+      : req.query;
+    const selection = resolveReleaseProject(projects, query);
     if (sendProjectScopeError(res, selection)) return null;
     return selection;
+  }
+
+  function selectedExecution(req, res) {
+    const selection = selectedProject(req, res);
+    if (!selection) return null;
+    try {
+      const scope = resolveExecutionScope(storage, projects, selection);
+      return { selection, scope, publication: readExecutionIndex(scope) };
+    } catch (error) {
+      const status = error.code === 'PROJECT_NOT_FOUND' ? 404 : error.code === 'PROJECT_SELECTION_REQUIRED' ? 400 : 503;
+      res.status(status).json({
+        projectId: selection.projectId,
+        state: 'unavailable',
+        freshness: 'unknown',
+        partial: true,
+        reason: error.code || 'project-publication-unavailable',
+        error: error.message
+      });
+      return null;
+    }
+  }
+
+  function requireLegacyInteractive(res, scope, action) {
+    if (isLegacyInteractiveScope(scope)) return true;
+    res.status(409).json({
+      projectId: scope.projectId,
+      state: 'unavailable',
+      freshness: 'unknown',
+      partial: false,
+      reason: `${action}-not-configured`,
+      error: `${action} is not configured for this project`
+    });
+    return false;
   }
 
   function readDataFile(relativePath) {
@@ -225,28 +309,19 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /features — list all features with summary metrics
   router.get('/features', requireAuth, requireScope('releases:read'), function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
-    if (selection.projectId !== 'osac') {
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { publication } = selected;
+    if (!publication.ok) {
       return res.json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'release-execution',
-          'Release execution features have not been collected for this project.'
-        ),
+        ...publication.meta,
         featureCount: 0,
-        features: []
-      });
-    }
-    const index = readDataFile('index.json');
-    if (!index || !index.features) {
-      return res.json({
-        fetchedAt: null,
-        featureCount: 0,
+        totalFeatureCount: 0,
         features: [],
-        message: 'No data available. Configure GitLab CI integration in Settings to fetch feature traffic data.'
+        message: publication.meta.message || 'Execute feature inventory is unavailable for this project.'
       });
     }
+    const index = publication.data;
 
     // Optional filters
     let features = index.features;
@@ -283,26 +358,19 @@ module.exports = function registerExecutionRoutes(router, context) {
     });
 
     res.json({
-      fetchedAt: index.fetchedAt,
+      ...publication.meta,
+      fetchedAt: publication.meta.fetchedAt || index.fetchedAt || null,
       featureCount: features.length,
+      totalFeatureCount: index.features.length,
       features
     });
   });
 
   // GET /features/:key — full feature detail
   router.get('/features/:key', requireAuth, requireScope('releases:read'), function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
-    if (selection.projectId !== 'osac') {
-      return res.status(404).json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'release-execution',
-          'Release execution feature details have not been collected for this project.'
-        ),
-        error: `No project-qualified feature detail for ${selection.projectId}`
-      });
-    }
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope, publication } = selected;
     const key = req.params.key.toUpperCase();
 
     // Validate key format (RHAISTRAT in production, TEST* in demo mode)
@@ -310,12 +378,44 @@ module.exports = function registerExecutionRoutes(router, context) {
       return res.status(400).json({ error: 'Invalid feature key format' });
     }
 
-    const feature = readDataFile(`features/${key}.json`);
-    if (!feature) {
+    if (!publication.ok) {
+      // A pre-project OSAC deployment historically served a feature detail
+      // even when its summary index was absent. Retain that narrow adapter;
+      // profile-backed projects still require index membership.
+      const legacyDetail = scope.legacyAdapter
+        ? readExecutionDetail(scope, key, publication)
+        : null;
+      if (legacyDetail?.ok) return res.json({ ...legacyDetail.data, projectId: scope.projectId });
+      return res.json({
+        ...publication.meta,
+        key,
+        state: 'unavailable',
+        epics: [],
+        message: publication.meta.message || 'Feature detail is unavailable for this project.'
+      });
+    }
+    const summary = publication.data.features.find(feature => feature.key === key);
+    if (!summary) {
       return res.status(404).json({ error: `Feature ${key} not found` });
     }
+    const detail = readExecutionDetail(scope, key, publication);
+    if (!detail.ok) {
+      return res.json({
+        ...summary,
+        ...publication.meta,
+        state: 'unavailable',
+        partial: true,
+        detailState: 'unavailable',
+        epics: [],
+        reason: detail.reason || 'feature-detail-unavailable'
+      });
+    }
 
-    res.json(feature);
+    res.json({
+      ...detail.data,
+      ...publication.meta,
+      detailState: 'supported'
+    });
   });
 
   // POST /features/:key/refresh — on-demand single-feature refresh from Jira
@@ -323,31 +423,25 @@ module.exports = function registerExecutionRoutes(router, context) {
   const PER_KEY_COOLDOWN_MS = 60 * 1000;
 
   router.post('/features/:key/refresh', requireAuth, requireScope('releases:read'), async function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
-    if (selection.projectId !== 'osac') {
-      return res.status(409).json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'release-execution',
-          'Release execution refresh is not configured for this project.'
-        ),
-        error: 'Release execution refresh is unavailable for this project'
-      });
-    }
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope, publication } = selected;
+    if (!requireLegacyInteractive(res, scope, 'feature-refresh')) return;
     const key = req.params.key.toUpperCase();
 
     if (!/^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
       return res.status(400).json({ error: 'Invalid feature key format' });
     }
 
-    const existing = readDataFile(`features/${key}.json`);
+    const existsInProject = publication.ok && publication.data.features.some(feature => feature.key === key);
+    const existing = existsInProject ? readDataFile(`features/${key}.json`) : null;
     if (!existing) {
       return res.status(404).json({ error: `Feature ${key} not found` });
     }
 
     // Per-key cooldown
-    const lastRefresh = perKeyLastRefresh.get(key) || 0;
+    const refreshKey = `${scope.projectId}:${key}`;
+    const lastRefresh = perKeyLastRefresh.get(refreshKey) || 0;
     const elapsed = Date.now() - lastRefresh;
     if (lastRefresh > 0 && elapsed < PER_KEY_COOLDOWN_MS) {
       const retryAfter = Math.ceil((PER_KEY_COOLDOWN_MS - elapsed) / 1000);
@@ -367,9 +461,14 @@ module.exports = function registerExecutionRoutes(router, context) {
       const merged = mergeFeatureData(existing, null, jiraData);
 
       await writeFeatures(storage, [merged]);
-      perKeyLastRefresh.set(key, Date.now());
+      perKeyLastRefresh.set(refreshKey, Date.now());
+      logAudit(storage.readFromStorage, storage.writeToStorage, {
+        domain: 'execution', projectId: scope.projectId, action: 'feature_refresh',
+        user: req.userEmail || 'unknown', summary: `Refreshed execution feature ${key}`,
+        details: { key }
+      });
 
-      res.json(merged);
+      res.json({ ...merged, projectId: scope.projectId });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -377,32 +476,32 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /status — data freshness and sync info
   router.get('/status', requireAuth, requireScope('releases:read'), function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
-    if (selection.projectId !== 'osac') {
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope, publication } = selected;
+    const index = publication.ok ? publication.data : null;
+    if (!isLegacyInteractiveScope(scope)) {
       return res.json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'release-execution',
-          'Release execution status is unavailable because this project has no execution collection.'
-        ),
-        dataAvailable: false,
-        schemaVersion: null,
-        featureCount: 0,
-        configured: false,
-        tokenSource: null
+        ...publication.meta,
+        dataAvailable: publication.ok,
+        schemaVersion: index?.schemaVersion || null,
+        featureCount: index?.featureCount ?? index?.features?.length ?? 0,
+        configured: ['supported', 'empty'].includes(scope.capability?.state),
+        dataSource: publication.meta.sourceRefs && Object.keys(publication.meta.sourceRefs).join(', ') || 'project-publication',
+        tokenSource: null,
+        lastFetch: null
       });
     }
-    const index = readDataFile('index.json');
     const lastFetch = readDataFile('last-fetch.json');
     const config = loadConfig(storage);
     const token = getToken();
 
     const result = {
-      dataAvailable: !!index,
-      fetchedAt: index?.fetchedAt || null,
+      ...publication.meta,
+      dataAvailable: publication.ok,
+      fetchedAt: publication.meta.fetchedAt || index?.fetchedAt || null,
       schemaVersion: index?.schemaVersion || null,
-      featureCount: index?.featureCount || 0,
+      featureCount: index?.featureCount ?? index?.features?.length ?? 0,
       dataSource: config.projectPath
         ? `gitlab-ci (${config.projectPath})`
         : 'gitlab-ci',
@@ -468,33 +567,27 @@ module.exports = function registerExecutionRoutes(router, context) {
   // milestones — see /epics), for consumers like Epics by Release that understand
   // Epic-level context membership.
   router.get('/versions', requireAuth, requireScope('releases:read'), function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
-    if (selection.projectId !== 'osac') {
-      return res.json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'release-execution',
-          'Release execution versions have not been collected for this project.'
-        ),
-        versions: []
-      });
-    }
-    const index = readDataFile('index.json');
-    if (!index || !index.features) {
-      return res.json({ versions: [] });
-    }
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope, publication } = selected;
+    if (!publication.ok) return res.json({ ...publication.meta, versions: [] });
+    const index = publication.data;
 
     const includeEpicVersions = req.query.scope === 'epics';
 
     const versions = new Set();
+    let detailUnavailable = false;
     for (const f of index.features) {
       for (const v of (f.fixVersions || [])) {
         versions.add(stripZStream(v));
       }
       if (!includeEpicVersions) continue;
-      const detail = readDataFile(`features/${f.key}.json`);
-      for (const e of ((detail && detail.epics) || [])) {
+      const detail = readExecutionDetail(scope, f.key, publication);
+      if (!detail.ok) {
+        detailUnavailable = true;
+        continue;
+      }
+      for (const e of (detail.data.epics || [])) {
         if (isDirectEpic(e)) {
           for (const v of (e.fixVersions || [])) {
             versions.add(stripZStream(v));
@@ -503,7 +596,12 @@ module.exports = function registerExecutionRoutes(router, context) {
       }
     }
 
-    res.json({ versions: [...versions].sort() });
+    res.json({
+      ...publication.meta,
+      partial: publication.meta.partial || detailUnavailable,
+      versionCoverage: includeEpicVersions && detailUnavailable ? 'partial' : 'complete',
+      versions: [...versions].sort()
+    });
   });
 
   // GET /epics — Release → Feature → Epics tree.
@@ -514,38 +612,32 @@ module.exports = function registerExecutionRoutes(router, context) {
   // the selected version — its true Fix Version is preserved (never relabeled), and only
   // the directly-matching Epic(s) are shown under it, not its full Epic list.
   router.get('/epics', requireAuth, requireScope('releases:read'), function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope, publication } = selected;
     const version = req.query.version;
     if (!version) {
       return res.status(400).json({ error: 'version query parameter is required' });
     }
 
-    if (selection.projectId !== 'osac') {
-      return res.json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'release-execution',
-          'Release execution epics have not been collected for this project.'
-        ),
-        version,
-        featureCount: 0,
-        features: []
-      });
-    }
-
-    const index = readDataFile('index.json');
-    if (!index || !index.features) {
-      return res.json({ version, fetchedAt: null, featureCount: 0, features: [] });
-    }
+    if (!publication.ok) return res.json({
+      ...publication.meta,
+      version,
+      featureCount: 0,
+      hierarchy: null,
+      features: []
+    });
+    const index = publication.data;
 
     const normalizedFilter = stripZStream(version);
     const matching = index.features.filter(f => matchesVersion(f, normalizedFilter));
     const matchedKeys = new Set(matching.map(f => f.key));
+    let detailUnavailable = false;
 
     const features = matching.map(function(entry) {
-      const detail = readDataFile(`features/${entry.key}.json`);
-      const epics = (detail && detail.epics) || [];
+      const detail = readExecutionDetail(scope, entry.key, publication);
+      if (!detail.ok) detailUnavailable = true;
+      const epics = detail.ok ? (detail.data.epics || []) : [];
       return {
         key: entry.key,
         summary: entry.summary,
@@ -554,16 +646,22 @@ module.exports = function registerExecutionRoutes(router, context) {
         fixVersions: entry.fixVersions || [],
         components: entry.components || [],
         team: entry.team || null,
+        coverage: entry.coverage || null,
         isContext: false,
-        totalEpicCount: epics.length,
+        detailState: detail.ok ? 'supported' : 'unavailable',
+        totalEpicCount: detail.ok ? epics.length : null,
         epics
       };
     });
 
     index.features.forEach(function(entry) {
       if (matchedKeys.has(entry.key)) return;
-      const detail = readDataFile(`features/${entry.key}.json`);
-      const allEpics = (detail && detail.epics) || [];
+      const detail = readExecutionDetail(scope, entry.key, publication);
+      if (!detail.ok) {
+        detailUnavailable = true;
+        return;
+      }
+      const allEpics = detail.data.epics || [];
       const directEpics = allEpics.filter(e => epicDirectlyMatchesVersion(e, normalizedFilter));
       if (directEpics.length === 0) return;
       features.push({
@@ -574,7 +672,9 @@ module.exports = function registerExecutionRoutes(router, context) {
         fixVersions: entry.fixVersions || [],
         components: entry.components || [],
         team: entry.team || null,
+        coverage: entry.coverage || null,
         isContext: true,
+        detailState: 'supported',
         totalEpicCount: allEpics.length,
         epics: directEpics
       });
@@ -584,8 +684,12 @@ module.exports = function registerExecutionRoutes(router, context) {
     // features surfaced solely via a directly-versioned child Epic — not just Features
     // whose own Fix Version matched. See isContext on each feature to distinguish them.
     res.json({
+      ...publication.meta,
+      partial: publication.meta.partial || detailUnavailable,
+      hierarchyCoverage: detailUnavailable ? 'partial' : 'complete',
+      hierarchy: index.hierarchy || null,
       version,
-      fetchedAt: index.fetchedAt,
+      fetchedAt: publication.meta.fetchedAt || index.fetchedAt || null,
       featureCount: features.length,
       features
     });
@@ -593,18 +697,10 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // POST /refresh — trigger manual data refresh (admin only)
   router.post('/refresh', context.requireAdmin, requireScope('releases:write'), async function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
-    if (selection.projectId !== 'osac') {
-      return res.status(409).json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'release-execution',
-          'Release execution refresh is not configured for this project.'
-        ),
-        error: 'Release execution refresh is unavailable for this project'
-      });
-    }
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope } = selected;
+    if (!requireLegacyInteractive(res, scope, 'manual-refresh')) return;
     if (context.isRefreshRunning && context.isRefreshRunning()) {
       return res.status(409).json({ status: 'error', message: 'A global refresh is already in progress' });
     }
@@ -615,6 +711,7 @@ module.exports = function registerExecutionRoutes(router, context) {
       }
       logAudit(storage.readFromStorage, storage.writeToStorage, {
         domain: 'execution',
+        projectId: scope.projectId,
         action: 'manual_refresh',
         user: req.userEmail || 'unknown',
         summary: 'Manual execution data refresh: ' + (result.status || 'unknown'),
@@ -628,17 +725,12 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // GET /config — get current fetch configuration (admin only)
   router.get('/config', context.requireAdmin, requireScope('releases:write'), function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
-    if (selection.projectId !== 'osac') {
-      return res.status(404).json(unavailableProjectData(
-        selection.projectId,
-        'release-execution',
-        'Release execution configuration is not defined for this project.'
-      ));
-    }
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    if (!requireLegacyInteractive(res, selected.scope, 'execution-config')) return;
     const config = loadConfig(storage);
     res.json({
+      projectId: selected.scope.projectId,
       ...config,
       tokenConfigured: !!getToken(),
       tokenSource: getTokenSource()
@@ -647,22 +739,15 @@ module.exports = function registerExecutionRoutes(router, context) {
 
   // POST /config — save fetch configuration (admin only)
   router.post('/config', context.requireAdmin, requireScope('releases:write'), async function(req, res) {
-    const selection = selectedProject(req, res);
-    if (!selection) return;
-    if (selection.projectId !== 'osac') {
-      return res.status(409).json({
-        ...unavailableProjectData(
-          selection.projectId,
-          'release-execution',
-          'Release execution configuration is not defined for this project.'
-        ),
-        error: 'Release execution configuration is unavailable for this project'
-      });
-    }
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope } = selected;
+    if (!requireLegacyInteractive(res, scope, 'execution-config')) return;
     try {
       const result = await onConfigSave(storage, req.body);
       logAudit(storage.readFromStorage, storage.writeToStorage, {
         domain: 'execution',
+        projectId: scope.projectId,
         action: 'config_save',
         user: req.userEmail || 'unknown',
         summary: 'Updated execution fetch configuration',
@@ -697,13 +782,18 @@ module.exports = function registerExecutionRoutes(router, context) {
    *                 items:
    *                   type: object
    *                   properties:
-   *                     key: { type: string }
-   *                     aiReview: { type: object }
+ *                     key: { type: string }
+ *                     aiReview: { type: object }
+ *               projectId: { type: string }
    *     responses:
    *       200:
    *         description: Upsert results with created/updated/unchanged counts
    */
   router.post('/ai-review/bulk', context.requireAdmin, requireScope('releases:write'), jsonLimit, async function(req, res) {
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope } = selected;
+    if (!requireLegacyInteractive(res, scope, 'ai-review-edit')) return;
     const { features } = req.body;
     if (!Array.isArray(features)) {
       return res.status(400).json({ error: 'features must be an array' });
@@ -757,6 +847,12 @@ module.exports = function registerExecutionRoutes(router, context) {
         await writeFeatures(storage, toWrite);
       }
 
+      logAudit(storage.readFromStorage, storage.writeToStorage, {
+        domain: 'execution', projectId: scope.projectId, action: 'ai_review_bulk',
+        user: req.userEmail || 'unknown', summary: `Updated AI review data for ${toWrite.length} features`,
+        details: counts
+      });
+
       res.json(counts);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -767,13 +863,25 @@ module.exports = function registerExecutionRoutes(router, context) {
    * @openapi
    * /api/modules/releases/execution/ai-review:
    *   delete:
-   *     summary: Remove AI review data from all features (async)
-   *     tags: [Releases - Execution]
+ *     summary: Remove AI review data from all features (async)
+ *     tags: [Releases - Execution]
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         schema: { type: string }
    *     responses:
    *       200:
    *         description: Deletion started
    */
   router.delete('/ai-review', context.requireAdmin, requireScope('releases:write'), function(req, res) {
+    const selected = selectedExecution(req, res);
+    if (!selected) return;
+    const { scope } = selected;
+    if (!requireLegacyInteractive(res, scope, 'ai-review-edit')) return;
+    logAudit(storage.readFromStorage, storage.writeToStorage, {
+      domain: 'execution', projectId: scope.projectId, action: 'ai_review_delete',
+      user: req.userEmail || 'unknown', summary: 'Started AI review data removal from the OSAC feature store'
+    });
     res.json({ status: 'started', message: 'AI review data removal started' });
 
     // Process in background

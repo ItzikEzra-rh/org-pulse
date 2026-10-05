@@ -95,22 +95,46 @@ test.describe('Project onboarding @project-onboarding', () => {
     expect((registryBody?.releases || []).some((release) => String(release.id || '').startsWith('flightctl-'))).toBe(true);
   });
 
-  test('Releases Execute displays project-qualified Flight Control evidence', async ({ page }) => {
-    const response = page.waitForResponse(response => response.url().includes('/api/modules/releases/execution/evidence?projectId=flightctl'));
+  test('Releases Execute keeps the shared OSAC tabs for Flight Control', async ({ page }) => {
+    const response = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith('/api/modules/releases/execution/features') &&
+        url.searchParams.get('projectId') === FLIGHTCTL;
+    });
     await page.goto(`/#/releases/execute?projectId=${FLIGHTCTL}`);
     const result = await response;
     expect(result.status()).toBe(200);
     const body = await result.json();
     expect(body.projectId).toBe(FLIGHTCTL);
-    await expect(page.getByTestId('project-execution-evidence')).toBeVisible();
-    if (['supported', 'empty'].includes(body.state)) {
-      expect(body.data.projectId).toBe(FLIGHTCTL);
-      await expect(page.getByTestId('execution-release-filter')).toBeVisible();
-      if (body.partial) await expect(page.getByText(/Partial coverage:/)).toBeVisible();
-    } else {
-      await expect(page.getByTestId('execution-release-filter')).toHaveCount(0);
-    }
-    expect(await page.locator('text=/OSAC-\\d+/').count()).toBe(0);
+    expect(body.features.some(feature => feature.key.startsWith('EDM-'))).toBe(true);
+    const tabs = page.locator('nav[aria-label="Execute sub-tabs"] button');
+    await expect(tabs).toHaveText(['Feature List', 'Feature Tracking', 'Epics by Release']);
+    await expect(page.getByTestId('project-execution-evidence')).toHaveCount(0);
+    await expect(page.getByText(/No compatible pipeline execution producer is configured/)).toBeVisible();
+
+    const trackingResponse = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith('/api/modules/releases/execution/tracking/releases') &&
+        url.searchParams.get('projectId') === FLIGHTCTL;
+    });
+    await page.getByRole('button', { name: 'Feature Tracking', exact: true }).click();
+    expect((await trackingResponse).status()).toBe(200);
+    await expect(page.getByText(/scope-baseline policy is not configured/i)).toBeVisible();
+
+    const versionResponse = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith('/api/modules/releases/execution/versions') &&
+        url.searchParams.get('projectId') === FLIGHTCTL && url.searchParams.get('scope') === 'epics';
+    });
+    const treeResponse = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith('/api/modules/releases/execution/epics') &&
+        url.searchParams.get('projectId') === FLIGHTCTL;
+    });
+    await page.getByRole('button', { name: 'Epics by Release', exact: true }).click();
+    expect((await versionResponse).status()).toBe(200);
+    expect((await treeResponse).status()).toBe(200);
+    await expect(page.getByRole('heading', { name: 'Epics by Release' })).toBeVisible();
   });
 
   test('Jira Hygiene shows only the configured EDM baseline for Flight Control', async ({ page }) => {

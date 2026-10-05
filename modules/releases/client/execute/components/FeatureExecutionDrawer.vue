@@ -179,6 +179,11 @@ const completedViaStatusEpicCount = computed(() =>
                 <dt class="text-gray-400 dark:text-gray-500">Assignee</dt>
                 <dd class="text-gray-700 dark:text-gray-300">{{ card.feature.assignee || 'Unassigned' }}</dd>
 
+                <dt class="text-gray-400 dark:text-gray-500">Team</dt>
+                <dd class="text-gray-700 dark:text-gray-300">
+                  {{ card.feature.coverage?.team === 'unknown' || card.feature.coverage?.team === 'unavailable' ? 'Unknown' : (card.feature.team || 'Unassigned') }}
+                </dd>
+
                 <dt class="text-gray-400 dark:text-gray-500 self-start">Components</dt>
                 <dd>
                   <div v-if="(card.feature.components || []).length" class="flex flex-wrap gap-1">
@@ -219,11 +224,13 @@ const completedViaStatusEpicCount = computed(() =>
                 <dd class="text-gray-700 dark:text-gray-300">{{ card.feature.epicCount }}</dd>
 
                 <dt class="text-gray-400 dark:text-gray-500" title="Total tracked child issues, including recognized planning">Total issues</dt>
-                <dd class="text-gray-700 dark:text-gray-300">{{ card.feature.issueCount }}</dd>
+                <dd class="text-gray-700 dark:text-gray-300">{{ isValidProgressCount(card.feature.issueCount) ? card.feature.issueCount : 'Unknown' }}</dd>
 
-                <template v-if="card.feature.blockerCount > 0">
+                <template v-if="!isValidProgressCount(card.feature.blockerCount) || card.feature.blockerCount > 0">
                   <dt class="text-gray-400 dark:text-gray-500">Blockers</dt>
-                  <dd class="text-amber-600 dark:text-amber-400 font-semibold">{{ card.feature.blockerCount }}</dd>
+                  <dd :class="isValidProgressCount(card.feature.blockerCount) ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-500 dark:text-gray-400'">
+                    {{ isValidProgressCount(card.feature.blockerCount) ? card.feature.blockerCount : 'Unknown' }}
+                  </dd>
                 </template>
               </dl>
             </section>

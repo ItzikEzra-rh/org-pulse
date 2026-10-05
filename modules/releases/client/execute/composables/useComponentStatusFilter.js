@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 export const UNASSIGNED_COMPONENT = 'Unassigned'
 export const UNKNOWN_STATUS = 'Unknown'
 export const UNASSIGNED_TEAM = 'Unassigned'
+export const UNKNOWN_TEAM = 'Unknown'
 // Internal sentinel, not the literal "Unassigned" — a person's displayName could collide with that string.
 export const UNASSIGNED_ASSIGNEE = '__unassigned__'
 
@@ -54,15 +55,22 @@ export function matchesStatus(status, selected) {
 export function collectTeamOptions(items, getTeam) {
   const set = new Set()
   for (const item of items) {
-    set.add(getTeam(item) || UNASSIGNED_TEAM)
+    const mapped = getTeam ? getTeam(item) : null
+    set.add(mapped || teamFilterValue(item))
   }
   const sorted = [...set].filter(t => t !== UNASSIGNED_TEAM).sort()
   if (set.has(UNASSIGNED_TEAM)) sorted.push(UNASSIGNED_TEAM)
   return sorted
 }
 
-export function matchesTeam(team, selected) {
+export function teamFilterValue(item) {
+  if (item?.coverage?.team === 'unknown' || item?.coverage?.team === 'unavailable') return UNKNOWN_TEAM
+  return item?.team || UNASSIGNED_TEAM
+}
+
+export function matchesTeam(team, selected, coverage) {
   if (!selected || selected.length === 0) return true
+  if (coverage === 'unknown' || coverage === 'unavailable') return selected.includes(UNKNOWN_TEAM)
   return selected.includes(team || UNASSIGNED_TEAM)
 }
 

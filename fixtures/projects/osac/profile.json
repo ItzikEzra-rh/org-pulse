@@ -223,11 +223,73 @@
         "resultsArtifactKey": "releases/hygiene/project-hygiene-results.json",
         "configArtifactKey": "releases/hygiene/project-hygiene-config.json"
       }
+    },
+    "execute": {
+      "state": "supported",
+      "artifactKey": "releases/execution/index.json",
+      "legacyFallback": true
     }
   },
+  "execution": {
+    "schemaVersion": 1,
+    "inventory": {
+      "source": "legacy-feature-store",
+      "indexArtifact": "releases/execution/index.json",
+      "detailPrefix": "releases/execution/features/"
+    },
+    "featureIssueTypes": [
+      "Feature"
+    ],
+    "epicIssueTypes": [
+      "Epic"
+    ],
+    "hierarchy": {
+      "epicParentField": "parentKey",
+      "epicChildParentField": "parentKey"
+    },
+    "fieldMappings": {
+      "team": "customfield_10001"
+    },
+    "versionAttribution": {
+      "feature": "direct",
+      "epic": "direct"
+    },
+    "metrics": {
+      "producer": "legacy-feature-store",
+      "authority": "OSAC pipeline/Jira merge rules in feature-store.js",
+      "preserveFields": [
+        "metrics",
+        "topology",
+        "trafficSignals",
+        "statusNotes",
+        "aiReview"
+      ]
+    },
+    "scopeBaseline": {
+      "policy": "jira-changelog",
+      "outputDir": "releases/execution",
+      "registryPath": "releases/registry.json",
+      "baselineConfigPath": "releases/execution/feature-tracking-config.json",
+      "defaultOffsetDays": 7,
+      "changeClassification": "committed-added-dropped-moved-unknown"
+    },
+    "readiness": {
+      "policy": "legacy-feature-store"
+    },
+    "traceability": {
+      "sourceArtifact": "sources/traceability/joins.json",
+      "joinKey": "jiraKey",
+      "role": "delivery"
+    },
+    "aiReview": {
+      "source": "legacy-feature-store",
+      "markerRequired": true
+    }
+  },
+  "executeRevision": "50521dcc3d4a9386",
   "provenance": {
     "configPath": "config/projects/osac.json",
     "repositoryRevision": null,
-    "publishedAt": "2026-10-05T10:48:17.487966Z"
+    "publishedAt": "2026-10-05T13:03:50.749082Z"
   }
 }

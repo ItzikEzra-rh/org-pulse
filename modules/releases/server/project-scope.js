@@ -10,6 +10,24 @@ function resolveReleaseProject(projects, query) {
   if (selection.status && !projects && query?.projectId === 'osac') {
     return { provided: true, projectId: 'osac', legacy: true }
   }
+  if (selection.status) return selection
+
+  // Explicit project selection is valid only when the project is part of the
+  // published, revision-checked index. A loose profile file must not make an
+  // unpublished project look selectable.
+  if (selection.provided && projects && typeof projects.list === 'function') {
+    try {
+      const profiles = projects.list()
+      if (!Array.isArray(profiles)) {
+        return { provided: true, status: 503, error: 'Project profiles cannot be listed' }
+      }
+      const profile = profiles.find(item => item.projectId === selection.projectId)
+      if (!profile) return { provided: true, status: 404, error: 'Unknown project' }
+      return { ...selection, profile }
+    } catch (error) {
+      return { provided: true, status: 503, error: error.message || 'Project profiles are unavailable' }
+    }
+  }
   if (selection.status || selection.provided) return selection
 
   if (!projects) {

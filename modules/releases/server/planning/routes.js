@@ -24,6 +24,7 @@ const { validateBigRock } = require('./validation')
 const { getOutcomeSummaries } = require('./outcome-fetch')
 const { previewDocImport, executeDocImport } = require('./doc-import')
 const { logAudit, getAuditLog, computeFieldDiff } = require('./audit-log')
+const { resolveReleaseProject, sendProjectScopeError } = require('../project-scope')
 const { blockDuringImpersonation } = require('../../../../shared/server/auth')
 const healthRoutes = require('./health/health-routes')
 var { buildFeatureReadiness } = require('./feature-readiness')
@@ -280,9 +281,12 @@ module.exports = function registerPlanningRoutes(router, context) {
    *   get:
    *     summary: Get pipeline candidates for a release version
    *     tags: [releases-planning]
-   *     security: [{ bearerAuth: [] }]
-   *     parameters:
-   *       - name: version
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - name: projectId
+ *         in: query
+ *         schema: { type: string }
+ *       - name: version
    *         in: path
    *         required: true
    *         schema: { type: string }
@@ -1347,6 +1351,8 @@ module.exports = function registerPlanningRoutes(router, context) {
    *         description: Audit log entries
    */
   router.get('/audit-log', requireAuth, requireScope('releases:read'), function(req, res) {
+    const selection = resolveReleaseProject(context.projects || null, req.query)
+    if (sendProjectScopeError(res, selection)) return
     const version = req.query.version || null
     const action = req.query.action || null
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 500)
@@ -1355,11 +1361,12 @@ module.exports = function registerPlanningRoutes(router, context) {
     const result = getAuditLog(readFromStorage, {
       version: version,
       action: action,
+      projectId: selection.projectId,
       limit: limit,
       offset: offset
     })
 
-    res.json(result)
+    res.json({ ...result, projectId: selection.projectId })
   })
 
   // Diagnostics

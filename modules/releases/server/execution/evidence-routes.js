@@ -4,42 +4,6 @@ const { resolveReleaseProject, sendProjectScopeError, unavailableProjectData } =
 module.exports = function registerExecutionEvidenceRoutes(router, context) {
   /**
    * @openapi
-   * /api/modules/releases/execution/presentation:
-   *   get:
-   *     summary: Read the selected profile's execution presentation capability
-   *     tags: [Releases]
-   *     parameters:
-   *       - in: query
-   *         name: projectId
-   *         schema:
-   *           type: string
-   *     responses:
-   *       200:
-   *         description: Project-qualified execution view and capability state
-   *       400:
-   *         description: Project selection required or invalid
-   *       404:
-   *         description: Unknown project
-   */
-  router.get('/presentation', context.requireAuth, context.requireScope('releases:read'), (req, res) => {
-    const selection = resolveReleaseProject(context.projects, req.query);
-    if (sendProjectScopeError(res, selection)) return;
-    // Compatibility for installs without published profiles. Multi-project
-    // installs must declare their presentation in the selected profile.
-    const capability = selection.profile?.capabilities?.releaseExecution;
-    const view = selection.legacy ? 'feature-execution' : capability?.view || (capability?.artifactKey ? 'release-evidence' : null);
-    const supportedView = ['feature-execution', 'release-evidence'].includes(view);
-    return res.json({
-      projectId: selection.projectId,
-      projectDisplayName: selection.profile?.displayName || selection.projectId,
-      state: selection.legacy ? 'supported' : supportedView ? capability?.state || 'unavailable' : 'unavailable',
-      view: supportedView ? view : null,
-      message: capability?.reason || (!supportedView ? 'Execution presentation is not configured for this project.' : null)
-    });
-  });
-
-  /**
-   * @openapi
    * /api/modules/releases/execution/evidence:
    *   get:
    *     summary: Read project-qualified bounded release execution evidence

@@ -131,6 +131,95 @@ describe('OverviewView (Feature List)', () => {
     expect(wrapper.text()).not.toMatch(/OSAC-\d+/)
   })
 
+  it('shows Flight Control inventory and keeps unsupported metrics, readiness, and blocker filtering Unknown', async () => {
+    setProjectId('flightctl')
+    mockApiRequest.mockImplementation((url) => {
+      if (url.includes('/versions')) return Promise.resolve({ projectId: 'flightctl', versions: [] })
+      return Promise.resolve({
+        projectId: 'flightctl',
+        state: 'supported',
+        partial: false,
+        features: [{
+          key: 'EDM-100', summary: 'Jira inventory item', status: 'Closed', statusCategory: 'Done',
+          fixVersions: ['0.10.0'], components: ['FlightCtl-Core'], labels: [], epicCount: 2,
+          issueCount: null, blockerCount: null, completionPct: null, health: null,
+          executionIssueCount: null, doneExecutionIssueCount: null, executionState: 'unavailable',
+          executionCoverage: 'unavailable', executionCoverageReason: 'no-compatible-feature-producer',
+          preparationReadiness: 'unknown', team: null,
+          coverage: { team: 'unknown', pipelineMetrics: 'unavailable', featureReadiness: 'unconfigured' }
+        }],
+        featureCount: 1
+      })
+    })
+
+    const wrapper = mount(OverviewView, {
+      global: { provide: { moduleNav: mockNav() }, stubs: { Teleport: true, Transition: true } }
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No compatible pipeline execution producer is configured.')
+    expect(wrapper.text()).toContain('does not establish execution progress or release readiness')
+    expect(wrapper.text()).toContain('Blockers only (Unknown)')
+    expect(wrapper.find('input[type="checkbox"]').element.disabled).toBe(true)
+    expect(wrapper.text()).toContain('Without progress data:')
+
+    const coverageButton = wrapper.findAll('button').find(button => button.text().includes('Without progress data'))
+    await coverageButton.trigger('click')
+    expect(wrapper.text()).toContain('EDM-100')
+    expect(wrapper.text()).toContain('Total issues')
+    expect(wrapper.text()).toContain('Unknown')
+    expect(wrapper.text()).toContain('No compatible execution producer')
+  })
+
+  it('keeps filter state project-qualified and discards a late OSAC response after switching projects', async () => {
+    const filterState = (searchQuery) => JSON.stringify({
+      selectedVersions: [], selectedExecutionStates: [], selectedComponents: [], selectedStatuses: [],
+      selectedAssignees: [], attentionBlockersOnly: false, searchQuery, viewMode: 'list'
+    })
+    sessionStorage.setItem('releases:feature-list-filters', filterState('OSAC'))
+    sessionStorage.setItem('releases:feature-list-filters:flightctl', filterState('Flight'))
+
+    let resolveOsac
+    mockApiRequest.mockImplementation((url) => {
+      if (url.includes('/versions')) return Promise.resolve({ versions: [] })
+      if (url.includes('projectId=osac')) {
+        return new Promise(resolve => { resolveOsac = resolve })
+      }
+      return Promise.resolve({
+        projectId: 'flightctl',
+        state: 'supported',
+        features: [{
+          key: 'EDM-1', summary: 'Flightctl feature', status: 'To Do', statusCategory: 'To Do',
+          fixVersions: [], components: [], labels: [], epicCount: 0, issueCount: null, blockerCount: null,
+          executionState: 'unavailable', executionCoverage: 'unavailable',
+          executionCoverageReason: 'no-compatible-feature-producer', preparationReadiness: 'unknown',
+          coverage: { team: 'unknown', pipelineMetrics: 'unavailable' }
+        }],
+        featureCount: 1
+      })
+    })
+
+    setProjectId('osac')
+    const wrapper = mount(OverviewView, {
+      global: { provide: { moduleNav: mockNav() }, stubs: { Teleport: true, Transition: true } }
+    })
+    await flushPromises()
+    expect(wrapper.get('#feature-search').element.value).toBe('OSAC')
+
+    setProjectId('flightctl')
+    await flushPromises()
+    expect(wrapper.get('#feature-search').element.value).toBe('Flight')
+    expect(JSON.parse(sessionStorage.getItem('releases:feature-list-filters')).searchQuery).toBe('OSAC')
+    expect(wrapper.text()).toContain('EDM-1')
+    expect(wrapper.text()).not.toContain('OSAC-1')
+    expect(mockApiRequest).toHaveBeenCalledWith(expect.stringContaining('projectId=flightctl'))
+
+    resolveOsac({ features: [{ key: 'OSAC-1', summary: 'Late OSAC result' }], featureCount: 1 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('EDM-1')
+    expect(wrapper.text()).not.toContain('OSAC-1')
+  })
+
   it('defaults to Board view with three execution columns plus a separate coverage total, losing no features', async () => {
     const { wrapper } = await mountWithData()
 

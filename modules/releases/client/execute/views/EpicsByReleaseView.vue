@@ -8,6 +8,7 @@ import {
   collectComponentOptions,
   collectStatusOptions,
   collectTeamOptions,
+  teamFilterValue,
   collectAssigneeOptions,
   matchesComponents,
   matchesStatus,
@@ -20,7 +21,7 @@ import ComponentStatusFilterBar from '../components/ComponentStatusFilterBar.vue
 
 const { versions, state: versionState, message: versionMessage, loadVersions } = useVersions()
 const projectId = useProjectId()
-const { features, fetchedAt, loading, error, loadEpicsByRelease } = useEpicsByRelease()
+const { features, hierarchy, fetchedAt, loading, error, state: treeState, message: treeMessage, loadEpicsByRelease } = useEpicsByRelease()
 const {
   selectedComponents,
   selectedStatuses,
@@ -72,7 +73,7 @@ const statusOptions = computed(() => {
 
 // Team lives only on the Feature (the generated contract has no per-Epic Team), so
 // options are sourced from Features alone rather than the Feature+Epic union above.
-const teamOptions = computed(() => collectTeamOptions(features.value, f => f.team))
+const teamOptions = computed(() => collectTeamOptions(features.value, teamFilterValue))
 
 // Assignee is the direct epic.assignee only — no Feature-level assignee exists, so
 // options are sourced from Epics alone (never the Feature, never a rollup).
@@ -93,7 +94,7 @@ const filteredFeatures = computed(() => {
   }
   const result = []
   for (const feature of features.value) {
-    if (!matchesTeam(feature.team, selectedTeams.value)) continue
+    if (!matchesTeam(feature.team, selectedTeams.value, feature.coverage?.team)) continue
     const matchingEpics = feature.epics.filter(e =>
       matchesComponents(e.components, selectedComponents.value) &&
       matchesStatus(e.status, selectedStatuses.value) &&
@@ -137,11 +138,33 @@ watch(projectId, async () => {
 <template>
   <div class="space-y-6">
     <div
-      v-if="versionState === 'unavailable'"
+      v-if="versionState && !['supported', 'empty'].includes(versionState)"
       role="status"
       class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 text-sm text-gray-600 dark:text-gray-300"
     >
       {{ versionMessage || 'Release execution versions have not been collected for this project.' }}
+    </div>
+
+    <div
+      v-if="treeState && !['supported', 'empty'].includes(treeState) && features.length > 0"
+      role="status"
+      class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-300"
+    >
+      {{ treeMessage || 'The release hierarchy is partial or unavailable; review the visible details before interpreting it.' }}
+    </div>
+
+    <div
+      v-if="treeState && selectedVersion && (!hierarchy || !Number.isFinite(hierarchy.epicCount) || !Number.isFinite(hierarchy.unparentedEpicCount) || hierarchy.unparentedEpicCount > 0)"
+      role="status"
+      class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-300"
+    >
+      <template v-if="hierarchy">
+        Project inventory: {{ Number.isFinite(hierarchy.epicCount) ? hierarchy.epicCount : 'Unknown' }} Jira Epics observed;
+        Epics without a linked Feature: {{ Number.isFinite(hierarchy.unparentedEpicCount) ? hierarchy.unparentedEpicCount : 'Unknown' }} (not shown in the tree).
+      </template>
+      <template v-else>
+        Project-wide Jira Epic inventory and parent relationships are Unknown.
+      </template>
     </div>
 
     <!-- Header -->
@@ -205,7 +228,7 @@ watch(projectId, async () => {
       </div>
 
       <div v-else-if="features.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
-        No Features found for release {{ selectedVersion }}.
+        {{ treeState && !['supported', 'empty'].includes(treeState) ? (treeMessage || 'Release hierarchy unavailable.') : `No Features found for release ${selectedVersion}.` }}
       </div>
 
       <div v-else-if="filteredFeatures.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
@@ -241,6 +264,11 @@ watch(projectId, async () => {
                 class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400"
                 :title="feature.isContext ? 'Feature\'s real Fix Version — not relabeled to ' + selectedVersion : undefined"
               >{{ v }}</span>
+              <span
+                v-if="feature.coverage?.team === 'unknown'"
+                class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                title="Jira team attribution is not available for this project"
+              >Team: Unknown</span>
             </div>
           </div>
 
@@ -251,7 +279,10 @@ watch(projectId, async () => {
             <span v-if="isFiltered && feature.epics.length !== feature.directEpicCount">{{ feature.epics.length }} shown after filters.</span>
           </div>
 
-          <div class="p-3">
+          <div v-if="feature.detailState === 'unavailable'" class="p-3 text-sm italic text-gray-500 dark:text-gray-400">
+            Epic hierarchy unavailable for this feature.
+          </div>
+          <div v-else class="p-3">
             <EpicBreakdown :epics="feature.epics" show-provenance />
           </div>
         </div>

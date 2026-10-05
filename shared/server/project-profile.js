@@ -173,6 +173,27 @@ function normalizeProjectProfile(profile) {
     throw new Error(`project profile contains duplicate team IDs: ${projectId}`)
   }
 
+  const executeRevision = profile.executeRevision === undefined || profile.executeRevision === null
+    ? null
+    : normalizeString(profile.executeRevision, 'executeRevision')
+  if (executeRevision !== null && !/^[0-9a-f]{16}$/.test(executeRevision)) {
+    throw new Error(`executeRevision must be a 16-character lowercase hex digest: ${projectId}`)
+  }
+  const execution = profile.execution && typeof profile.execution === 'object'
+    ? clone(profile.execution)
+    : null
+  if (execution && execution.schemaVersion !== undefined && execution.schemaVersion !== 1) {
+    throw new Error(`unsupported Execute profile schemaVersion: ${execution.schemaVersion}`)
+  }
+  const executeCapability = profile.capabilities?.execute
+  if (executeCapability !== undefined && (!executeCapability || typeof executeCapability !== 'object' || Array.isArray(executeCapability))) {
+    throw new Error(`capabilities.execute must be an object: ${projectId}`)
+  }
+  if (executeCapability?.state === 'supported'
+      && (executeCapability.artifactKey !== 'releases/execution/index.json' || !executeRevision)) {
+    throw new Error(`supported Execute capability must declare its artifact and revision: ${projectId}`)
+  }
+
   return deepFreeze({
     schemaVersion: profile.schemaVersion || PROFILE_SCHEMA_VERSION,
     profileRevision: normalizeString(profile.profileRevision || 'unversioned', 'profileRevision'),
@@ -190,6 +211,8 @@ function normalizeProjectProfile(profile) {
     capabilities: profile.capabilities && typeof profile.capabilities === 'object'
       ? clone(profile.capabilities)
       : {},
+    execution,
+    executeRevision,
     provenance: profile.provenance && typeof profile.provenance === 'object'
       ? clone(profile.provenance)
       : null
@@ -318,6 +341,10 @@ function createProjectProfileReader(storage) {
       if (entry.profileKey !== `projects/${projectId}/profile.json`) {
         throw new ProjectProfileIndexError(`Published project index profileKey is invalid: ${projectId}`)
       }
+      if (entry.executeRevision !== undefined
+          && (typeof entry.executeRevision !== 'string' || !/^[0-9a-f]{16}$/.test(entry.executeRevision))) {
+        throw new ProjectProfileIndexError(`Published project index executeRevision is missing or invalid: ${projectId}`)
+      }
       if (seenProjectIds.has(projectId)) {
         throw new ProjectProfileIndexError(`Duplicate project ID in published project index: ${projectId}`)
       }
@@ -340,6 +367,9 @@ function createProjectProfileReader(storage) {
       }
       if (entry.displayName !== profile.displayName) {
         throw new ProjectProfileIndexError(`Published project profile display name does not match the index: ${projectId}`, 'PROJECT_PROFILE_DISPLAY_NAME_MISMATCH')
+      }
+      if ((entry.executeRevision || null) !== (profile.executeRevision || null)) {
+        throw new ProjectProfileIndexError(`Published project Execute revision does not match the index: ${projectId}`, 'PROJECT_EXECUTE_REVISION_MISMATCH')
       }
       return profile
     })

@@ -30,6 +30,69 @@ function makeStorage(data = {}) {
   }
 }
 
+function makeProjectPublication({ detailGenerationId = 'flightctl-generation-1' } = {}) {
+  const profile = {
+    schemaVersion: 1,
+    profileRevision: '1111111111111111',
+    executeRevision: '2222222222222222',
+    projectId: 'flightctl',
+    displayName: 'Flight Control',
+    jiraProjectKey: 'EDM',
+    jiraProjectName: 'Flight Control',
+    repositories: [],
+    capabilities: { execute: { state: 'supported', artifactKey: 'releases/execution/index.json' } }
+  }
+  const generationId = 'flightctl-generation-1'
+  const root = `projects/flightctl/generations/${generationId}`
+  const envelope = (artifactKey, data, id = generationId) => ({
+    schemaVersion: 1,
+    projectId: 'flightctl',
+    profileRevision: profile.profileRevision,
+    executeRevision: profile.executeRevision,
+    generationId: id,
+    artifactKey,
+    state: 'supported',
+    freshness: 'fresh',
+    partial: false,
+    data
+  })
+  const feature = { key: 'EDM-100', summary: 'Real Flight Control feature', team: null, issueCount: null }
+  const detail = {
+    ...feature,
+    epics: [{ key: 'EDM-200', summary: 'Real Flight Control epic', parentFeatureKey: 'EDM-100', issues: [] }]
+  }
+  const releaseId = 'MVP Q1CY25'
+  const trackingKey = 'releases/execution/tracking-data-MVP%20Q1CY25.json'
+  const tracking = { releaseId, features: [{ key: 'EDM-100', summary: 'Real Flight Control feature', team: null }] }
+  const index = {
+    projectId: 'flightctl',
+    features: [feature],
+    trackingReleases: [{ releaseId, artifactKey: trackingKey }]
+  }
+  const registry = envelope('releases/registry.json', { releases: [{ id: releaseId }] })
+  return {
+    profile,
+    generationId,
+    root,
+    projectIndex: {
+      schemaVersion: 1,
+      projects: [{
+        projectId: profile.projectId,
+        displayName: profile.displayName,
+        profileRevision: profile.profileRevision,
+        executeRevision: profile.executeRevision,
+        profileKey: 'projects/flightctl/profile.json'
+      }]
+    },
+    current: { projectId: profile.projectId, generationId },
+    registry,
+    index: envelope('releases/execution/index.json', index),
+    detail: envelope('releases/execution/features/EDM-100.json', detail, detailGenerationId),
+    trackingKey,
+    tracking: envelope(trackingKey, tracking)
+  }
+}
+
 describe('releasesExport — execution data', () => {
   it('anonymizes index.json feature keys and summaries', async () => {
     const files = []
@@ -136,5 +199,59 @@ describe('releasesExport — execution data', () => {
     const registryFile = files.find(f => f.path === 'releases/registry.json')
     expect(registryFile).toBeDefined()
     expect(registryFile.data.versions).toEqual(['1.0', '2.0'])
+  })
+
+  it('exports project Execute artifacts under the selected immutable project generation and keeps legacy OSAC output', async () => {
+    const fixture = makeProjectPublication()
+    const files = []
+    const addFile = (path, data) => files.push({ path, data })
+    const mapping = buildMapping(FIXTURE_ROSTER)
+    const storage = makeStorage({
+      'projects/index.json': fixture.projectIndex,
+      'projects/flightctl/profile.json': fixture.profile,
+      'projects/flightctl/current.json': fixture.current,
+      [`${fixture.root}/profile.json`]: fixture.profile,
+      [`${fixture.root}/releases/registry.json`]: fixture.registry,
+      [`${fixture.root}/releases/execution/index.json`]: fixture.index,
+      [`${fixture.root}/releases/execution/features/EDM-100.json`]: fixture.detail,
+      [`${fixture.root}/${fixture.trackingKey}`]: fixture.tracking,
+      'releases/execution/index.json': {
+        fetchedAt: '2026-01-01',
+        featureCount: 1,
+        features: [{ key: 'OSAC-1', summary: 'Legacy OSAC feature' }]
+      }
+    })
+
+    await releasesExport(addFile, storage, mapping)
+
+    const projectIndex = files.find(file => file.path === 'projects/index.json')
+    const projectExecuteIndex = files.find(file => file.path === `${fixture.root}/releases/execution/index.json`)
+    const detail = files.find(file => file.path === `${fixture.root}/releases/execution/features/EDM-100.json`)
+    const tracking = files.find(file => file.path === `${fixture.root}/${fixture.trackingKey}`)
+    const legacyOsac = files.find(file => file.path === 'releases/execution/index.json')
+
+    expect(projectIndex).toBeDefined()
+    expect(projectExecuteIndex.data.projectId).toBe('flightctl')
+    expect(projectExecuteIndex.data.generationId).toBe(fixture.generationId)
+    expect(projectExecuteIndex.data.data.features[0].key).not.toBe('EDM-100')
+    expect(detail.data.generationId).toBe(fixture.generationId)
+    expect(detail.data.data.epics[0].parentFeatureKey).toBe(detail.data.data.key)
+    expect(tracking.data.data.features[0].key).not.toBe('EDM-100')
+    expect(legacyOsac.data.features[0].key).not.toBe('OSAC-1')
+  })
+
+  it('rejects project Execute exports that mix feature detail generations', async () => {
+    const fixture = makeProjectPublication({ detailGenerationId: 'old-generation' })
+    const mapping = buildMapping(FIXTURE_ROSTER)
+    const storage = makeStorage({
+      'projects/index.json': fixture.projectIndex,
+      'projects/flightctl/profile.json': fixture.profile,
+      'projects/flightctl/current.json': fixture.current,
+      [`${fixture.root}/profile.json`]: fixture.profile,
+      [`${fixture.root}/releases/execution/index.json`]: fixture.index,
+      [`${fixture.root}/releases/execution/features/EDM-100.json`]: fixture.detail
+    })
+
+    await expect(releasesExport(() => {}, storage, mapping)).rejects.toThrow(/publication identity mismatch/)
   })
 })

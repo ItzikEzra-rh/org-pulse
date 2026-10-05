@@ -10,6 +10,7 @@ export function useFeatureTraffic() {
   const error = ref(null)
   const state = ref(null)
   const message = ref(null)
+  const partial = ref(false)
   const projectId = useProjectId()
   let latestRequestId = 0
 
@@ -20,6 +21,7 @@ export function useFeatureTraffic() {
     error.value = null
     state.value = null
     message.value = null
+    partial.value = false
     features.value = []
     featureCount.value = 0
     fetchedAt.value = null
@@ -43,6 +45,7 @@ export function useFeatureTraffic() {
       fetchedAt.value = data.fetchedAt || null
       state.value = data.state || 'supported'
       message.value = data.message || data.error || null
+      partial.value = data.partial === true
     } catch (err) {
       if (requestId !== latestRequestId || projectId.value !== requestedProjectId) return
       error.value = err.message
@@ -51,7 +54,7 @@ export function useFeatureTraffic() {
     }
   }
 
-  return { features, featureCount, fetchedAt, loading, error, state, message, loadFeatures }
+  return { features, featureCount, fetchedAt, loading, error, state, message, partial, loadFeatures }
 }
 
 export function useFeatureDetail() {
@@ -137,6 +140,7 @@ export function useVersions() {
 
 export function useEpicsByRelease() {
   const features = ref([])
+  const hierarchy = ref(null)
   const fetchedAt = ref(null)
   const loading = ref(false)
   const error = ref(null)
@@ -154,6 +158,7 @@ export function useEpicsByRelease() {
 
     if (!version) {
       features.value = []
+      hierarchy.value = null
       fetchedAt.value = null
       loading.value = false
       error.value = null
@@ -167,6 +172,7 @@ export function useEpicsByRelease() {
     state.value = null
     message.value = null
     features.value = []
+    hierarchy.value = null
 
     try {
       const params = new URLSearchParams({ version })
@@ -174,6 +180,7 @@ export function useEpicsByRelease() {
       const data = await apiRequest(`/modules/releases/execution/epics?${params.toString()}`)
       if (requestId !== latestRequestId || projectId.value !== requestedProjectId) return
       features.value = data.features || []
+      hierarchy.value = data.hierarchy || null
       fetchedAt.value = data.fetchedAt || null
       state.value = data.state || 'supported'
       message.value = data.message || data.error || null
@@ -186,5 +193,5 @@ export function useEpicsByRelease() {
     }
   }
 
-  return { features, fetchedAt, loading, error, state, message, loadEpicsByRelease }
+  return { features, hierarchy, fetchedAt, loading, error, state, message, loadEpicsByRelease }
 }

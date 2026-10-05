@@ -1,8 +1,10 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useAuditLog } from '../plan/composables/useAuditLog'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 
 const { entries, total, loading, error, loadAuditLog } = useAuditLog()
+const projectId = useProjectId()
 
 const filters = ref({
   domain: '',
@@ -15,6 +17,10 @@ const filters = ref({
 let debounceTimer = null
 
 onMounted(function() { loadAuditLog(filters.value) })
+watch(projectId, function() {
+  filters.value.offset = 0
+  loadAuditLog(filters.value)
+}, { flush: 'sync' })
 onUnmounted(function() { clearTimeout(debounceTimer) })
 
 function applyFilters() {

@@ -36,6 +36,7 @@ const {
   error,
   state: featureDataState,
   message: featureDataMessage,
+  partial: featureDataPartial,
   loadFeatures
 } = useFeatureTraffic()
 const projectId = useProjectId()
@@ -61,6 +62,8 @@ const {
 const { user } = useAuth()
 // Hidden when no reliable jiraDisplayName is resolved for the current user — never guessed client-side.
 const meAssignee = computed(() => user.value?.jiraDisplayName || null)
+const hasUnknownBlockerCount = computed(() => features.value.some(f => !isKnownCount(f.blockerCount)))
+const hasNoCompatibleProducer = computed(() => features.value.some(f => f.coverage?.pipelineMetrics === 'unavailable'))
 
 function selectMeAssignee() {
   if (meAssignee.value) setAssignees([meAssignee.value])
@@ -230,11 +233,17 @@ const WITHOUT_PROGRESS_DATA_HELP =
   'Progress cannot be calculated because no execution issues were found, only planning issues were found, or issue details are missing. This does not necessarily mean work hasn’t started.'
 
 const OVERVIEW_FILTER_STORAGE_KEY = 'releases:feature-list-filters'
+let filterProjectId = projectId.value
 
-function saveOverviewFilters() {
+function overviewFilterStorageKey(id = filterProjectId) {
+  // Keep the original OSAC key so existing browser preferences remain intact.
+  return !id || id === 'osac' ? OVERVIEW_FILTER_STORAGE_KEY : `${OVERVIEW_FILTER_STORAGE_KEY}:${id}`
+}
+
+function saveOverviewFilters(storageKey = overviewFilterStorageKey()) {
   try {
     sessionStorage.setItem(
-      OVERVIEW_FILTER_STORAGE_KEY,
+      storageKey,
       JSON.stringify({
         selectedVersions: selectedVersions.value,
         selectedExecutionStates: selectedExecutionStates.value,
@@ -251,9 +260,9 @@ function saveOverviewFilters() {
   }
 }
 
-function restoreOverviewFilters() {
+function restoreOverviewFilters(storageKey = overviewFilterStorageKey()) {
   try {
-    const raw = sessionStorage.getItem(OVERVIEW_FILTER_STORAGE_KEY)
+    const raw = sessionStorage.getItem(storageKey)
     if (!raw) return
     const o = JSON.parse(raw)
     if (!o || typeof o !== 'object') return
@@ -291,7 +300,7 @@ function restoreOverviewFilters() {
 
 watch(
   [selectedVersions, selectedExecutionStates, selectedComponents, selectedStatuses, selectedAssignees, attentionBlockersOnly, searchQuery, viewMode],
-  saveOverviewFilters,
+  () => saveOverviewFilters(),
   { deep: true }
 )
 
@@ -324,6 +333,27 @@ function clearAllFilters() {
   clearComponentStatusFilters()
 }
 
+function resetOverviewFilters() {
+  selectedVersions.value = []
+  selectedExecutionStates.value = []
+  attentionBlockersOnly.value = false
+  searchQuery.value = ''
+  viewMode.value = 'board'
+  clearComponentStatusFilters()
+}
+
+function isKnownCount(value) {
+  return Number.isInteger(value) && value >= 0
+}
+
+function displayCount(value) {
+  return isKnownCount(value) ? value : 'Unknown'
+}
+
+watch(hasUnknownBlockerCount, (unknown) => {
+  if (unknown) attentionBlockersOnly.value = false
+})
+
 const filteredFeatures = computed(() => {
   let list = features.value
   if (searchQuery.value) {
@@ -347,7 +377,7 @@ const filteredFeatures = computed(() => {
     )
   }
   if (attentionBlockersOnly.value) {
-    list = list.filter(f => (f.blockerCount || 0) > 0)
+    list = list.filter(f => Number.isInteger(f.blockerCount) && f.blockerCount > 0)
   }
   return list
 })
@@ -462,6 +492,7 @@ function formatDate(iso) {
 
 onMounted(() => {
   document.addEventListener('click', handleOutsideClick)
+  filterProjectId = projectId.value
   restoreOverviewFilters()
   loadFeatures()
   loadVersions()
@@ -475,7 +506,11 @@ onMounted(() => {
   window.addEventListener('resize', updateContentWidth)
 })
 
-watch(projectId, () => {
+watch(projectId, (nextProjectId, previousProjectId) => {
+  saveOverviewFilters(overviewFilterStorageKey(previousProjectId))
+  filterProjectId = nextProjectId
+  resetOverviewFilters()
+  restoreOverviewFilters(overviewFilterStorageKey(nextProjectId))
   closeDrawer()
   loadFeatures()
   loadVersions()
@@ -730,13 +765,18 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Blockers only toggle -->
-      <label class="flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+      <label
+        class="flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm select-none"
+        :class="hasUnknownBlockerCount ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' : 'text-gray-700 dark:text-gray-300 cursor-pointer'"
+        :title="hasUnknownBlockerCount ? 'Blocker count is unknown for some features; this filter is unavailable.' : ''"
+      >
         <input
           v-model="attentionBlockersOnly"
           type="checkbox"
+          :disabled="hasUnknownBlockerCount"
           class="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
         />
-        Blockers only
+        Blockers only<span v-if="hasUnknownBlockerCount"> (Unknown)</span>
       </label>
 
       <button
@@ -749,8 +789,24 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Error -->
-    <div v-if="error" class="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg p-4 text-red-700 dark:text-red-400 text-sm">
+    <div v-if="error && features.length > 0" class="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg p-4 text-red-700 dark:text-red-400 text-sm">
       {{ error }}
+    </div>
+
+    <div
+      v-if="featureDataPartial && features.length > 0"
+      role="status"
+      class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-300"
+    >
+      Feature inventory is partial. Missing execution metrics, readiness, and attribution remain Unknown.
+    </div>
+
+    <div
+      v-if="hasNoCompatibleProducer && features.length > 0"
+      role="status"
+      class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 text-sm text-gray-600 dark:text-gray-300"
+    >
+      No compatible pipeline execution producer is configured. Jira Feature or child status is shown separately and does not establish execution progress or release readiness.
     </div>
 
     <!-- Loading -->
@@ -759,11 +815,11 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      v-else-if="featureDataState === 'unavailable'"
+      v-else-if="error || (featureDataState && ['error', 'unavailable', 'inaccessible', 'source-only'].includes(featureDataState) && features.length === 0)"
       role="status"
       class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 text-sm text-gray-600 dark:text-gray-300"
     >
-      {{ featureDataMessage || 'Release execution data has not been collected for this project.' }}
+      {{ error || featureDataMessage || 'Release execution data has not been collected for this project.' }}
     </div>
 
     <template v-else>
@@ -835,6 +891,11 @@ onBeforeUnmount(() => {
                 </div>
                 <p class="text-sm text-gray-900 dark:text-gray-100 font-medium leading-snug mb-1">{{ d.feature.summary }}</p>
                 <p class="text-xs italic text-gray-500 dark:text-gray-400">{{ d.progress.caption }}</p>
+                <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500 dark:text-gray-400">
+                  <span>Total issues: <strong class="font-semibold text-gray-700 dark:text-gray-300">{{ displayCount(d.feature.issueCount) }}</strong></span>
+                  <span>Blockers: <strong class="font-semibold text-gray-700 dark:text-gray-300">{{ displayCount(d.feature.blockerCount) }}</strong></span>
+                  <span v-if="d.feature.coverage?.team === 'unknown' || d.feature.coverage?.team === 'unavailable'">Team: Unknown</span>
+                </div>
               </div>
             </div>
             <div v-if="pageCount(coverageFeatures) > 1" class="flex items-center justify-center gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -935,7 +996,7 @@ onBeforeUnmount(() => {
                       <span class="text-xs font-semibold text-gray-600 dark:text-gray-300 w-24 text-right">{{ d.progress.done }}/{{ d.progress.total }} &middot; {{ d.progress.pct }}%</span>
                     </div>
                   </template>
-                  <p v-else class="text-xs italic text-gray-400 dark:text-gray-500">{{ d.progress.caption }}</p>
+                  <p v-else class="text-xs italic text-gray-400 dark:text-gray-500" :title="d.progress.detail">{{ d.progress.caption }}</p>
                 </div>
 
                 <!-- Counts breakdown -->
@@ -945,11 +1006,14 @@ onBeforeUnmount(() => {
                   </span>
                   <span class="text-gray-300 dark:text-gray-600">|</span>
                   <span class="text-gray-500 dark:text-gray-400" title="Total tracked child issues, including recognized planning">
-                    <span class="font-semibold text-gray-700 dark:text-gray-300">{{ d.feature.issueCount }}</span> Total issues
+                    <span class="font-semibold text-gray-700 dark:text-gray-300">{{ displayCount(d.feature.issueCount) }}</span> Total issues
                   </span>
-                  <span v-if="d.feature.blockerCount > 0" class="text-gray-300 dark:text-gray-600">|</span>
-                  <span v-if="d.feature.blockerCount > 0" class="text-amber-600 dark:text-amber-400 font-semibold">
-                    {{ d.feature.blockerCount }} Blockers
+                  <span v-if="!isKnownCount(d.feature.blockerCount) || d.feature.blockerCount > 0" class="text-gray-300 dark:text-gray-600">|</span>
+                  <span v-if="!isKnownCount(d.feature.blockerCount)" class="text-gray-500 dark:text-gray-400 font-semibold">
+                    Blockers Unknown
+                  </span>
+                  <span v-else-if="d.feature.blockerCount > 0" class="text-amber-600 dark:text-amber-400 font-semibold">
+                    {{ displayCount(d.feature.blockerCount) }} Blockers
                   </span>
                 </div>
 
@@ -1095,7 +1159,7 @@ onBeforeUnmount(() => {
                         <span class="text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">{{ d.progress.done }}/{{ d.progress.total }} &middot; {{ d.progress.pct }}%</span>
                       </div>
                     </template>
-                    <span v-else class="text-xs italic text-gray-400 dark:text-gray-500">{{ d.progress.caption }}</span>
+                    <span v-else class="text-xs italic text-gray-400 dark:text-gray-500" :title="d.progress.detail">{{ d.progress.caption }}</span>
                   </td>
                   <td class="px-3 py-2">
                     <span class="inline-flex items-center gap-1">
@@ -1104,9 +1168,10 @@ onBeforeUnmount(() => {
                     </span>
                   </td>
                   <td class="px-3 py-2 text-gray-700 dark:text-gray-300">{{ d.feature.epicCount }}</td>
-                  <td class="px-3 py-2 text-gray-700 dark:text-gray-300">{{ d.feature.issueCount }}</td>
+                  <td class="px-3 py-2 text-gray-700 dark:text-gray-300">{{ displayCount(d.feature.issueCount) }}</td>
                   <td class="px-3 py-2">
-                    <span v-if="d.feature.blockerCount > 0" class="text-amber-600 dark:text-amber-400 font-medium">{{ d.feature.blockerCount }} Blockers</span>
+                    <span v-if="!isKnownCount(d.feature.blockerCount)" class="text-gray-500 dark:text-gray-400">Unknown</span>
+                    <span v-else-if="d.feature.blockerCount > 0" class="text-amber-600 dark:text-amber-400 font-medium">{{ d.feature.blockerCount }} Blockers</span>
                     <span v-else class="text-gray-400 dark:text-gray-600">&mdash;</span>
                   </td>
                   <td class="px-3 py-2 max-w-[160px]">

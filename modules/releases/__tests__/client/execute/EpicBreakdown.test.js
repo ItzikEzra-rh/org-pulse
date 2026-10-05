@@ -42,6 +42,59 @@ describe('EpicBreakdown', () => {
     expect(wrapper.text()).toContain('1 Blocked')
   })
 
+  it('labels Jira child status separately from execution and readiness', () => {
+    const wrapper = mount(EpicBreakdown, {
+      props: {
+        showProvenance: true,
+        epics: [makeEpic({
+          jiraStatusProgress: true,
+          issueStatusCoverage: 'complete',
+          blockedCoverage: 'unavailable',
+          issues: [
+            { key: 'EDM-201', status: 'Closed', statusCategory: 'Done' },
+            { key: 'EDM-202', status: 'To Do', statusCategory: 'To Do' }
+          ]
+        })]
+      }
+    })
+
+    expect(wrapper.text()).toContain('1/2 Jira Done')
+    expect(wrapper.text()).toContain('Jira child status only; this does not measure pipeline execution or release readiness.')
+    expect(wrapper.text()).toContain('Blocked: Unknown')
+    expect(wrapper.text()).not.toContain('50%')
+  })
+
+  it('does not calculate Jira status percentages when child status coverage is partial', () => {
+    const wrapper = mount(EpicBreakdown, {
+      props: {
+        epics: [makeEpic({
+          jiraStatusProgress: true,
+          issueStatusCoverage: 'partial',
+          blockedCoverage: 'unavailable',
+          issues: [
+            { key: 'EDM-201', status: 'Review', statusCategory: null }
+          ]
+        })]
+      }
+    })
+
+    expect(wrapper.text()).toContain('Jira child statuses are partial')
+    expect(wrapper.text()).toContain('1 observed status Unknown.')
+    expect(wrapper.text()).toContain('Blocked: Unknown')
+    expect(wrapper.text()).not.toMatch(/\b\d+%/)
+  })
+
+  it('shows no Jira child issues instead of a zero-percent progress bar', () => {
+    const wrapper = mount(EpicBreakdown, {
+      props: {
+        epics: [makeEpic({ jiraStatusProgress: true, issueStatusCoverage: 'complete', issues: [] })]
+      }
+    })
+
+    expect(wrapper.text()).toContain('No Jira child issues.')
+    expect(wrapper.text()).not.toMatch(/\b\d+%/)
+  })
+
   it('does not show provenance info by default (existing Feature Detail behavior unchanged)', () => {
     const wrapper = mount(EpicBreakdown, {
       props: {
