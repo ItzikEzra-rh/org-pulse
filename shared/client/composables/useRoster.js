@@ -38,16 +38,7 @@ function fetchRoster({ force = false } = {}) {
 
   const promise = (async () => {
     try {
-      let fresh
-      try {
-        fresh = await getRoster(requestedProjectId)
-      } catch (err) {
-        const missingOsacPublication = requestedProjectId === 'osac'
-          && err?.status === 404
-          && err?.data?.error === 'Project roster publication is unavailable'
-        if (!missingOsacPublication) throw err
-        fresh = await getRoster()
-      }
+      const fresh = await getRoster(requestedProjectId)
       if (requestedProjectId && requestedProjectId !== 'osac' && fresh?.projectId !== requestedProjectId) {
         throw new Error('Roster response project identity mismatch')
       }

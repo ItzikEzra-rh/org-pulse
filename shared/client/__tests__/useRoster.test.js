@@ -25,21 +25,20 @@ describe('useRoster project migration', () => {
     mocks.getRoster.mockReset()
   })
 
-  it('uses the legacy OSAC roster only when its project publication is unavailable', async () => {
-    const legacyRoster = { orgs: [{ key: 'osac' }], teamDataSource: 'legacy' }
+  it('does not retry the legacy root route when the OSAC project route is unavailable', async () => {
     const missingPublication = Object.assign(new Error('Project roster publication is unavailable'), {
       status: 404,
       data: { error: 'Project roster publication is unavailable' }
     })
-    mocks.getRoster.mockRejectedValueOnce(missingPublication).mockResolvedValueOnce(legacyRoster)
+    mocks.getRoster.mockRejectedValueOnce(missingPublication)
     const roster = await createRoster('osac')
 
     await roster.loadRoster()
 
-    expect(mocks.getRoster).toHaveBeenNthCalledWith(1, 'osac')
-    expect(mocks.getRoster.mock.calls[1]).toEqual([])
-    expect(roster.rosterData.value).toMatchObject(legacyRoster)
-    expect(roster.error.value).toBeNull()
+    expect(mocks.getRoster).toHaveBeenCalledOnce()
+    expect(mocks.getRoster).toHaveBeenCalledWith('osac')
+    expect(roster.rosterData.value).toBeNull()
+    expect(roster.error.value).toBe('Project roster publication is unavailable')
   })
 
   it('does not fall back for a missing Flight Control publication', async () => {

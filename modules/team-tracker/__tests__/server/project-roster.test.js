@@ -3,7 +3,7 @@
  * falls back to the legacy OSAC roster file; unavailable publications stay
  * truthful.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readProjectRoster } from '../../server/project-roster.js'
 
 function mockProjects(publications = {}, profiles = {}) {
@@ -89,15 +89,37 @@ describe('readProjectRoster', () => {
   });
 
   it('returns 404 for an unknown project and never OSAC fallback', () => {
-    const result = readProjectRoster(mockProjects(publications, profiles), 'nonexistent');
+    const readLegacyOsacRoster = vi.fn(() => ({ orgs: [{ key: 'legacy-osac' }] }));
+    const result = readProjectRoster(mockProjects(publications, profiles), 'nonexistent', { readLegacyOsacRoster });
     expect(result.status).toBe(404);
     expect(result.error).toBe('Unknown project');
+    expect(readLegacyOsacRoster).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the project roster publication is missing', () => {
     const result = readProjectRoster(mockProjects(publications, profiles), 'osac');
     expect(result.status).toBe(404);
     expect(result.error).toBe('Project roster publication is unavailable');
+  });
+
+  it('serves the legacy roster for registered OSAC without a failing project request', () => {
+    const legacyRoster = { orgs: [{ key: 'osac' }], teamDataSource: 'legacy' };
+    const readLegacyOsacRoster = vi.fn(() => legacyRoster);
+    const result = readProjectRoster(mockProjects(publications, profiles), 'osac', { readLegacyOsacRoster });
+
+    expect(result.status).toBe(200);
+    expect(result.roster).toMatchObject({ ...legacyRoster, projectId: 'osac' });
+    expect(readLegacyOsacRoster).toHaveBeenCalledOnce();
+  });
+
+  it('does not serve the legacy OSAC roster for another registered project', () => {
+    profiles.flightctl = makeProfile('flightctl');
+    const readLegacyOsacRoster = vi.fn(() => ({ orgs: [{ key: 'osac' }] }));
+    const result = readProjectRoster(mockProjects({}, profiles), 'flightctl', { readLegacyOsacRoster });
+
+    expect(result.status).toBe(404);
+    expect(result.error).toBe('Project roster publication is unavailable');
+    expect(readLegacyOsacRoster).not.toHaveBeenCalled();
   });
 
   it('returns truthful unavailable for a stale publication', () => {
