@@ -2838,12 +2838,9 @@ module.exports = function registerRoutes(router, context) {
     try {
       const selection = resolveProjectSelection(context.projects, req.query);
       if (selection.status) return res.status(selection.status).json({ error: selection.error });
-      if (selection.provided) {
-        const result = readProjectRoster(context.projects, selection.projectId, {
-          readLegacyOsacRoster: selection.projectId === 'osac'
-            ? () => readLegacyRosterResponse(req)
-            : undefined
-        });
+      // OSAC's project publication has a minimal person contract; use the enriched legacy roster instead.
+      if (selection.provided && selection.projectId !== 'osac') {
+        const result = readProjectRoster(context.projects, selection.projectId);
         if (result.status !== 200) return res.status(result.status).json({ error: result.error });
         return res.json(result.roster);
       }
