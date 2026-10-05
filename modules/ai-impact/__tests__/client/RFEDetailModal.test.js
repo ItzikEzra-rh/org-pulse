@@ -65,6 +65,43 @@ describe('RFEDetailModal', () => {
     wrapper.unmount();
   });
 
+  it('shows an unavailable state and suppresses AI/sign-off data when docs linkage is unknown', () => {
+    const rfe = makeRFE({ status: 'Unknown', prdArtifactPresence: 'unavailable', aiInvolvement: null });
+    const wrapper = mountModal(rfe);
+
+    expect(document.body.textContent).toContain('PRD document and review status are unavailable');
+    expect(document.body.textContent).toContain('Assessment unavailable');
+    expect(document.body.textContent).not.toContain('AI Involvement');
+    expect(document.body.textContent).not.toContain('Review Status');
+    expect(document.body.textContent).not.toContain('No AI');
+    expect(document.body.textContent).not.toContain('Awaiting Sign-off');
+    wrapper.unmount();
+  });
+
+  it('keeps unavailable authoritative when a stale payload also says No PR', () => {
+    const rfe = makeRFE({ status: 'No PR', prdArtifactPresence: 'unavailable', aiInvolvement: 'none' });
+    const wrapper = mountModal(rfe, { passFail: 'PASS', total: 9 });
+
+    expect(document.body.textContent).toContain('PRD document and review status are unavailable');
+    expect(document.body.textContent).toContain('Assessment unavailable');
+    expect(document.body.textContent).not.toContain('No PRD has been verified');
+    expect(document.body.textContent).not.toContain('No PRD to assess');
+    expect(document.body.textContent).not.toContain('AI Involvement');
+    expect(document.body.textContent).not.toContain('No AI');
+    expect(document.body.textContent).not.toContain('Awaiting Sign-off');
+    expect(document.body.textContent).not.toContain('9/10');
+    wrapper.unmount();
+  });
+
+  it('distinguishes a present PRD document with no linked review PR', () => {
+    const rfe = makeRFE({ status: 'No PR', prdArtifactPresence: 'present', aiInvolvement: null });
+    const wrapper = mountModal(rfe);
+
+    expect(document.body.textContent).toContain('A PRD document exists, but no linked PR is available to review.');
+    expect(document.body.textContent).toContain('No PRD to assess');
+    wrapper.unmount();
+  });
+
   it('shows a no-PRD assessment placeholder instead of "Not yet assessed" when status is No PR', () => {
     const rfe = makeRFE({ status: 'No PR', creatorDisplayName: 'Dev One', sourceRfe: null, aiInvolvement: 'none' });
     const wrapper = mountModal(rfe);

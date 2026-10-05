@@ -122,22 +122,41 @@ describe('RFEList artifact filter', () => {
   const rfes = [
     makeRFE({ key: 'OSAC-1', status: 'Merged' }),
     makeRFE({ key: 'OSAC-2', status: 'Open' }),
-    makeRFE({ key: 'OSAC-3', status: 'No PR' })
+    makeRFE({ key: 'OSAC-3', status: 'No PR', prdArtifactPresence: 'missing' }),
+    makeRFE({ key: 'OSAC-4', status: 'No PR', prdArtifactPresence: 'present' }),
+    makeRFE({ key: 'OSAC-5', status: 'Unknown', prdArtifactPresence: 'unavailable' })
   ];
 
-  it('"has" excludes rows with No PR', () => {
+  it('"has" uses verified document presence and excludes unavailable data', () => {
     const wrapper = mount(RFEList, { props: { rfes, artifactFilter: 'has' } });
-    expect(renderedKeys(wrapper).sort()).toEqual(['OSAC-1', 'OSAC-2']);
+    expect(renderedKeys(wrapper).sort()).toEqual(['OSAC-1', 'OSAC-2', 'OSAC-4']);
   });
 
-  it('"missing" includes only rows with No PR', () => {
+  it('"missing" includes known missing documents but excludes present and unavailable states', () => {
     const wrapper = mount(RFEList, { props: { rfes, artifactFilter: 'missing' } });
     expect(renderedKeys(wrapper)).toEqual(['OSAC-3']);
   });
 
   it('"all" (default) includes every row', () => {
     const wrapper = mount(RFEList, { props: { rfes } });
-    expect(renderedKeys(wrapper)).toHaveLength(3);
+    expect(renderedKeys(wrapper)).toHaveLength(5);
+  });
+});
+
+describe('RFEList unknown docs state', () => {
+  function renderedKeys(wrapper) {
+    return wrapper.findAllComponents(RFEListItem).map(c => c.props('rfe').key);
+  }
+
+  it('keeps unavailable docs visible without treating them as present or missing PRDs', () => {
+    const rfes = [
+      makeRFE({ key: 'EDM-1', status: 'Unknown', prdArtifactPresence: 'unavailable', aiInvolvement: null }),
+      makeRFE({ key: 'EDM-2', status: 'No PR', prdArtifactPresence: 'missing' })
+    ];
+    const wrapper = mount(RFEList, { props: { rfes } });
+    expect(renderedKeys(wrapper)).toHaveLength(2);
+    expect(renderedKeys(mount(RFEList, { props: { rfes, artifactFilter: 'has' } }))).toEqual([]);
+    expect(renderedKeys(mount(RFEList, { props: { rfes, artifactFilter: 'missing' } }))).toEqual(['EDM-2']);
   });
 });
 

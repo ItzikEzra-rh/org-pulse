@@ -111,6 +111,30 @@ describe('RFEListItem', () => {
     expect(wrapper.text()).not.toContain('No AI');
   });
 
+  it('shows PRD unavailable without AI or sign-off claims when registry state is unknown', () => {
+    const rfe = makeRFE({
+      status: 'Unknown',
+      prdArtifactPresence: 'unavailable',
+      aiInvolvement: null
+    });
+    const wrapper = mount(RFEListItem, { props: { rfe } });
+
+    expect(wrapper.text()).toContain('PRD unavailable');
+    expect(wrapper.text()).not.toContain('No AI');
+    expect(wrapper.text()).not.toContain('Missing PRD');
+    expect(wrapper.text()).not.toContain('Awaiting Sign-off');
+    expect(wrapper.text()).not.toContain('Score');
+  });
+
+  it('distinguishes a present PRD document with no linked PR from a missing document', () => {
+    const rfe = makeRFE({ status: 'No PR', prdArtifactPresence: 'present', aiInvolvement: 'none' });
+    const wrapper = mount(RFEListItem, { props: { rfe } });
+
+    expect(wrapper.text()).toContain('PRD doc, no linked PR');
+    expect(wrapper.text()).not.toContain('Missing PRD');
+    expect(wrapper.text()).not.toContain('No AI');
+  });
+
   it('gives the Missing PRD pill the same blue treatment as Design Review No Design', () => {
     const rfe = makeRFE({ status: 'No PR', creatorDisplayName: 'Dev One', aiInvolvement: 'none' });
     const wrapper = mount(RFEListItem, { props: { rfe } });

@@ -1,16 +1,37 @@
 <script setup>
+import { computed } from 'vue'
 import {
   getReviewStatusClass, getReviewStatusLabel, getPrdSignOffStatus,
   getPrdReviewStatusTooltip, getInvolvementLabel, getInvolvementClass
 } from '../utils/feature-helpers.js'
 import InfoBubble from './InfoBubble.vue'
 
-defineProps({
+const props = defineProps({
   rfe: { type: Object, required: true },
   selected: { type: Boolean, default: false },
   assessment: { type: Object, default: null },
   hasLinkedFeature: { type: Boolean, default: false }
 })
+
+function getPrdArtifactPresence(rfe) {
+  if (['present', 'missing', 'unavailable'].includes(rfe.prdArtifactPresence)) return rfe.prdArtifactPresence
+  if (rfe.status === 'Unknown') return 'unavailable'
+  return rfe.status === 'No PR' ? 'missing' : 'present'
+}
+
+const prdArtifactPresence = computed(() => getPrdArtifactPresence(props.rfe))
+const prdUnavailable = computed(() => prdArtifactPresence.value === 'unavailable')
+const prdMissing = computed(() => prdArtifactPresence.value === 'missing'
+  || (prdArtifactPresence.value !== 'unavailable' && props.rfe.status === 'No PR' && prdArtifactPresence.value !== 'present'))
+const prdHasNoLinkedPr = computed(() => prdArtifactPresence.value === 'present' && props.rfe.status === 'No PR')
+const hasVerifiedPrdPr = computed(() => prdArtifactPresence.value === 'present' && !['No PR', 'Unknown'].includes(props.rfe.status))
+const visiblePrUrl = computed(() => {
+  if (hasVerifiedPrdPr.value && props.rfe.prdPrUrl) return props.rfe.prdPrUrl
+  return props.rfe.linkedPrs?.find(pr => pr?.url)?.url || null
+})
+const prLinkTitle = computed(() => hasVerifiedPrdPr.value && props.rfe.prdPrUrl
+  ? 'View PRD pull request on GitHub'
+  : 'View linked pull request on GitHub')
 
 const emit = defineEmits(['select'])
 </script>
@@ -29,21 +50,39 @@ const emit = defineEmits(['select'])
         <div class="flex items-center gap-2 mb-1">
           <span class="font-mono text-xs text-gray-500 dark:text-gray-400">{{ rfe.key }}</span>
           <span
-            v-if="rfe.status === 'No PR'"
+            v-if="prdUnavailable"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+          >
+            PRD unavailable
+          </span>
+          <span
+            v-else-if="prdHasNoLinkedPr"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+          >
+            PRD doc, no linked PR
+          </span>
+          <span
+            v-else-if="prdMissing"
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
           >
             Missing PRD
           </span>
           <span
-            v-else
+            v-else-if="hasVerifiedPrdPr && rfe.aiInvolvement != null"
             class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
             :class="getInvolvementClass(rfe.aiInvolvement)"
           >
             {{ getInvolvementLabel(rfe.aiInvolvement) }}
           </span>
+          <span
+            v-else-if="hasVerifiedPrdPr"
+            class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+          >
+            AI status unavailable
+          </span>
         </div>
         <h4 class="font-medium text-sm truncate dark:text-gray-200">{{ rfe.summary }}</h4>
-        <div v-if="rfe.status !== 'No PR'" class="flex items-center flex-wrap gap-2 mt-2">
+        <div v-if="hasVerifiedPrdPr" class="flex items-center flex-wrap gap-2 mt-2">
           <span class="inline-flex items-center">
             <span
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
@@ -70,6 +109,19 @@ const emit = defineEmits(['select'])
         </div>
       </div>
       <div class="flex items-center gap-1 shrink-0">
+        <a
+          v-if="visiblePrUrl"
+          :href="visiblePrUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-purple-500 dark:text-purple-400"
+          :title="prLinkTitle"
+          @click.stop
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
         <span
           v-if="hasLinkedFeature"
           class="text-blue-500 dark:text-blue-400"

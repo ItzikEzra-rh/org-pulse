@@ -126,7 +126,7 @@ export function getDesignStatusLabel(designPrStatus) {
 
 // Same merge-based sign-off rule as Design Review, applied to the PRD PR status.
 export function getPrdSignOffStatus(prdPrStatus) {
-  if (prdPrStatus === 'No PR') return null
+  if (prdPrStatus === 'No PR' || prdPrStatus === 'Unknown' || prdPrStatus == null) return null
   if (prdPrStatus === 'Merged') return 'approved'
   return 'awaiting-review'
 }
