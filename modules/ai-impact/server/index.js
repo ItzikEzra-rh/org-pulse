@@ -6,6 +6,7 @@ module.exports = function registerRoutes(router, context) {
   const { readProjectDesignDocs } = require('./project-design-docs');
   const {
     resolveAiCommitsSource,
+    fetchAiCommitsPage,
     transformAiCommitsHtml,
     renderAiCommitsStatePage
   } = require('./ai-commits-source');
@@ -73,7 +74,6 @@ module.exports = function registerRoutes(router, context) {
   const DEMO_MODE = process.env.DEMO_MODE === 'true';
 
   // Jira helpers from shared package (no duplication)
-  const https = require('https');
   const { createJiraClient } = require('../../../shared/server/jira');
   const jira = createJiraClient({
     email: (context.secrets && context.secrets.JIRA_EMAIL) || '',
@@ -589,36 +589,6 @@ module.exports = function registerRoutes(router, context) {
 
   const aiCommitsCache = new Map();
   const AI_COMMITS_TTL = 60 * 60 * 1000;
-  const MAX_REDIRECTS = 5;
-  const FETCH_TIMEOUT_MS = 15000;
-
-  function fetchPage(url, redirectCount) {
-    if (redirectCount === undefined) redirectCount = 0;
-    return new Promise((resolve, reject) => {
-      // eslint-disable-next-line org-pulse/no-module-process-env -- NODE_EXTRA_CA_CERTS is Node.js runtime config, not a secret
-      const tlsOptions = process.env.NODE_EXTRA_CA_CERTS ? {} : { rejectUnauthorized: false };
-      const req = https.get(url, tlsOptions, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          if (redirectCount >= MAX_REDIRECTS) return reject(new Error('Too many redirects'));
-          const nextUrl = new URL(res.headers.location, url).toString();
-          res.resume();
-          return resolve(fetchPage(nextUrl, redirectCount + 1));
-        }
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          res.resume();
-          return reject(new Error(`Upstream returned ${res.statusCode}`));
-        }
-        const chunks = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-        res.on('error', reject);
-      });
-      req.on('error', reject);
-      req.setTimeout(FETCH_TIMEOUT_MS, () => {
-        req.destroy(new Error('Upstream request timed out'));
-      });
-    });
-  }
 
   /**
    * @openapi
@@ -711,7 +681,7 @@ module.exports = function registerRoutes(router, context) {
       const cached = aiCommitsCache.get(aiCommitsUrl);
       if (!cached || now - cached.fetchedAt > AI_COMMITS_TTL) {
         const html = transformAiCommitsHtml(
-          await fetchPage(aiCommitsUrl),
+          await fetchAiCommitsPage(aiCommitsUrl),
           aiCommitsUrl,
           projectId
         );
