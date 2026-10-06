@@ -586,7 +586,7 @@ test.describe('CI Daily Digest @system-health', () => {
   });
 
   test('renders headline tiles and section content from a successful API response', async ({ page }) => {
-    await page.route('**/api/modules/system-health/ci-digest', async route => {
+    await page.route('**/api/modules/system-health/ci-digest**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(makeEnvelope()) });
     });
 
@@ -624,7 +624,7 @@ test.describe('CI Daily Digest @system-health', () => {
   });
 
   test('shows the no-report state when no digest has been delivered yet', async ({ page }) => {
-    await page.route('**/api/modules/system-health/ci-digest', async route => {
+    await page.route('**/api/modules/system-health/ci-digest**', async route => {
       await route.fulfill({
         status: 404,
         contentType: 'application/json',
@@ -646,7 +646,7 @@ test.describe('CI Daily Digest @system-health', () => {
 
   test('shows a generic error and recovers on manual retry', async ({ page }) => {
     let callCount = 0;
-    await page.route('**/api/modules/system-health/ci-digest', async route => {
+    await page.route('**/api/modules/system-health/ci-digest**', async route => {
       callCount += 1;
       if (callCount === 1) {
         await route.fulfill({
@@ -718,7 +718,7 @@ test.describe('CI Duty View @system-health', () => {
   });
 
   test('renders current, next, and upcoming rotation from a successful API response', async ({ page }) => {
-    await page.route('**/api/modules/system-health/ci-duty', async route => {
+    await page.route('**/api/modules/system-health/ci-duty**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(makeCiDutyRoster()) });
     });
 
@@ -747,7 +747,7 @@ test.describe('CI Duty View @system-health', () => {
   });
 
   test('shows the gap state with no current duty while a future duty remains visible', async ({ page }) => {
-    await page.route('**/api/modules/system-health/ci-duty', async route => {
+    await page.route('**/api/modules/system-health/ci-duty**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(makeCiDutyGapRoster()) });
     });
 
@@ -803,7 +803,7 @@ test.describe('CI Duty Home Widget @system-health', () => {
   }
 
   test('adds and renders the CI Duty widget with current and next duty', async ({ page }) => {
-    await page.route('**/api/modules/system-health/ci-duty', async route => {
+    await page.route('**/api/modules/system-health/ci-duty**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(makeCiDutyRoster()) });
     });
 
@@ -821,7 +821,7 @@ test.describe('CI Duty Home Widget @system-health', () => {
   });
 
   test('navigates to the full CI Duty view via View all', async ({ page }) => {
-    await page.route('**/api/modules/system-health/ci-duty', async route => {
+    await page.route('**/api/modules/system-health/ci-duty**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(makeCiDutyRoster()) });
     });
 
@@ -836,7 +836,7 @@ test.describe('CI Duty Home Widget @system-health', () => {
   });
 
   test('shows the gap state with no current duty while the next duty remains visible', async ({ page }) => {
-    await page.route('**/api/modules/system-health/ci-duty', async route => {
+    await page.route('**/api/modules/system-health/ci-duty**', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(makeCiDutyGapRoster()) });
     });
 

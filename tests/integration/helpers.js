@@ -24,6 +24,36 @@ function setupErrorTracking(page) {
 }
 
 /**
+ * Mock the shell's project-qualified roster request for tests that only exercise
+ * another module. The empty publication is explicit and avoids coupling those
+ * tests to a live project roster artifact.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} defaultProjectId
+ */
+async function mockProjectRoster(page, defaultProjectId = 'osac') {
+  await page.route('**/api/roster**', route => {
+    const url = new URL(route.request().url());
+    const projectId = url.searchParams.get('projectId') || defaultProjectId;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        projectId,
+        state: 'supported',
+        availability: 'empty',
+        reason: 'test-fixture-no-active-team-memberships',
+        people: [],
+        orgs: [],
+        visibleFields: [],
+        primaryDisplayField: null,
+        managerNames: {},
+        teamDataSource: 'project-publication'
+      })
+    });
+  });
+}
+
+/**
  * Logs any errors to the console that were captured during the test so that users
  * can debug any failing integration test.
  *
@@ -136,6 +166,7 @@ async function countDisabledNavItems(page, sectionName) {
 
 module.exports = {
   setupErrorTracking,
+  mockProjectRoster,
   logCapturedErrors,
   pageHasContent,
   pageLoadComplete,

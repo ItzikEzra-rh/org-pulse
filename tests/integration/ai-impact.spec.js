@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { DEFAULT_PAGE_WAIT_TIME } = require('./constants');
-const { setupErrorTracking, logCapturedErrors, pageHasContent, pageLoadComplete, mainContentIsVisible } = require('./helpers');
+const { setupErrorTracking, mockProjectRoster, logCapturedErrors, pageHasContent, pageLoadComplete, mainContentIsVisible } = require('./helpers');
 
 /**
  * Integration tests for AI Impact module
@@ -123,6 +123,7 @@ test.describe('AI Impact Disabled Menu Items @ai-impact', () => {
   });
 
   test('Documentation menu item opens selected project design docs', async ({ page }) => {
+    await mockProjectRoster(page, 'flightctl');
     await page.goto('/#/ai-impact/ai-factory-guide?projectId=flightctl');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);

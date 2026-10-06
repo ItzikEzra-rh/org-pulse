@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { DEFAULT_PAGE_WAIT_TIME } = require('./constants');
-const { setupErrorTracking, logCapturedErrors } = require('./helpers');
+const { setupErrorTracking, mockProjectRoster, logCapturedErrors } = require('./helpers');
 
 /**
  * Integration tests for Releases module
@@ -53,6 +53,7 @@ test.describe('Releases Module @releases', () => {
   });
 
   test('Execute keeps the Hygiene tab available for the selected project', async ({ page }) => {
+    await mockProjectRoster(page, 'flightctl');
     await page.goto('/#/releases/execute?tab=feature-status&projectId=flightctl');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);

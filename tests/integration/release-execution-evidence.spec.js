@@ -203,7 +203,7 @@ function installExecuteApi(page, { delayOsacFeatures = false } = {}) {
 
 async function expectSharedTabs(page) {
   const tabs = page.locator('nav[aria-label="Execute sub-tabs"] button');
-  await expect(tabs).toHaveText(['Feature List', 'Feature Tracking', 'Epics by Release']);
+  await expect(tabs).toHaveText(['Feature List', 'Hygiene', 'Feature Tracking', 'Epics by Release']);
 }
 
 test.describe('Shared Releases Execute @releases', () => {
