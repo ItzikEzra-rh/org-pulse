@@ -20,6 +20,7 @@ import {
 import {
   isValidProgressCount,
   executionUnavailableInfo,
+  JIRA_CHILD_PROGRESS_HELP_TEXT,
   PROGRESS_SUPPORTING_TEXT,
   effectiveExecutionState,
   effectiveExecutionCoverage,
@@ -63,6 +64,9 @@ const { user } = useAuth()
 // Hidden when no reliable jiraDisplayName is resolved for the current user — never guessed client-side.
 const meAssignee = computed(() => user.value?.jiraDisplayName || null)
 const hasUnknownBlockerCount = computed(() => features.value.some(f => !isKnownCount(f.blockerCount)))
+const hasJiraChildProgress = computed(() => features.value.some(
+  f => f.jiraChildProgress?.source === 'jira-child-status-rollup'
+))
 const hasNoCompatibleProducer = computed(() => features.value.some(f => f.coverage?.pipelineMetrics === 'unavailable'))
 
 function selectMeAssignee() {
@@ -119,12 +123,28 @@ const EXECUTION_STATE_FILTER_OPTIONS = [
   { value: 'complete', label: 'Complete' },
   { value: 'unavailable', label: 'Execution Data Unavailable' }
 ]
-const allowedExecutionStateFilterIds = new Set(EXECUTION_STATE_FILTER_OPTIONS.map(o => o.value))
+const JIRA_CHILD_STATUS_FILTER_OPTIONS = [
+  { value: 'no-tracked-work', label: 'No Eligible Jira Children' },
+  { value: 'not-started', label: 'All Jira Children To Do' },
+  { value: 'in-progress', label: 'Mixed Jira Child Statuses' },
+  { value: 'complete', label: 'All Jira Children Done' },
+  { value: 'unavailable', label: 'Jira Child Status Partial or Unknown' },
+  { value: 'inapplicable', label: 'Jira Child Status Not Applicable' }
+]
+const executionStateFilterOptions = computed(() =>
+  hasJiraChildProgress.value ? JIRA_CHILD_STATUS_FILTER_OPTIONS : EXECUTION_STATE_FILTER_OPTIONS
+)
+const allowedExecutionStateFilterIds = new Set([
+  ...EXECUTION_STATE_FILTER_OPTIONS.map(o => o.value),
+  ...JIRA_CHILD_STATUS_FILTER_OPTIONS.map(o => o.value)
+])
 
 const executionStateFilterLabel = computed(() => {
-  if (selectedExecutionStates.value.length === 0) return 'All Execution States'
+  if (selectedExecutionStates.value.length === 0) {
+    return hasJiraChildProgress.value ? 'All Jira Child Statuses' : 'All Execution States'
+  }
   if (selectedExecutionStates.value.length === 1) {
-    const opt = EXECUTION_STATE_FILTER_OPTIONS.find(o => o.value === selectedExecutionStates.value[0])
+    const opt = executionStateFilterOptions.value.find(o => o.value === selectedExecutionStates.value[0])
     return opt ? opt.label : selectedExecutionStates.value[0]
   }
   return selectedExecutionStates.value.length + ' states'
@@ -141,7 +161,31 @@ function handleOutsideClick(e) {
 // missing, or an unrecognized value from an older payload — is a coverage
 // fallback, never a fabricated lane.
 const KNOWN_EXECUTION_STATES = new Set(['no-tracked-work', 'not-started', 'in-progress', 'complete'])
+function jiraChildLaneKey(f) {
+  const progress = f.jiraChildProgress
+  if (progress?.source !== 'jira-child-status-rollup') return null
+  if (progress.state === 'inapplicable' && progress.coverage === 'inapplicable') return 'inapplicable'
+  if (progress.state === 'empty' && progress.coverage === 'complete' && progress.issueCount === 0) {
+    return 'no-tracked-work'
+  }
+  if (progress.state !== 'supported' || progress.coverage !== 'complete') return 'unavailable'
+
+  const total = progress.issueCount
+  const counts = progress.statusCounts || {}
+  const done = counts.done
+  const inProgress = counts.inProgress
+  const toDo = counts.toDo
+  const unknown = counts.unknown
+  if (![total, done, inProgress, toDo, unknown].every(isValidProgressCount) || total <= 0) return 'unavailable'
+  if (done + inProgress + toDo + unknown !== total || unknown !== 0) return 'unavailable'
+  if (done === total) return 'complete'
+  if (toDo === total) return 'not-started'
+  return 'in-progress'
+}
+
 function laneKey(f) {
+  const jiraLane = jiraChildLaneKey(f)
+  if (jiraLane !== null) return jiraLane
   const state = effectiveExecutionState(f)
   return KNOWN_EXECUTION_STATES.has(state) ? state : 'unavailable'
 }
@@ -191,12 +235,36 @@ const LANE_META = {
     headerBg: 'bg-gray-100/80 dark:bg-gray-800/60',
     textClass: 'text-gray-500 dark:text-gray-400',
     dotClass: 'bg-gray-300'
+  },
+  inapplicable: {
+    title: 'Jira Child Status Not Applicable',
+    subtitle: 'The project profile marks Jira child status as not applicable',
+    borderClass: 'border-gray-200 dark:border-gray-700',
+    bgClass: 'bg-gray-50 dark:bg-gray-800/40',
+    headerBg: 'bg-gray-100 dark:bg-gray-800',
+    textClass: 'text-gray-500 dark:text-gray-400',
+    dotClass: 'bg-gray-300'
   }
 }
 // Board columns are only the three real execution states; `no-tracked-work`
 // and `unavailable` both fold into the separate coverage total instead of
 // being columns of their own.
 const BOARD_COLUMNS = ['not-started', 'in-progress', 'complete']
+
+function laneMeta(lane) {
+  const meta = LANE_META[lane]
+  if (!hasJiraChildProgress.value) return meta
+  const jiraLabels = {
+    'no-tracked-work': ['No Eligible Jira Children', 'No configured direct Jira children were found under the linked Epics'],
+    'not-started': ['Jira Children: To Do', 'All configured Jira child issues are in Jira To Do status'],
+    'in-progress': ['Mixed Jira Child Statuses', 'Linked Jira children have a mix of Jira status categories'],
+    complete: ['Jira Children: Done', 'All configured Jira child issues are in Jira Done status'],
+    unavailable: ['Jira Child Status Partial or Unknown', 'Jira child status evidence is incomplete or unavailable'],
+    inapplicable: ['Jira Child Status Not Applicable', 'The project profile marks Jira child status as not applicable']
+  }
+  const [title, subtitle] = jiraLabels[lane] || [meta.title, meta.subtitle]
+  return { ...meta, title, subtitle }
+}
 const PAGE_SIZE = 12
 
 const READINESS_META = {
@@ -213,6 +281,54 @@ function readinessMeta(r, featureKey) {
 // `complete` is state-driven 100%, not a done/total division — a
 // confirmed-complete Epic can have zero actual children (0/0).
 function executionSummary(f) {
+  const jiraProgress = f.jiraChildProgress
+  if (jiraProgress?.source === 'jira-child-status-rollup') {
+    if (jiraProgress.state === 'inapplicable' && jiraProgress.coverage === 'inapplicable') {
+      return {
+        kind: 'jira-inapplicable',
+        caption: 'Jira child status is not applicable',
+        detail: jiraProgress.reason || 'The project profile marks Jira child status as not applicable.'
+      }
+    }
+    if (jiraProgress.state === 'supported' && jiraProgress.coverage === 'complete') {
+      const total = jiraProgress.issueCount
+      const statusCounts = jiraProgress.statusCounts || {}
+      const done = statusCounts.done
+      const inProgress = statusCounts.inProgress
+      const toDo = statusCounts.toDo
+      const unknown = statusCounts.unknown
+      if ([total, done, inProgress, toDo, unknown].every(isValidProgressCount) && total > 0 &&
+          done + inProgress + toDo + unknown === total && done <= total && unknown === 0) {
+        return {
+          kind: 'jira-status',
+          pct: Math.round((done / total) * 100),
+          done,
+          total,
+          detail: JIRA_CHILD_PROGRESS_HELP_TEXT
+        }
+      }
+    }
+    if (jiraProgress.state === 'empty' && jiraProgress.coverage === 'complete') {
+      return {
+        kind: 'unavailable',
+        caption: 'No eligible Jira child issues',
+        detail: 'No direct Jira children of the configured issue types were found under this Feature’s linked Epics.'
+      }
+    }
+    if (jiraProgress.coverage === 'partial') {
+      return {
+        kind: 'unavailable',
+        caption: 'Jira child status data is partial',
+        detail: JIRA_CHILD_PROGRESS_HELP_TEXT
+      }
+    }
+    return {
+      kind: 'unavailable',
+      caption: 'Jira child status data unavailable',
+      detail: JIRA_CHILD_PROGRESS_HELP_TEXT
+    }
+  }
+
   const coverage = effectiveExecutionCoverage(f)
   const total = effectiveExecutionIssueCount(f)
   const done = effectiveDoneExecutionIssueCount(f)
@@ -231,6 +347,29 @@ const WITH_PROGRESS_DATA_HELP =
   'Features with collected execution issues that can be used to calculate progress. Includes work that has not started.'
 const WITHOUT_PROGRESS_DATA_HELP =
   'Progress cannot be calculated because no execution issues were found, only planning issues were found, or issue details are missing. This does not necessarily mean work hasn’t started.'
+const withProgressDataLabel = computed(() =>
+  hasJiraChildProgress.value ? 'With Jira child status progress:' : 'With progress data:'
+)
+const withoutProgressDataLabel = computed(() =>
+  hasJiraChildProgress.value ? 'Without complete Jira child status progress:' : 'Without progress data:'
+)
+const withProgressDataHelp = computed(() =>
+  hasJiraChildProgress.value ? JIRA_CHILD_PROGRESS_HELP_TEXT : WITH_PROGRESS_DATA_HELP
+)
+const withoutProgressDataHelp = computed(() =>
+  hasJiraChildProgress.value
+    ? 'No complete Jira child-status ratio is available. The child inventory may be empty, partial, or missing recognized Jira status categories.'
+    : WITHOUT_PROGRESS_DATA_HELP
+)
+
+function progressIssueCount(feature) {
+  const jiraProgress = feature.jiraChildProgress
+  return jiraProgress?.source === 'jira-child-status-rollup' ? jiraProgress.issueCount : feature.issueCount
+}
+
+function progressIssueCountLabel(feature) {
+  return feature.jiraChildProgress?.source === 'jira-child-status-rollup' ? 'Jira child issues' : 'Total issues'
+}
 
 const OVERVIEW_FILTER_STORAGE_KEY = 'releases:feature-list-filters'
 let filterProjectId = projectId.value
@@ -394,18 +533,17 @@ const decoratedFeatures = computed(() => filteredFeatures.value.map(f => ({
 // Requires both a recognized lane and validated progress, so a known lane
 // with invalid counts (or vice versa) lands in coverage, not neither total.
 function isBoardEligible(d) {
-  return BOARD_COLUMNS.includes(d.lane) && d.progress.kind === 'available'
+  return BOARD_COLUMNS.includes(d.lane) && ['available', 'jira-status'].includes(d.progress.kind)
 }
 
-// The three execution columns are rendered as vertically stacked sections.
-// `LANE_META`/`laneKey` remain in use by filtering and the List view's
-// per-row lane badge.
+// Jira-only profiles reuse the same columns while labeling the lane as Jira
+// child status. They never receive a pipeline execution state from this view.
 const boardColumns = computed(() => {
   const buckets = { 'not-started': [], 'in-progress': [], complete: [] }
   for (const d of decoratedFeatures.value) {
     if (isBoardEligible(d)) buckets[d.lane].push(d)
   }
-  return BOARD_COLUMNS.map(id => ({ id, ...LANE_META[id], items: buckets[id] }))
+  return BOARD_COLUMNS.map(id => ({ id, ...laneMeta(id), items: buckets[id] }))
 })
 
 // Exact complement of board membership.
@@ -530,7 +668,12 @@ onBeforeUnmount(() => {
       <div>
         <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">Feature Execution Overview</h1>
         <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Execution status and progress for features in the selected release, based on observed Jira data.
+          <template v-if="hasJiraChildProgress">
+            Jira child status for configured issue types under linked Epics. It does not report pipeline execution or release readiness.
+          </template>
+          <template v-else>
+            Execution status and progress for features in the selected release, based on observed Jira data.
+          </template>
           <span v-if="fetchedAt" class="ml-2">
             &middot; Data from {{ formatDate(fetchedAt) }}
           </span>
@@ -644,12 +787,12 @@ onBeforeUnmount(() => {
 
       <!-- Multi-select: Execution State -->
       <div class="flex flex-col gap-0.5">
-        <label class="text-xs font-medium text-gray-600 dark:text-gray-400">Execution state</label>
+        <label class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ hasJiraChildProgress ? 'Jira child status' : 'Execution state' }}</label>
         <div class="relative multi-select-dropdown">
           <button
             @click.stop="toggleDropdown('executionState')"
             class="bg-white dark:bg-gray-800 border rounded-md px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none flex items-center gap-1.5 min-w-[160px]"
-            title="Execution state reflects observed, normalized Jira issues only; recognized planning work is excluded."
+            :title="hasJiraChildProgress ? JIRA_CHILD_PROGRESS_HELP_TEXT : 'Execution state reflects observed, normalized Jira issues only; recognized planning work is excluded.'"
             :class="selectedExecutionStates.length > 0
               ? 'border-primary-500 ring-1 ring-primary-500'
               : 'border-gray-300 dark:border-gray-600'"
@@ -662,7 +805,7 @@ onBeforeUnmount(() => {
             class="absolute z-20 mt-1 w-60 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1"
           >
             <label
-              v-for="opt in EXECUTION_STATE_FILTER_OPTIONS"
+              v-for="opt in executionStateFilterOptions"
               :key="opt.value"
               class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-900 dark:text-gray-100"
             >
@@ -806,7 +949,12 @@ onBeforeUnmount(() => {
       role="status"
       class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 text-sm text-gray-600 dark:text-gray-300"
     >
-      No compatible pipeline execution producer is configured. Jira Feature or child status is shown separately and does not establish execution progress or release readiness.
+      <template v-if="hasJiraChildProgress">
+        No compatible pipeline execution producer is configured. Jira child status progress is shown separately; it does not establish Feature completion, pipeline success, or release readiness.
+      </template>
+      <template v-else>
+        No compatible pipeline execution producer is configured. Jira Feature or child status is shown separately and does not establish execution progress or release readiness.
+      </template>
     </div>
 
     <!-- Loading -->
@@ -825,15 +973,14 @@ onBeforeUnmount(() => {
     <template v-else>
       <!-- ===================== BOARD VIEW ===================== -->
       <template v-if="viewMode === 'board'">
-        <!-- Data coverage: not additional columns, a separate accounting of the
-             filtered population's measurable-vs-not execution progress. -->
+        <!-- Data coverage: the producer remains separate from Jira-only child status. -->
         <div class="flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm mb-4">
           <span class="text-gray-600 dark:text-gray-300">
             Features: <strong class="text-gray-900 dark:text-gray-100">{{ filteredFeatures.length }}</strong>
           </span>
           <span class="inline-flex items-center text-gray-600 dark:text-gray-300">
-            With progress data: <strong class="text-gray-900 dark:text-gray-100 ml-1">{{ measurableCount }}</strong>
-            <AIInfoBubble hoverable :text="WITH_PROGRESS_DATA_HELP" />
+            {{ withProgressDataLabel }} <strong class="text-gray-900 dark:text-gray-100 ml-1">{{ measurableCount }}</strong>
+            <AIInfoBubble hoverable :text="withProgressDataHelp" />
           </span>
           <span class="inline-flex items-center">
             <button
@@ -843,9 +990,9 @@ onBeforeUnmount(() => {
               aria-controls="coverage-panel"
               @click="coveragePanelOpen = !coveragePanelOpen"
             >
-              Without progress data: <strong class="text-gray-900 dark:text-gray-100">{{ coverageFeatures.length }}</strong>
+              {{ withoutProgressDataLabel }} <strong class="text-gray-900 dark:text-gray-100">{{ coverageFeatures.length }}</strong>
             </button>
-            <AIInfoBubble hoverable :text="WITHOUT_PROGRESS_DATA_HELP" />
+            <AIInfoBubble hoverable :text="withoutProgressDataHelp" />
           </span>
         </div>
 
@@ -855,7 +1002,7 @@ onBeforeUnmount(() => {
           class="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/60 dark:bg-gray-800/20 p-3 mb-4"
         >
           <div v-if="coverageFeatures.length === 0" class="text-center py-6 text-gray-500 text-sm">
-            No features without measurable execution progress.
+            {{ hasJiraChildProgress ? 'No features without complete Jira child status progress.' : 'No features without measurable execution progress.' }}
           </div>
           <template v-else>
             <div class="grid gap-2" :class="coverageGridClass">
@@ -892,7 +1039,7 @@ onBeforeUnmount(() => {
                 <p class="text-sm text-gray-900 dark:text-gray-100 font-medium leading-snug mb-1">{{ d.feature.summary }}</p>
                 <p class="text-xs italic text-gray-500 dark:text-gray-400">{{ d.progress.caption }}</p>
                 <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500 dark:text-gray-400">
-                  <span>Total issues: <strong class="font-semibold text-gray-700 dark:text-gray-300">{{ displayCount(d.feature.issueCount) }}</strong></span>
+                  <span>{{ progressIssueCountLabel(d.feature) }}: <strong class="font-semibold text-gray-700 dark:text-gray-300">{{ displayCount(progressIssueCount(d.feature)) }}</strong></span>
                   <span>Blockers: <strong class="font-semibold text-gray-700 dark:text-gray-300">{{ displayCount(d.feature.blockerCount) }}</strong></span>
                   <span v-if="d.feature.coverage?.team === 'unknown' || d.feature.coverage?.team === 'unavailable'">Team: Unknown</span>
                 </div>
@@ -988,12 +1135,14 @@ onBeforeUnmount(() => {
 
                 <!-- Progress -->
                 <div class="px-4 pb-2">
-                  <template v-if="d.progress.kind === 'available'">
+                  <template v-if="['available', 'jira-status'].includes(d.progress.kind)">
                     <div class="flex items-center gap-2">
                       <div class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div class="h-full rounded-full bg-primary-500" :style="{ width: d.progress.pct + '%' }" />
+                        <div class="h-full rounded-full" :class="d.progress.kind === 'jira-status' ? 'bg-slate-500' : 'bg-primary-500'" :style="{ width: d.progress.pct + '%' }" />
                       </div>
-                      <span class="text-xs font-semibold text-gray-600 dark:text-gray-300 w-24 text-right">{{ d.progress.done }}/{{ d.progress.total }} &middot; {{ d.progress.pct }}%</span>
+                      <span class="text-xs font-semibold text-gray-600 dark:text-gray-300 w-32 text-right">
+                        {{ d.progress.done }}/{{ d.progress.total }}<template v-if="d.progress.kind === 'jira-status'"> Jira Done</template> &middot; {{ d.progress.pct }}%
+                      </span>
                     </div>
                   </template>
                   <p v-else class="text-xs italic text-gray-400 dark:text-gray-500" :title="d.progress.detail">{{ d.progress.caption }}</p>
@@ -1005,8 +1154,8 @@ onBeforeUnmount(() => {
                     <span class="font-semibold text-gray-700 dark:text-gray-300">{{ d.feature.epicCount }}</span> Epics
                   </span>
                   <span class="text-gray-300 dark:text-gray-600">|</span>
-                  <span class="text-gray-500 dark:text-gray-400" title="Total tracked child issues, including recognized planning">
-                    <span class="font-semibold text-gray-700 dark:text-gray-300">{{ displayCount(d.feature.issueCount) }}</span> Total issues
+                  <span class="text-gray-500 dark:text-gray-400" :title="hasJiraChildProgress ? JIRA_CHILD_PROGRESS_HELP_TEXT : 'Total tracked child issues, including recognized planning'">
+                    <span class="font-semibold text-gray-700 dark:text-gray-300">{{ displayCount(progressIssueCount(d.feature)) }}</span> {{ progressIssueCountLabel(d.feature) }}
                   </span>
                   <span v-if="!isKnownCount(d.feature.blockerCount) || d.feature.blockerCount > 0" class="text-gray-300 dark:text-gray-600">|</span>
                   <span v-if="!isKnownCount(d.feature.blockerCount)" class="text-gray-500 dark:text-gray-400 font-semibold">
@@ -1111,17 +1260,17 @@ onBeforeUnmount(() => {
                   <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Key</th>
                   <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Summary</th>
                   <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Jira Status</th>
-                  <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Execution State</th>
+                  <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">{{ hasJiraChildProgress ? 'Jira Child Status' : 'Execution State' }}</th>
                   <th
                     class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium"
-                    :title="PROGRESS_SUPPORTING_TEXT"
-                  >Progress</th>
+                    :title="hasJiraChildProgress ? JIRA_CHILD_PROGRESS_HELP_TEXT : PROGRESS_SUPPORTING_TEXT"
+                  >{{ hasJiraChildProgress ? 'Jira Child Progress' : 'Progress' }}</th>
                   <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Planning</th>
                   <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Epics</th>
                   <th
                     class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium"
-                    title="Total tracked child issues, including recognized planning — a different denominator than Progress"
-                  >Total issues</th>
+                    :title="hasJiraChildProgress ? JIRA_CHILD_PROGRESS_HELP_TEXT : 'Total tracked child issues, including recognized planning — a different denominator than Progress'"
+                  >{{ hasJiraChildProgress ? 'Jira child issues' : 'Total issues' }}</th>
                   <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Attention</th>
                   <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Components</th>
                   <th class="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Version</th>
@@ -1146,17 +1295,19 @@ onBeforeUnmount(() => {
                   <td class="px-3 py-2"><StatusBadge :status="d.feature.status" /></td>
                   <td class="px-3 py-2">
                     <span class="inline-flex items-center gap-1.5">
-                      <span class="w-2 h-2 rounded-full" :class="LANE_META[d.lane].dotClass" />
-                      <span class="text-xs" :class="LANE_META[d.lane].textClass">{{ LANE_META[d.lane].title }}</span>
+                      <span class="w-2 h-2 rounded-full" :class="laneMeta(d.lane).dotClass" />
+                      <span class="text-xs" :class="laneMeta(d.lane).textClass">{{ laneMeta(d.lane).title }}</span>
                     </span>
                   </td>
                   <td class="px-3 py-2 min-w-[150px]">
-                    <template v-if="d.progress.kind === 'available'">
+                    <template v-if="['available', 'jira-status'].includes(d.progress.kind)">
                       <div class="flex items-center gap-2">
                         <div class="w-16 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div class="h-full rounded-full bg-primary-500" :style="{ width: d.progress.pct + '%' }" />
+                          <div class="h-full rounded-full" :class="d.progress.kind === 'jira-status' ? 'bg-slate-500' : 'bg-primary-500'" :style="{ width: d.progress.pct + '%' }" />
                         </div>
-                        <span class="text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">{{ d.progress.done }}/{{ d.progress.total }} &middot; {{ d.progress.pct }}%</span>
+                        <span class="text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">
+                          {{ d.progress.done }}/{{ d.progress.total }}<template v-if="d.progress.kind === 'jira-status'"> Jira Done</template> &middot; {{ d.progress.pct }}%
+                        </span>
                       </div>
                     </template>
                     <span v-else class="text-xs italic text-gray-400 dark:text-gray-500" :title="d.progress.detail">{{ d.progress.caption }}</span>
@@ -1168,7 +1319,7 @@ onBeforeUnmount(() => {
                     </span>
                   </td>
                   <td class="px-3 py-2 text-gray-700 dark:text-gray-300">{{ d.feature.epicCount }}</td>
-                  <td class="px-3 py-2 text-gray-700 dark:text-gray-300">{{ displayCount(d.feature.issueCount) }}</td>
+                  <td class="px-3 py-2 text-gray-700 dark:text-gray-300">{{ displayCount(progressIssueCount(d.feature)) }}</td>
                   <td class="px-3 py-2">
                     <span v-if="!isKnownCount(d.feature.blockerCount)" class="text-gray-500 dark:text-gray-400">Unknown</span>
                     <span v-else-if="d.feature.blockerCount > 0" class="text-amber-600 dark:text-amber-400 font-medium">{{ d.feature.blockerCount }} Blockers</span>

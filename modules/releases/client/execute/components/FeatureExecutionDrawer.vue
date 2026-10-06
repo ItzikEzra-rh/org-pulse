@@ -4,7 +4,12 @@ import StatusBadge from './StatusBadge.vue'
 import AIInfoBubble from './AIInfoBubble.vue'
 import { componentDisplayLabel } from '../composables/useComponentStatusFilter'
 import { useFocusTrap } from '../../plan/composables/useFocusTrap'
-import { isValidProgressCount, PROGRESS_SUPPORTING_TEXT, PROGRESS_HELP_TEXT } from '../utils/progress'
+import {
+  isValidProgressCount,
+  PROGRESS_SUPPORTING_TEXT,
+  PROGRESS_HELP_TEXT,
+  JIRA_CHILD_PROGRESS_HELP_TEXT
+} from '../utils/progress'
 
 const props = defineProps({
   featureKey: { type: String, default: null },
@@ -47,6 +52,18 @@ function togglePrep(key) {
 // Per-Epic progress reads the producer's own executionIssueCount/doneExecutionIssueCount
 // directly — never counted up from issue-level isPreparation flags in this view.
 function epicProgress(epic) {
+  if (epic.jiraStatusProgress === true) {
+    const issues = Array.isArray(epic.issues) ? epic.issues : []
+    const total = issues.length
+    const done = issues.filter(issue => issue.statusCategory === 'Done').length
+    const unknown = issues.filter(issue => !['Done', 'In Progress', 'To Do'].includes(issue.statusCategory)).length
+    if (total === 0 && epic.issueStatusCoverage === 'complete') return { kind: 'empty-jira-status' }
+    if (total === 0 || epic.issueStatusCoverage !== 'complete' || unknown > 0) {
+      return { kind: 'unavailable', source: 'jira-status' }
+    }
+    return { kind: 'jira-status', pct: Math.round((done / total) * 100), done, total }
+  }
+
   const total = epic.executionIssueCount
   const done = epic.doneExecutionIssueCount
   if (!isValidProgressCount(total) || !isValidProgressCount(done) || done > total) return { kind: 'unavailable' }
@@ -68,6 +85,16 @@ function issueMain(epic) {
 function issuePrep(epic) {
   if (!Array.isArray(epic.issues)) return []
   return epic.issues.filter(i => i.isPreparation === true)
+}
+
+function featureIssueCount(feature) {
+  return feature.jiraChildProgress?.source === 'jira-child-status-rollup'
+    ? feature.jiraChildProgress.issueCount
+    : feature.issueCount
+}
+
+function featureIssueCountLabel(feature) {
+  return feature.jiraChildProgress?.source === 'jira-child-status-rollup' ? 'Jira child issues' : 'Total issues'
 }
 
 const completedViaStatusEpicCount = computed(() =>
@@ -148,11 +175,11 @@ const completedViaStatusEpicCount = computed(() =>
           <!-- Scrollable body -->
           <div class="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
 
-            <!-- Execution Progress -->
+            <!-- Execution Progress or explicitly labeled Jira child status -->
             <section class="px-4 py-4">
               <p class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3 flex items-center">
-                Execution Progress
-                <AIInfoBubble hoverable :text="PROGRESS_HELP_TEXT" />
+                {{ card.progress.kind.startsWith('jira-') ? 'Jira Child Status Progress' : 'Execution Progress' }}
+                <AIInfoBubble hoverable :text="card.progress.kind.startsWith('jira-') ? JIRA_CHILD_PROGRESS_HELP_TEXT : PROGRESS_HELP_TEXT" />
               </p>
               <template v-if="card.progress.kind === 'available'">
                 <div class="flex items-center gap-2">
@@ -162,6 +189,15 @@ const completedViaStatusEpicCount = computed(() =>
                 </div>
                 <p class="text-xs font-semibold text-gray-600 dark:text-gray-300 mt-2">{{ card.progress.done }} of {{ card.progress.total }} tracked execution issues done &middot; {{ card.progress.pct }}%</p>
                 <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-2">{{ PROGRESS_SUPPORTING_TEXT }}</p>
+              </template>
+              <template v-else-if="card.progress.kind === 'jira-status'">
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full bg-slate-500" :style="{ width: card.progress.pct + '%' }" />
+                  </div>
+                </div>
+                <p class="text-xs font-semibold text-gray-600 dark:text-gray-300 mt-2">{{ card.progress.done }} of {{ card.progress.total }} configured Jira child issues are Done &middot; {{ card.progress.pct }}%</p>
+                <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-2">{{ JIRA_CHILD_PROGRESS_HELP_TEXT }}</p>
               </template>
               <template v-else>
                 <p class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ card.progress.caption }}</p>
@@ -223,8 +259,11 @@ const completedViaStatusEpicCount = computed(() =>
                 <dt class="text-gray-400 dark:text-gray-500">Epics</dt>
                 <dd class="text-gray-700 dark:text-gray-300">{{ card.feature.epicCount }}</dd>
 
-                <dt class="text-gray-400 dark:text-gray-500" title="Total tracked child issues, including recognized planning">Total issues</dt>
-                <dd class="text-gray-700 dark:text-gray-300">{{ isValidProgressCount(card.feature.issueCount) ? card.feature.issueCount : 'Unknown' }}</dd>
+                <dt
+                  class="text-gray-400 dark:text-gray-500"
+                  :title="card.feature.jiraChildProgress?.source === 'jira-child-status-rollup' ? JIRA_CHILD_PROGRESS_HELP_TEXT : 'Total tracked child issues, including recognized planning'"
+                >{{ featureIssueCountLabel(card.feature) }}</dt>
+                <dd class="text-gray-700 dark:text-gray-300">{{ isValidProgressCount(featureIssueCount(card.feature)) ? featureIssueCount(card.feature) : 'Unknown' }}</dd>
 
                 <template v-if="!isValidProgressCount(card.feature.blockerCount) || card.feature.blockerCount > 0">
                   <dt class="text-gray-400 dark:text-gray-500">Blockers</dt>
@@ -300,18 +339,19 @@ const completedViaStatusEpicCount = computed(() =>
                     <p v-if="epic.completedViaStatus" class="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mb-1">
                       Completed via Epic status
                     </p>
-                    <template v-if="epicProgress(epic).kind === 'available'">
+                    <template v-if="['available', 'jira-status'].includes(epicProgress(epic).kind)">
                       <div class="flex items-center gap-2">
                         <div class="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div class="h-full rounded-full bg-primary-500" :style="{ width: epicProgress(epic).pct + '%' }" />
+                          <div class="h-full rounded-full" :class="epicProgress(epic).kind === 'jira-status' ? 'bg-slate-500' : 'bg-primary-500'" :style="{ width: epicProgress(epic).pct + '%' }" />
                         </div>
                         <span class="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                          {{ epicProgress(epic).done }}/{{ epicProgress(epic).total }} &middot; {{ epicProgress(epic).pct }}%<template v-if="epic.completedViaStatus"> (actual)</template>
+                          {{ epicProgress(epic).done }}/{{ epicProgress(epic).total }}<template v-if="epicProgress(epic).kind === 'jira-status'"> Jira Done</template> &middot; {{ epicProgress(epic).pct }}%<template v-if="epic.completedViaStatus"> (actual)</template>
                         </span>
                       </div>
                     </template>
+                    <p v-else-if="epicProgress(epic).kind === 'empty-jira-status'" class="text-[11px] italic text-gray-400 dark:text-gray-500">No Jira child issues.</p>
                     <p v-else-if="epicProgress(epic).kind === 'empty'" class="text-[11px] italic text-gray-400 dark:text-gray-500">{{ epic.completedViaStatus ? 'No execution issues recorded' : 'No tracked execution work' }}</p>
-                    <p v-else class="text-[11px] italic text-gray-400 dark:text-gray-500">No issue-level progress available</p>
+                    <p v-else class="text-[11px] italic text-gray-400 dark:text-gray-500">{{ epicProgress(epic).source === 'jira-status' ? 'Jira child status data is partial.' : 'No issue-level progress available' }}</p>
                   </div>
 
                   <div v-if="expandedEpics.has(epic.key)" class="border-t border-gray-100 dark:border-gray-800 px-3 py-2 space-y-1">

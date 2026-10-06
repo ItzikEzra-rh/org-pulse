@@ -63,3 +63,6 @@ export const PROGRESS_SUPPORTING_TEXT =
 
 export const PROGRESS_HELP_TEXT =
   'Only issues identified as planning are excluded from this calculation. Other collected issues remain included, even if their type wasn’t confirmed.'
+
+export const JIRA_CHILD_PROGRESS_HELP_TEXT =
+  'Counts the configured Jira issue types directly under linked Epics. This reports Jira child status only; it does not establish Feature completion, pipeline success, or release readiness.'

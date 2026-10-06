@@ -444,6 +444,16 @@
       "jiraChildren": {
         "state": "supported",
         "definition": "Direct Jira children of a parented Epic, grouped by Jira status category",
+        "featureProgress": {
+          "state": "supported",
+          "issueTypes": [
+            "Story",
+            "Bug",
+            "Task",
+            "Sub-task",
+            "Spike"
+          ]
+        },
         "doesNotCertify": [
           "pipeline-success",
           "feature-completion",
@@ -470,7 +480,7 @@
       "markerRequired": true
     }
   },
-  "executeRevision": "3e276deefdcc706e",
+  "executeRevision": "4479223e71a25778",
   "provenance": {
     "configPath": "config/projects/flightctl.json",
     "repositoryRevision": null,

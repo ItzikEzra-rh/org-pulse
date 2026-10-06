@@ -1174,6 +1174,15 @@ Derived summary index of all features in the unified feature store. Rebuilt auto
   `effectiveExecutionState` renders as 100% from the state itself, never from a `done/total`
   division — a completedViaStatus Epic with zero children legitimately has
   `effectiveExecutionIssueCount: 0` / `effectiveDoneExecutionIssueCount: 0` at `"complete"`.
+- `jiraChildProgress` is a separate, optional Jira-only rollup emitted when the project profile
+  configures `execution.metrics.jiraChildren.featureProgress`. It follows Feature → parented Epic →
+  direct child and counts only the configured child issue types. The object has
+  `source: "jira-child-status-rollup"`, `state` (`supported`, `empty`, `unavailable`, or `inapplicable`), `coverage`
+  (`complete`, `partial`, `unavailable`, or `inapplicable`), `issueCount`, `knownStatusIssueCount`, `statusCounts`
+  (`done`, `inProgress`, `toDo`, `unknown`), and an optional `reason`. Consumers may show a Done ratio
+  only when `state` is `supported`, `coverage` is `complete`, and `issueCount` is positive. It reports
+  Jira child status; it must not populate `execution*` metrics or be presented as pipeline success,
+  Feature completion, or release readiness. The same object is copied into the matching Feature Detail.
 
 ## Releases — Execution Feature Detail (`data/releases/execution/features/{KEY}.json`)
 

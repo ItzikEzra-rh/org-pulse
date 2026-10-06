@@ -115,6 +115,47 @@ describe('FeatureExecutionDrawer', () => {
     expect(text).not.toMatch(/0\/0/)
   })
 
+  it('labels Feature and Epic Jira child status separately from pipeline execution', () => {
+    const card = makeCard({
+      feature: {
+        key: 'EDM-100',
+        issueCount: null,
+        jiraChildProgress: {
+          source: 'jira-child-status-rollup',
+          state: 'supported',
+          coverage: 'complete',
+          issueCount: 2,
+          knownStatusIssueCount: 2,
+          statusCounts: { done: 1, inProgress: 1, toDo: 0, unknown: 0 }
+        }
+      },
+      progress: { kind: 'jira-status', pct: 50, done: 1, total: 2 },
+      readiness: { label: 'Unknown', class: 'bg-gray-100' }
+    })
+    const detail = {
+      key: 'EDM-100',
+      epics: [{
+        key: 'EDM-200', summary: 'Linked Epic', status: 'In Progress',
+        jiraStatusProgress: true,
+        issueStatusCoverage: 'complete',
+        issues: [
+          { key: 'EDM-201', status: 'Closed', statusCategory: 'Done' },
+          { key: 'EDM-202', status: 'Open', statusCategory: 'To Do' }
+        ]
+      }]
+    }
+    const wrapper = mountDrawer({ featureKey: 'EDM-100', card, detail })
+    const text = wrapper.text()
+
+    expect(text).toContain('Jira Child Status Progress')
+    expect(text).toContain('1 of 2 configured Jira child issues are Done')
+    expect(text).toContain('Jira child issues')
+    expect(text).toContain('1/2 Jira Done')
+    expect(text).toContain('Unknown')
+    expect(text).toContain('does not establish Feature completion, pipeline success, or release readiness')
+    expect(text).not.toContain('tracked execution issues done')
+  })
+
   it('separates execution and preparation issues, flagging missing/unrecognized classification as Unclassified', async () => {
     const detail = {
       key: 'OSAC-100',

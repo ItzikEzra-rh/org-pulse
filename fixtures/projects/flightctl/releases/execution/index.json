@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "projectId": "flightctl",
   "profileRevision": "84d6e4c515154de5",
-  "executeRevision": "3e276deefdcc706e",
-  "generationId": "flightctl-fixture-generation-1",
+  "executeRevision": "4479223e71a25778",
+  "generationId": "flightctl-fixture-generation-jira-progress-1",
   "artifactKey": "releases/execution/index.json",
   "source": {
     "id": "execute-demo-fixture",
@@ -29,8 +29,8 @@
     "schemaVersion": 1,
     "projectId": "flightctl",
     "profileRevision": "84d6e4c515154de5",
-    "executeRevision": "3e276deefdcc706e",
-    "generationId": "flightctl-fixture-generation-1",
+    "executeRevision": "4479223e71a25778",
+    "generationId": "flightctl-fixture-generation-jira-progress-1",
     "fetchedAt": "2026-10-05T00:00:00Z",
     "observedAt": "2026-10-05T00:00:00Z",
     "featureCount": 2,
@@ -76,6 +76,21 @@
           "featureReadiness": "unconfigured",
           "scopeBaseline": "unconfigured",
           "issueStatus": "complete"
+        },
+        "jiraChildProgress": {
+          "source": "jira-child-status-rollup",
+          "method": "direct-children-of-parented-epics",
+          "state": "supported",
+          "coverage": "complete",
+          "issueCount": 1,
+          "knownStatusIssueCount": 1,
+          "statusCounts": {
+            "done": 1,
+            "inProgress": 0,
+            "toDo": 0,
+            "unknown": 0
+          },
+          "reason": null
         }
       },
       {
@@ -119,6 +134,21 @@
           "featureReadiness": "unconfigured",
           "scopeBaseline": "unconfigured",
           "issueStatus": "complete"
+        },
+        "jiraChildProgress": {
+          "source": "jira-child-status-rollup",
+          "method": "direct-children-of-parented-epics",
+          "state": "empty",
+          "coverage": "complete",
+          "issueCount": 0,
+          "knownStatusIssueCount": 0,
+          "statusCounts": {
+            "done": 0,
+            "inProgress": 0,
+            "toDo": 0,
+            "unknown": 0
+          },
+          "reason": "no-matching-jira-children"
         }
       }
     ],
@@ -163,6 +193,7 @@
       "inventory": "complete",
       "team": "unknown",
       "pipelineMetrics": "unavailable",
+      "jiraChildProgress": "complete",
       "readiness": "unconfigured",
       "scopeBaseline": "unconfigured",
       "traceability": "unavailable"

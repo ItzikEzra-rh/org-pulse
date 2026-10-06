@@ -238,16 +238,34 @@ test.describe('Shared Releases Execute @releases', () => {
         await drawer.getByRole('button', { name: 'Close detail panel' }).click();
       } else {
         await expect(page.getByText(/No compatible pipeline execution producer is configured/)).toBeVisible();
+        await expect(page.getByText(/does not establish Feature completion, pipeline success, or release readiness/)).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Board', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Board', exact: true }).click();
+        await expect(page.getByText(/With Jira child status progress:/)).toBeVisible();
+        await expect(page.getByText(/Without complete Jira child status progress:/)).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Jira Children: Done' })).toBeVisible();
+        await expect(page.getByText(/1\/1 Jira Done/)).toBeVisible();
+
+        await page.getByRole('button', { name: 'List', exact: true }).click();
         await page.getByLabel('Search').fill('EDM-1002');
         const row = page.getByRole('row').filter({ hasText: 'EDM-1002' });
         await expect(row).toBeVisible();
-        await expect(row.getByRole('cell').nth(7)).toHaveText('Unknown');
+        await expect(row.getByRole('cell').nth(3)).toContainText('No Eligible Jira Children');
+        await expect(row.getByRole('cell').nth(7)).toHaveText('0');
         await captureSharedExecuteScreenshot(page, projectId, 'feature-list');
         await page.getByRole('button', { name: 'Open details for EDM-1002', exact: true }).click();
         const drawer = page.getByRole('dialog', { name: 'Feature details for EDM-1002' });
         await expect(drawer).toBeVisible();
         await expect(drawer.locator('dt:has-text("Team") + dd')).toHaveText('Unknown');
         await drawer.getByRole('button', { name: 'Close detail panel' }).click();
+
+        await page.getByLabel('Search').fill('EDM-1001');
+        await page.getByRole('button', { name: 'Open details for EDM-1001', exact: true }).click();
+        const progressDrawer = page.getByRole('dialog', { name: 'Feature details for EDM-1001' });
+        await expect(progressDrawer.getByText('Jira Child Status Progress', { exact: true })).toBeVisible();
+        await expect(progressDrawer.getByText(/1 of 1 configured Jira child issues are Done/)).toBeVisible();
+        await expect(progressDrawer.getByText(/does not establish Feature completion, pipeline success, or release readiness/)).toBeVisible();
+        await progressDrawer.getByRole('button', { name: 'Close detail panel' }).click();
       }
 
       await page.getByRole('button', { name: 'Feature Tracking', exact: true }).click();
