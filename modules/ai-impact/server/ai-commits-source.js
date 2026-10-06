@@ -1,7 +1,38 @@
+const https = require('https')
 const { resolveProjectSelection } = require('../../../shared/server/project-profile')
 
 const AI_COMMITS_SCANNER_ORIGIN = 'https://ai-commits-scanner-fd01cc.pages.redhat.com'
 const LEGACY_OSAC_SCANNER_URL = `${AI_COMMITS_SCANNER_ORIGIN}/osac/index.html`
+const MAX_REDIRECTS = 5
+const FETCH_TIMEOUT_MS = 15000
+
+function fetchAiCommitsPage(url, { redirectCount = 0, httpsGet = https.get } = {}) {
+  return new Promise((resolve, reject) => {
+    // Calling https.get without custom TLS options preserves Node's default
+    // certificate verification. NODE_EXTRA_CA_CERTS, when configured for the
+    // process, adds the deployment's trusted CA chain without disabling checks.
+    const req = httpsGet(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        if (redirectCount >= MAX_REDIRECTS) return reject(new Error('Too many redirects'))
+        const nextUrl = new URL(res.headers.location, url).toString()
+        res.resume()
+        return resolve(fetchAiCommitsPage(nextUrl, { redirectCount: redirectCount + 1, httpsGet }))
+      }
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        res.resume()
+        return reject(new Error(`Upstream returned ${res.statusCode}`))
+      }
+      const chunks = []
+      res.on('data', chunk => chunks.push(chunk))
+      res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    req.setTimeout(FETCH_TIMEOUT_MS, () => {
+      req.destroy(new Error('Upstream request timed out'))
+    })
+  })
+}
 
 function resolveAiCommitsSource(projects, query) {
   const selection = resolveProjectSelection(projects, query)
@@ -110,4 +141,9 @@ function renderAiCommitsStatePage({ title, message }) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head><body style="font-family:system-ui,sans-serif;padding:2rem;color:#374151"><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p></main></body></html>`
 }
 
-module.exports = { resolveAiCommitsSource, transformAiCommitsHtml, renderAiCommitsStatePage }
+module.exports = {
+  resolveAiCommitsSource,
+  fetchAiCommitsPage,
+  transformAiCommitsHtml,
+  renderAiCommitsStatePage
+}

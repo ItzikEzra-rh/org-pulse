@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { EventEmitter } from 'node:events'
+import { describe, it, expect, vi } from 'vitest'
 import {
   resolveAiCommitsSource,
+  fetchAiCommitsPage,
   transformAiCommitsHtml,
   renderAiCommitsStatePage
 } from '../../server/ai-commits-source.js'
@@ -126,5 +128,34 @@ describe('AI Commits scanner HTML', () => {
     const html = renderAiCommitsStatePage({ title: 'AI Commits <Flight Control>', message: 'source <missing>' })
     expect(html).toContain('AI Commits &lt;Flight Control&gt;')
     expect(html).toContain('source &lt;missing&gt;')
+  })
+})
+
+describe('AI Commits scanner HTTPS client', () => {
+  it('uses Node HTTPS certificate verification defaults', async () => {
+    const response = new EventEmitter()
+    response.statusCode = 200
+    response.headers = {}
+    response.resume = vi.fn()
+
+    const request = {
+      on: vi.fn().mockReturnThis(),
+      setTimeout: vi.fn(),
+      destroy: vi.fn()
+    }
+    const httpsGet = vi.fn((url, callback) => {
+      queueMicrotask(() => {
+        callback(response)
+        response.emit('data', Buffer.from('<html>scanner</html>'))
+        response.emit('end')
+      })
+      return request
+    })
+
+    await expect(fetchAiCommitsPage(FLIGHTCTL_URL, { httpsGet })).resolves.toBe('<html>scanner</html>')
+    expect(httpsGet).toHaveBeenCalledTimes(1)
+    expect(httpsGet.mock.calls[0]).toHaveLength(2)
+    expect(httpsGet.mock.calls[0][0]).toBe(FLIGHTCTL_URL)
+    expect(httpsGet.mock.calls[0][1]).toEqual(expect.any(Function))
   })
 })
