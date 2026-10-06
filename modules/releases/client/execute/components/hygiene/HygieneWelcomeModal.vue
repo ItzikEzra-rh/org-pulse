@@ -68,7 +68,7 @@ const enabledRuleCount = computed(() => {
       <!-- Modal -->
       <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6 z-10">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          Welcome to Feature Status
+          Welcome to Release Hygiene
         </h2>
 
         <!-- Tabs -->

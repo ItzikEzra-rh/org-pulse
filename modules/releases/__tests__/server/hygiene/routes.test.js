@@ -95,6 +95,7 @@ describe('hygiene routes — GET /project-hygiene', () => {
 
     expect(res._status).toBe(200)
     expect(res._json.projectId).toBe('osac')
+    expect(res._json.legacyMigration).toBe(true)
     expect(res._json.profileRevision).toBe(OSAC_PROFILE.profileRevision)
     expect(Object.keys(res._json.results)).toEqual(['OSAC'])
     expect(res._json.results.OSAC.rules.map(rule => rule.id)).toEqual(OSAC_ENVELOPE.data.configuredRuleIds)
@@ -123,6 +124,7 @@ describe('hygiene routes — GET /project-hygiene', () => {
 
     expect(res._status).toBe(200)
     expect(res._json.projectId).toBe('flightctl')
+    expect(res._json.legacyMigration).toBeUndefined()
     expect(Object.keys(res._json.results)).toEqual(['EDM'])
     expect(res._json.results.EDM.rules.map(rule => rule.id)).toEqual(['in-progress-no-assignee'])
     expect(res._json.results.EDM.rules.flatMap(rule => rule.issues).map(issue => issue.key)).toEqual(['EDM-101'])

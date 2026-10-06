@@ -394,7 +394,7 @@ onMounted(() => {
       class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1"
       @click="goBack"
     >
-      &larr; {{ fromForYou ? 'Back to State of the Union' : fromRfe ? 'Back to PRD Review' : fromFeatureReview ? 'Back to Design Review' : fromPlanFeatures ? 'Back to Features List' : fromPlan ? 'Back to Plan' : fromHygieneReport ? 'Back to Hygiene Report' : fromFeatureStatus ? 'Back to Feature Status' : 'Back to Execute' }}
+      &larr; {{ fromForYou ? 'Back to State of the Union' : fromRfe ? 'Back to PRD Review' : fromFeatureReview ? 'Back to Design Review' : fromPlanFeatures ? 'Back to Features List' : fromPlan ? 'Back to Plan' : fromHygieneReport ? 'Back to Hygiene Report' : fromFeatureStatus ? 'Back to Hygiene' : 'Back to Execute' }}
     </button>
 
     <!-- Loading -->

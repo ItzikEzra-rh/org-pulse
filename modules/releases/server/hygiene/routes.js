@@ -104,7 +104,7 @@ const refreshState = {
  * /api/modules/releases/hygiene/project-hygiene:
  *   get:
  *     summary: Get the selected project's Jira hygiene results
- *     description: Read-only. The selected project profile identifies one project-qualified source envelope published by org-pulse-data.
+ *     description: Read-only. The selected project profile identifies one project-qualified source envelope published by org-pulse-data. A profile that declares legacyMigration returns that marker so the Execute Hygiene view can preserve its established collection path.
  *     tags: [Releases - Hygiene]
  *     parameters:
  *       - in: query
@@ -984,7 +984,13 @@ module.exports = function registerHygieneRoutes(router, context) {
     const selection = selectedHygieneProject(req, res);
     if (!selection) return;
     const selected = readSelectedProjectHygiene(selection);
-    return res.status(selected.status || 200).json(selected.contract);
+    const contract = selected.contract;
+    // The Execute Hygiene tab keeps the established release feature board
+    // when the selected profile declares the legacy migration contract.
+    if (selection.profile?.capabilities?.jiraHygiene?.legacyMigration && contract && typeof contract === 'object') {
+      contract.legacyMigration = true;
+    }
+    return res.status(selected.status || 200).json(contract);
   });
 
   // GET /project-hygiene/config — selected-project Jira hygiene rules (read-only, data-side owned)

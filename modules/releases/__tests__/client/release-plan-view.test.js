@@ -185,6 +185,90 @@ describe('ReleasePlanView', () => {
     expect(wrapper.findAll('h2').map(heading => heading.text())).not.toContain('Flight Control 0.3')
   })
 
+  it('renders a project release-plan envelope with its freshness, partial state and unknown policy predicates', async () => {
+    window.location.hash = '#/releases?projectId=flightctl'
+    window.dispatchEvent(new Event('hashchange'))
+    apiRequest.mockImplementation((path) => {
+      if (path === '/projects') return Promise.resolve({ projects: [{ projectId: 'flightctl', displayName: 'Flight Control' }] })
+      if (path === '/modules/releases/release-plans?projectId=flightctl') {
+        return Promise.resolve({
+          projectId: 'flightctl',
+          state: 'supported',
+          freshness: 'unknown',
+          partial: true,
+          generatedAt: '2026-10-06T08:17:58Z',
+          data: { projectId: 'flightctl', versions: [{ version: '0.10.0', state: 'supported', freshness: 'unknown', partial: true }] }
+        })
+      }
+      if (path === '/modules/releases/release-plan?version=0.10.0&projectId=flightctl') {
+        return Promise.resolve({
+          projectId: 'flightctl',
+          state: 'supported',
+          freshness: 'unknown',
+          partial: true,
+          generatedAt: '2026-10-06T08:17:58Z',
+          data: {
+            projectId: 'flightctl',
+            version: '0.10.0',
+            displayName: 'Flight Control 0.10.0',
+            planEntryCount: 2,
+            explicitTargetCount: 1,
+            derivedTargetCount: 1,
+            mergedPRCount: 1,
+            release: { state: 'archived' },
+            derived: {
+              freeze: { state: 'unknown', reason: 'No freeze policy is configured.' },
+              readiness: { state: 'unknown', reason: 'No readiness policy is configured.' },
+              shipped: { state: 'unknown', reason: 'No shipped policy is configured.' }
+            },
+            planEntries: [{
+              issueKey: 'EDM-10',
+              summary: 'Observed work item',
+              issueType: { name: 'Feature' },
+              status: { raw: { name: 'In Progress' } },
+              membership: { kind: 'explicit' },
+              traceability: [{ pullRequest: { merged: true } }]
+            }]
+          }
+        })
+      }
+      return Promise.reject(new Error(`unexpected path: ${path}`))
+    })
+
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Freshness: unknown')
+    expect(wrapper.text()).toContain('Partial evidence')
+    expect(wrapper.text()).toContain('Evidence-derived Jira scope and traceability')
+    expect(wrapper.text()).toContain('Explicit Fix Version targets')
+    expect(wrapper.text()).toContain('readiness')
+    expect(wrapper.text()).toContain('Unknown')
+    expect(wrapper.text()).toContain('EDM-10')
+    expect(wrapper.text()).not.toContain('Forward-looking view')
+  })
+
+  it('rejects a project-qualified plan response for another project', async () => {
+    window.location.hash = '#/releases?projectId=flightctl'
+    window.dispatchEvent(new Event('hashchange'))
+    apiRequest.mockImplementation((path) => {
+      if (path === '/projects') return Promise.resolve({ projects: [{ projectId: 'flightctl', displayName: 'Flight Control' }] })
+      if (path === '/modules/releases/release-plans?projectId=flightctl') {
+        return Promise.resolve({ projectId: 'flightctl', data: { versions: [{ version: '0.10.0' }] } })
+      }
+      if (path === '/modules/releases/release-plan?version=0.10.0&projectId=flightctl') {
+        return Promise.resolve({ projectId: 'osac', data: { planEntries: [] } })
+      }
+      return Promise.reject(new Error(`unexpected path: ${path}`))
+    })
+
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Release plan response project identity mismatch')
+  })
+
   it('refetches the plan when the version picker changes', async () => {
     apiRequest.mockImplementation((path) => {
       if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.2'), makeIndexEntry('0.3')] })

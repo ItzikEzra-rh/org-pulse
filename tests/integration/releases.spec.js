@@ -52,6 +52,16 @@ test.describe('Releases Module @releases', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('Execute keeps the Hygiene tab available for the selected project', async ({ page }) => {
+    await page.goto('/#/releases/execute?tab=feature-status&projectId=flightctl');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const executeTabs = page.getByRole('navigation', { name: 'Execute sub-tabs' });
+    await expect(executeTabs.getByRole('button', { name: 'Hygiene' })).toBeVisible();
+    expect(page.errors).toHaveLength(0);
+  });
+
 });
 
 /**

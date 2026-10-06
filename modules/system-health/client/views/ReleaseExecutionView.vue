@@ -13,6 +13,9 @@
           <p v-if="envelope.freshness !== 'fresh'" class="text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
             ⚠ Publication is {{ envelope.freshness }}
           </p>
+          <p v-if="envelope.partial === true" role="status" class="text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
+            ⚠ Partial evidence; counts follow the collector's bounded source coverage.
+          </p>
         </template>
       </div>
     </div>
@@ -51,6 +54,47 @@
         </div>
       </div>
 
+      <section v-if="diagnostics" aria-label="Release execution coverage" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-3">
+          <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Collection coverage</h2>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ diagnostics.counts?.workflowRunCount ?? (data.workflowRuns || []).length }} workflow runs,
+            {{ diagnostics.counts?.jobCount ?? (data.jobs || []).length }} jobs, and
+            {{ diagnostics.counts?.artifactCount ?? (data.artifacts || []).length }} artifacts were published.
+            <span v-if="diagnostics.bounded === true">The collector applies a bounded lookback and per-source limits.</span>
+          </p>
+        </div>
+        <div class="p-5 space-y-4">
+          <div v-if="unmatchedReleases.length" role="status">
+            <h3 class="text-xs font-semibold text-amber-700 dark:text-amber-300">{{ unmatchedReleases.length }} release records have unmatched evidence</h3>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">These records were not confidently joined to a Jira release. Their evidence is shown without a guessed association.</p>
+            <ul class="mt-2 divide-y divide-gray-100 dark:divide-gray-700">
+              <li v-for="item in unmatchedReleases" :key="item.releaseId" class="flex flex-wrap items-baseline gap-x-3 py-2 text-xs">
+                <span class="font-mono font-medium text-gray-800 dark:text-gray-200">{{ item.version || item.releaseId }}</span>
+                <span class="text-gray-500 dark:text-gray-400">{{ item.releaseId }}</span>
+                <span class="ml-auto text-gray-500 dark:text-gray-400">Observed: {{ (item.evidence || []).join(', ') || 'unknown' }}</span>
+              </li>
+            </ul>
+          </div>
+          <p v-else-if="Array.isArray(diagnostics.unmatched)" class="text-xs text-gray-500 dark:text-gray-400">
+            The collector reported no unmatched release records.
+          </p>
+          <details v-if="truncatedSources.length" class="rounded-md border border-gray-200 dark:border-gray-700">
+            <summary class="cursor-pointer px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">
+              Bounded or truncated evidence sources ({{ truncatedSources.length }})
+            </summary>
+            <ul class="border-t border-gray-200 dark:border-gray-700 px-3 py-2">
+              <li v-for="(item, index) in truncatedSources" :key="`${item.repository || item.kind || 'source'}:${index}`" class="py-1 text-xs text-gray-600 dark:text-gray-300">
+                {{ item.repository || item.directory || 'Collector' }} · {{ item.kind || 'bounded source' }}
+                <span v-if="item.since"> · since {{ item.since }}</span>
+                <span v-if="Number.isInteger(item.omitted)"> · {{ item.omitted }} omitted</span>
+                <span v-else-if="Number.isInteger(item.limit)"> · limit {{ item.limit }}</span>
+              </li>
+            </ul>
+          </details>
+        </div>
+      </section>
+
       <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
         <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">
           Workflow runs
@@ -78,7 +122,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
 import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
@@ -89,6 +133,9 @@ const unavailable = ref(null)
 const data = ref(null)
 const projectId = useProjectId()
 let requestSequence = 0
+const diagnostics = computed(() => data.value?.diagnostics || null)
+const unmatchedReleases = computed(() => Array.isArray(diagnostics.value?.unmatched) ? diagnostics.value.unmatched : [])
+const truncatedSources = computed(() => Array.isArray(diagnostics.value?.truncated) ? diagnostics.value.truncated : [])
 
 function runBadgeClasses(run) {
   const status = String(run.status || run.conclusion || '').toLowerCase()

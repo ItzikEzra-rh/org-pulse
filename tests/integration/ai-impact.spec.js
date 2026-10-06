@@ -122,8 +122,18 @@ test.describe('AI Impact Disabled Menu Items @ai-impact', () => {
     await testDisabledMenuItem(page, 'Security Review');
   });
 
-  test('Documentation menu item should be disabled', async ({ page }) => {
-    await testDisabledMenuItem(page, 'Documentation');
+  test('Documentation menu item opens selected project design docs', async ({ page }) => {
+    await page.goto('/#/ai-impact/ai-factory-guide?projectId=flightctl');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const documentationItem = page.locator('aside nav button').filter({ hasText: 'Documentation' }).first();
+    await expect(documentationItem).toBeVisible();
+    expect(await documentationItem.getAttribute('aria-disabled')).not.toBe('true');
+    await documentationItem.click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('heading', { name: 'Design Documentation' })).toBeVisible();
+    expect(page.errors).toHaveLength(0);
   });
 
   test('Build & Release menu item should be disabled', async ({ page }) => {

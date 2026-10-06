@@ -4,12 +4,41 @@ import { apiRequest } from '@shared/client/services/api.js'
 import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 
 const versions = ref([])
+const versionEntries = ref([])
 const selectedVersion = ref('')
 const plan = ref(null)
+const indexPublication = ref(null)
+const planPublication = ref(null)
 const loading = ref(true)
 const error = ref(null)
 const selectedProjectName = ref('')
 const projectId = useProjectId()
+
+const selectedVersionEntry = computed(() =>
+  versionEntries.value.find(entry => entry.version === selectedVersion.value) || null
+)
+const isEvidencePlan = computed(() => Array.isArray(plan.value?.planEntries))
+const publicationState = computed(() =>
+  planPublication.value?.state || selectedVersionEntry.value?.state || indexPublication.value?.state || 'unknown'
+)
+const publicationFreshness = computed(() =>
+  planPublication.value?.freshness || selectedVersionEntry.value?.freshness || indexPublication.value?.freshness || 'unknown'
+)
+const publicationPartial = computed(() => {
+  const value = planPublication.value?.partial ?? selectedVersionEntry.value?.partial ?? indexPublication.value?.partial
+  return typeof value === 'boolean' ? value : null
+})
+const publicationGeneratedAt = computed(() =>
+  planPublication.value?.generatedAt || plan.value?.metadata?.generatedAt || plan.value?.generatedAt ||
+  selectedVersionEntry.value?.generatedAt || indexPublication.value?.generatedAt || null
+)
+const publicationSources = computed(() => Array.isArray(planPublication.value?.sourceRefs)
+  ? planPublication.value.sourceRefs
+  : [])
+const planTitle = computed(() => plan.value?.displayName ||
+  [selectedProjectName.value || 'Release', plan.value?.metadata?.version || plan.value?.version || selectedVersion.value]
+    .filter(Boolean).join(' ')
+)
 
 function jiraLink(key) {
   return `https://redhat.atlassian.net/browse/${key}`
@@ -50,11 +79,19 @@ async function loadPlan(version, requestedProjectId = projectId.value) {
   loading.value = true
   error.value = null
   plan.value = null
+  planPublication.value = null
   try {
     const params = new URLSearchParams({ version })
     if (requestedProjectId) params.set('projectId', requestedProjectId)
-    const nextPlan = await apiRequest(`/modules/releases/release-plan?${params.toString()}`)
-    if (requestId === planRequestId && projectId.value === requestedProjectId) plan.value = nextPlan
+    const nextPublication = await apiRequest(`/modules/releases/release-plan?${params.toString()}`)
+    if (requestId !== planRequestId || projectId.value !== requestedProjectId) return
+    if (requestedProjectId && nextPublication?.projectId && nextPublication.projectId !== requestedProjectId) {
+      throw new Error('Release plan response project identity mismatch')
+    }
+    planPublication.value = nextPublication?.data && typeof nextPublication.data === 'object'
+      ? nextPublication
+      : null
+    plan.value = planPublication.value ? nextPublication.data : nextPublication
   } catch (e) {
     if (requestId === planRequestId && projectId.value === requestedProjectId) {
       error.value = e.message || 'Failed to load release plan'
@@ -75,20 +112,31 @@ async function bootstrap() {
   planRequestId += 1
   void loadProjectName(requestedProjectId)
   versions.value = []
+  versionEntries.value = []
+  indexPublication.value = null
   plan.value = null
+  planPublication.value = null
   error.value = null
   settingVersionFromBootstrap = true
   selectedVersion.value = ''
   settingVersionFromBootstrap = false
   loading.value = true
   try {
-    const data = await apiRequest(`/modules/releases/release-plans${projectQuery(requestedProjectId)}`)
+    const publication = await apiRequest(`/modules/releases/release-plans${projectQuery(requestedProjectId)}`)
     if (requestId !== bootstrapRequestId || projectId.value !== requestedProjectId) return
+    if (requestedProjectId && publication?.projectId && publication.projectId !== requestedProjectId) {
+      throw new Error('Release plan index project identity mismatch')
+    }
+    indexPublication.value = publication?.data && typeof publication.data === 'object'
+      ? publication
+      : null
+    const data = indexPublication.value ? publication.data : publication
     // Index entries are version-metadata objects ({ version, generatedAt, ...}),
     // not bare strings — normalize to the version string the picker/API need.
-    versions.value = (data.versions || [])
-      .map((v) => (typeof v === 'string' ? v : v?.version))
-      .filter(Boolean)
+    versionEntries.value = Array.isArray(data?.versions)
+      ? data.versions.map(value => typeof value === 'string' ? { version: value } : value).filter(value => value?.version)
+      : []
+    versions.value = versionEntries.value.map(entry => entry.version)
     if (versions.value.length === 0) {
       loading.value = false
       return
@@ -103,7 +151,10 @@ async function bootstrap() {
     if (requestId !== bootstrapRequestId || projectId.value !== requestedProjectId) return
     error.value = e.message || 'Failed to load release plan versions'
     versions.value = []
+    versionEntries.value = []
+    indexPublication.value = null
     plan.value = null
+    planPublication.value = null
     loading.value = false
   }
 }
@@ -169,6 +220,22 @@ function isUnfinishedPriorWork(item) {
   const status = item.status || ''
   return status !== '' && !status.startsWith('Done') && !status.startsWith('Closed')
 }
+
+function policyStateLabel(policy) {
+  if (!policy || typeof policy.state !== 'string') return 'Unknown'
+  if (policy.state === 'supported' && typeof policy.value === 'boolean') return policy.value ? 'Yes' : 'No'
+  if (policy.state === 'empty') return 'No evidence'
+  if (policy.state === 'inapplicable') return 'Not applicable'
+  return 'Unknown'
+}
+
+function issueStatus(entry) {
+  return entry?.status?.raw?.name || entry?.status?.name || 'Unknown'
+}
+
+function issueType(entry) {
+  return entry?.issueType?.name || entry?.issueType || 'Unknown'
+}
 </script>
 
 <template>
@@ -178,7 +245,8 @@ function isUnfinishedPriorWork(item) {
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Release Plan</h1>
         <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Forward-looking view of what a version will deliver for the selected project
+          <template v-if="isEvidencePlan">Observed release scope and linked evidence for the selected project.</template>
+          <template v-else>Forward-looking view of what a version will deliver for the selected project.</template>
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -224,10 +292,101 @@ function isUnfinishedPriorWork(item) {
     </div>
 
     <template v-else>
+      <section class="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-xs text-gray-600 dark:text-gray-300" aria-label="Release plan publication status">
+        <span><strong class="font-semibold">Publication:</strong> {{ publicationState }}</span>
+        <span><strong class="font-semibold">Freshness:</strong> {{ publicationFreshness }}</span>
+        <span v-if="publicationPartial === true" class="font-semibold text-amber-700 dark:text-amber-300">Partial evidence</span>
+        <span v-else-if="publicationPartial === false">Completeness: complete</span>
+        <span v-else>Completeness: unknown</span>
+        <span class="ml-auto">Generated {{ publicationGeneratedAt || 'unknown' }}</span>
+      </section>
+
+      <details v-if="publicationSources.length" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <summary class="cursor-pointer px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-300">Source evidence freshness ({{ publicationSources.length }})</summary>
+        <ul class="divide-y divide-gray-100 dark:divide-gray-700 border-t border-gray-200 dark:border-gray-700 px-4">
+          <li v-for="(source, index) in publicationSources" :key="`${source.name || source.artifactKey || 'source'}:${index}`" class="flex flex-wrap gap-x-3 py-2 text-xs">
+            <span class="font-medium text-gray-800 dark:text-gray-200">{{ source.name || source.source?.id || source.artifactKey }}</span>
+            <span class="text-gray-600 dark:text-gray-300">{{ source.state || 'unknown' }} · freshness {{ source.freshness || 'unknown' }}</span>
+            <span v-if="source.partial === true" class="text-amber-700 dark:text-amber-300">partial</span>
+          </li>
+        </ul>
+      </details>
+
+      <template v-if="isEvidencePlan">
+        <section class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ plan.displayName || selectedVersion }}</h2>
+              <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Evidence-derived Jira scope and traceability. This view does not infer release readiness.</p>
+            </div>
+            <span class="rounded-full bg-gray-100 dark:bg-gray-700 px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300">
+              Registry state: {{ plan.release?.state || 'unknown' }}
+            </span>
+          </div>
+          <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="rounded-md bg-gray-50 dark:bg-gray-900/40 p-3">
+              <div class="text-xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ plan.planEntryCount ?? 'Unknown' }}</div>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400">Jira plan entries</div>
+            </div>
+            <div class="rounded-md bg-gray-50 dark:bg-gray-900/40 p-3">
+              <div class="text-xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ plan.explicitTargetCount ?? 'Unknown' }}</div>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400">Explicit Fix Version targets</div>
+            </div>
+            <div class="rounded-md bg-gray-50 dark:bg-gray-900/40 p-3">
+              <div class="text-xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ plan.derivedTargetCount ?? 'Unknown' }}</div>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400">Hierarchy-derived targets</div>
+            </div>
+            <div class="rounded-md bg-gray-50 dark:bg-gray-900/40 p-3">
+              <div class="text-xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ plan.mergedPRCount ?? 'Unknown' }}</div>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400">Traceable merged PRs</div>
+            </div>
+          </div>
+          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div v-for="name in ['freeze', 'readiness', 'shipped']" :key="name" class="rounded-md border border-gray-200 dark:border-gray-700 p-3">
+              <div class="text-xs font-semibold capitalize text-gray-700 dark:text-gray-300">{{ name }}</div>
+              <div class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{{ policyStateLabel(plan.derived?.[name]) }}</div>
+              <p v-if="plan.derived?.[name]?.reason" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ plan.derived[name].reason }}</p>
+            </div>
+          </div>
+        </section>
+
+        <details v-if="plan.planEntries?.length" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <summary class="cursor-pointer px-5 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
+            Jira plan entries ({{ plan.planEntries.length }})
+          </summary>
+          <div class="max-h-[32rem] overflow-auto border-t border-gray-200 dark:border-gray-700">
+            <table class="w-full text-sm">
+              <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500">Issue</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500">Type</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500">Status</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500">Membership</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500">Traceable PRs</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in plan.planEntries" :key="entry.issueKey" class="border-t border-gray-100 dark:border-gray-700">
+                  <td class="px-4 py-2">
+                    <a :href="jiraLink(entry.issueKey)" target="_blank" rel="noopener noreferrer" class="font-mono text-xs text-primary-600 dark:text-primary-400 hover:underline">{{ entry.issueKey }}</a>
+                    <div class="mt-0.5 text-xs text-gray-700 dark:text-gray-300">{{ entry.summary || 'Summary unavailable' }}</div>
+                  </td>
+                  <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-300">{{ issueType(entry) }}</td>
+                  <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-300">{{ issueStatus(entry) }}</td>
+                  <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-300">{{ entry.membership?.kind || 'unknown' }}</td>
+                  <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-300">{{ (entry.traceability || []).filter(link => link.pullRequest?.merged === true).length }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </template>
+
+      <template v-else>
       <!-- Vision -->
       <section class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
         <div class="flex items-center gap-2 mb-2">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ selectedProjectName || 'Release' }} {{ plan.metadata?.version }}</h2>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ planTitle }}</h2>
           <span
             v-if="plan.metadata?.badge"
             class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300"
@@ -509,6 +668,7 @@ function isUnfinishedPriorWork(item) {
           </ul>
         </div>
       </section>
+      </template>
     </template>
   </div>
 </template>

@@ -51,4 +51,41 @@ describe('ReleaseExecutionView', () => {
     expect(wrapper.text()).toContain('OSAC run')
     expect(wrapper.text()).not.toContain('Flight Control run')
   })
+
+  it('shows partial collection coverage and the collector unmatched-release diagnostics', async () => {
+    setProjectId('flightctl')
+    apiRequest.mockResolvedValue({
+      projectId: 'flightctl',
+      state: 'supported',
+      freshness: 'fresh',
+      partial: true,
+      generatedAt: '2026-10-06T08:16:25Z',
+      data: {
+        workflowRuns: [],
+        jobs: [],
+        releases: [{ releaseId: 'flightctl-1.5.0-rc1' }],
+        artifacts: [],
+        diagnostics: {
+          bounded: true,
+          counts: { workflowRunCount: 200, jobCount: 319, artifactCount: 49 },
+          unmatched: [{
+            releaseId: 'flightctl-1.5.0-rc1',
+            version: '1.5.0-rc1',
+            evidence: ['tag', 'github-release', 'workflow-execution']
+          }],
+          truncated: [{ repository: 'flightctl/flightctl', kind: 'workflow-runs', since: '2026-09-06', limit: 100 }]
+        }
+      }
+    })
+
+    const wrapper = mount(ReleaseExecutionView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Partial evidence')
+    expect(wrapper.text()).toContain('Collection coverage')
+    expect(wrapper.text()).toContain('1 release records have unmatched evidence')
+    expect(wrapper.text()).toContain('1.5.0-rc1')
+    expect(wrapper.text()).toContain('tag, github-release, workflow-execution')
+    expect(wrapper.text()).toContain('Bounded or truncated evidence sources (1)')
+  })
 })

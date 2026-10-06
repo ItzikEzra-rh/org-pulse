@@ -34,14 +34,12 @@ import EpicsByReleaseView from '../execute/views/EpicsByReleaseView.vue'
 const nav = inject('moduleNav')
 const ALL_TABS = [
   { id: 'feature-list', label: 'Feature List' },
-  { id: 'feature-status', label: 'Feature Status' },
+  { id: 'feature-status', label: 'Hygiene' },
   { id: 'feature-tracking', label: 'Feature Tracking' },
   { id: 'epics-by-release', label: 'Epics by Release' },
 ]
 
-// Feature Status stays hidden as in the existing OSAC Execute experience.
-const HIDDEN_TAB_IDS = ['feature-status']
-const tabs = ALL_TABS.filter(tab => !HIDDEN_TAB_IDS.includes(tab.id))
+const tabs = ALL_TABS
 const VALID_TABS = tabs.map(tab => tab.id)
 const DEFAULT_TAB = 'feature-list'
 const activeTab = ref(DEFAULT_TAB)

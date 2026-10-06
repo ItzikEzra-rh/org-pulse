@@ -14,12 +14,12 @@ describe('shared Execute presentation', () => {
     const labels = wrapper.findAll('nav button').map(button => button.text())
 
     expect(['osac', 'flightctl']).toContain(projectId)
-    expect(labels).toEqual(['Feature List', 'Feature Tracking', 'Epics by Release'])
+    expect(labels).toEqual(['Feature List', 'Hygiene', 'Feature Tracking', 'Epics by Release'])
     expect(wrapper.find('overview-view-stub').exists()).toBe(true)
     expect(wrapper.find('project-execution-evidence-view-stub').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('Feature Status')
+    expect(wrapper.text()).toContain('Hygiene')
 
-    await wrapper.findAll('nav button')[2].trigger('click')
+    await wrapper.findAll('nav button')[3].trigger('click')
     expect(wrapper.find('epics-by-release-view-stub').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -32,20 +32,20 @@ describe('shared Execute presentation', () => {
     // data fetched by the mounted tab content.
     await nextTick()
     expect(wrapper.findAll('nav button').map(button => button.text())).toEqual([
-      'Feature List', 'Feature Tracking', 'Epics by Release'
+      'Feature List', 'Hygiene', 'Feature Tracking', 'Epics by Release'
     ])
     expect(wrapper.find('feature-tracking-view-stub').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('restores a valid tab from the URL and ignores the hidden legacy tab', async () => {
+  it('restores a valid tab from the URL, including the established hygiene route id', async () => {
     const wrapper = mountView('flightctl', 'epics-by-release')
     expect(wrapper.find('epics-by-release-view-stub').exists()).toBe(true)
     wrapper.unmount()
 
-    const hidden = mountView('osac', 'feature-status')
-    expect(hidden.find('overview-view-stub').exists()).toBe(true)
-    expect(hidden.text()).not.toContain('Feature Status')
-    hidden.unmount()
+    const hygiene = mountView('osac', 'feature-status')
+    expect(hygiene.find('hygiene-view-stub').exists()).toBe(true)
+    expect(hygiene.text()).toContain('Hygiene')
+    hygiene.unmount()
   })
 })
