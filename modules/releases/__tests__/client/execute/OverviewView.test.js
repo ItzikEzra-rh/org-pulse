@@ -171,6 +171,77 @@ describe('OverviewView (Feature List)', () => {
     expect(wrapper.text()).toContain('No compatible execution producer')
   })
 
+  it('shows Jira child status progress separately from pipeline execution and readiness', async () => {
+    setProjectId('flightctl')
+    const features = [
+      {
+        key: 'EDM-DONE', summary: 'All child issues done', status: 'In Progress', statusCategory: 'In Progress',
+        fixVersions: ['0.10.0'], components: [], labels: [], epicCount: 1, issueCount: null, blockerCount: null,
+        executionIssueCount: null, doneExecutionIssueCount: null, executionState: 'unavailable',
+        executionCoverage: 'unavailable', executionCoverageReason: 'no-compatible-feature-producer',
+        effectiveExecutionIssueCount: null, effectiveDoneExecutionIssueCount: null,
+        effectiveExecutionState: 'unavailable', effectiveExecutionCoverage: 'unavailable',
+        effectiveExecutionCoverageReason: 'no-compatible-feature-producer', preparationReadiness: 'unknown',
+        jiraChildProgress: {
+          source: 'jira-child-status-rollup', state: 'supported', coverage: 'complete', issueCount: 2,
+          knownStatusIssueCount: 2, statusCounts: { done: 2, inProgress: 0, toDo: 0, unknown: 0 }, reason: null
+        },
+        coverage: { team: 'unknown', pipelineMetrics: 'unavailable', featureReadiness: 'unconfigured' }
+      },
+      {
+        key: 'EDM-EMPTY', summary: 'No eligible child issues', status: 'To Do', statusCategory: 'To Do',
+        fixVersions: ['0.10.0'], components: [], labels: [], epicCount: 0, issueCount: null, blockerCount: null,
+        executionIssueCount: null, doneExecutionIssueCount: null, executionState: 'unavailable',
+        executionCoverage: 'unavailable', executionCoverageReason: 'no-compatible-feature-producer',
+        preparationReadiness: 'unknown',
+        jiraChildProgress: {
+          source: 'jira-child-status-rollup', state: 'empty', coverage: 'complete', issueCount: 0,
+          knownStatusIssueCount: 0, statusCounts: { done: 0, inProgress: 0, toDo: 0, unknown: 0 },
+          reason: 'no-matching-jira-children'
+        },
+        coverage: { team: 'unknown', pipelineMetrics: 'unavailable', featureReadiness: 'unconfigured' }
+      },
+      {
+        key: 'EDM-NA', summary: 'Child status not applicable', status: 'To Do', statusCategory: 'To Do',
+        fixVersions: ['0.10.0'], components: [], labels: [], epicCount: 0, issueCount: null, blockerCount: null,
+        executionIssueCount: null, doneExecutionIssueCount: null, executionState: 'unavailable',
+        executionCoverage: 'unavailable', executionCoverageReason: 'no-compatible-feature-producer',
+        preparationReadiness: 'unknown',
+        jiraChildProgress: {
+          source: 'jira-child-status-rollup', state: 'inapplicable', coverage: 'inapplicable',
+          issueCount: null, knownStatusIssueCount: null,
+          statusCounts: { done: null, inProgress: null, toDo: null, unknown: null },
+          reason: 'project-does-not-track-feature-child-status'
+        },
+        coverage: { team: 'unknown', pipelineMetrics: 'unavailable', featureReadiness: 'unconfigured' }
+      }
+    ]
+    mockApiRequest.mockImplementation(url => {
+      if (url.includes('/versions')) return Promise.resolve({ projectId: 'flightctl', versions: ['0.10.0'] })
+      return Promise.resolve({ projectId: 'flightctl', state: 'supported', partial: false, features, featureCount: features.length })
+    })
+
+    const wrapper = mount(OverviewView, {
+      global: { provide: { moduleNav: mockNav() }, stubs: { Teleport: true, Transition: true } }
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('With Jira child status progress:')
+    expect(wrapper.text()).toContain('Without complete Jira child status progress:')
+    expect(wrapper.text()).toContain('Jira Children: Done')
+    expect(wrapper.text()).toContain('2/2 Jira Done')
+    expect(wrapper.text()).toContain('does not establish Feature completion, pipeline success, or release readiness')
+    expect(wrapper.text()).toContain('Planning')
+    expect(wrapper.text()).toContain('Unknown')
+
+    const withoutProgress = wrapper.findAll('button').find(button => button.text().includes('Without complete Jira child status progress'))
+    await withoutProgress.trigger('click')
+    expect(wrapper.text()).toContain('EDM-EMPTY')
+    expect(wrapper.text()).toContain('No eligible Jira child issues')
+    expect(wrapper.text()).toContain('EDM-NA')
+    expect(wrapper.text()).toContain('Jira child status is not applicable')
+  })
+
   it('keeps filter state project-qualified and discards a late OSAC response after switching projects', async () => {
     const filterState = (searchQuery) => JSON.stringify({
       selectedVersions: [], selectedExecutionStates: [], selectedComponents: [], selectedStatuses: [],
