@@ -40,7 +40,7 @@ const timeWindowCutoff = computed(() => {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 })
 
-const isInTimeWindow = rfe => new Date(rfe.created) >= timeWindowCutoff.value
+const isInTimeWindow = rfe => new Date(rfe.prdPrCreatedAt || rfe.created) >= timeWindowCutoff.value
 
 const listRFEs = computed(() => {
   if (!rfeData.value?.issues) return []

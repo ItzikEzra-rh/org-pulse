@@ -107,6 +107,25 @@ describe('TrendCharts Created-with-AI chart type', () => {
   });
 });
 
+describe('TrendCharts AI status availability breakdown', () => {
+  it('gives the unavailable AI-evidence cohort its own neutral chart color', () => {
+    const breakdown = [
+      { name: 'Created & Review', value: 0 },
+      { name: 'AI Created', value: 0 },
+      { name: 'AI Review', value: 0 },
+      { name: 'No AI', value: 0 },
+      { name: 'AI status unavailable', value: 4 }
+    ];
+    const wrapper = mountTrend({ breakdown });
+    const breakdownBar = wrapper.findAllComponents(Bar).find(component =>
+      component.props('data').labels.includes('AI status unavailable'));
+    const data = breakdownBar.props('data');
+
+    expect(data.datasets[0].data).toEqual([0, 0, 0, 0, 4]);
+    expect(data.datasets[0].backgroundColor[4]).toBe('#9ca3af');
+  });
+});
+
 describe('TrendCharts Created-with-AI legend', () => {
   it('shows a compact legend labeling both stacked segments', () => {
     const wrapper = mountTrend({ trendData: [] });

@@ -180,6 +180,44 @@ describe('RFEListItem', () => {
     expect(wrapper.text()).toContain('Review Awaiting Sign-off');
   });
 
+  it('shows an unmerged PRD proposed for review even though the file is not on the main branch yet', () => {
+    const rfe = makeRFE({
+      key: 'EDM-371',
+      status: 'Open',
+      prdArtifactPresence: 'missing',
+      prdPrNumber: 54,
+      prdPrUrl: 'https://github.com/flightctl/design-docs/pull/54',
+      prdPrCreatedAt: '2026-09-29T14:13:24Z',
+      prdDraft: false,
+      aiInvolvement: null
+    });
+    const wrapper = mount(RFEListItem, { props: { rfe } });
+
+    expect(wrapper.text()).toContain('PRD PR in review');
+    expect(wrapper.text()).toContain('Review Awaiting Sign-off');
+    expect(wrapper.text()).not.toContain('Missing PRD');
+    expect(wrapper.text()).toContain('AI status unavailable');
+    expect(wrapper.text()).toContain('PR opened');
+    expect(wrapper.find('a[title="View PRD pull request on GitHub"]').attributes('href'))
+      .toBe(rfe.prdPrUrl);
+  });
+
+  it('does not treat a draft PRD pull request as awaiting human sign-off', () => {
+    const rfe = makeRFE({
+      status: 'Open',
+      prdArtifactPresence: 'missing',
+      prdPrUrl: 'https://github.com/flightctl/design-docs/pull/57',
+      prdDraft: true,
+      aiInvolvement: null
+    });
+    const wrapper = mount(RFEListItem, { props: { rfe } });
+
+    expect(wrapper.text()).toContain('Draft PRD PR');
+    expect(wrapper.text()).toContain('Review Draft');
+    expect(wrapper.text()).not.toContain('Awaiting Sign-off');
+    expect(wrapper.text()).not.toContain('Missing PRD');
+  });
+
   it('shows a Review Awaiting Sign-off badge when the PRD PR is Closed without merge', () => {
     const wrapper = mount(RFEListItem, { props: { rfe: makeRFE({ status: 'Closed' }) } });
 

@@ -71,7 +71,7 @@ describe('MetricsRow Needs Action metric', () => {
     expect(tileValue(wrapper, 'Needs Action')).toBe('2'); // OSAC-2, OSAC-3 — No PR excluded, Merged excluded
   });
 
-  it('excludes not-yet-assessed existing PRDs from the denominator', () => {
+  it('counts a non-draft open PRD awaiting sign-off even without an AI assessment', () => {
     const rfes = [
       makeRFE({ key: 'OSAC-1', status: 'Open' }),
       makeRFE({ key: 'OSAC-2', status: 'Open' })
@@ -79,7 +79,17 @@ describe('MetricsRow Needs Action metric', () => {
     const assessments = { 'OSAC-2': { passFail: 'FAIL' } };
     const wrapper = mount(MetricsRow, { props: { metrics: METRICS, rfes, assessments } });
 
-    expect(tileValue(wrapper, 'Needs Action')).toBe('1'); // OSAC-1 has no AI verdict yet
+    expect(tileValue(wrapper, 'Needs Action')).toBe('2');
+  });
+
+  it('does not count draft PRDs as awaiting human sign-off', () => {
+    const rfes = [
+      makeRFE({ key: 'OSAC-1', status: 'Open', prdPrUrl: 'https://github.com/org/repo/pull/1', prdDraft: true }),
+      makeRFE({ key: 'OSAC-2', status: 'Open', prdPrUrl: 'https://github.com/org/repo/pull/2', prdDraft: false })
+    ];
+    const wrapper = mount(MetricsRow, { props: { metrics: METRICS, rfes, assessments: {} } });
+
+    expect(tileValue(wrapper, 'Needs Action')).toBe('1');
   });
 });
 
@@ -147,6 +157,20 @@ describe('MetricsRow no-data guard (windowTotal === 0)', () => {
     expect(createdTile.find('.text-3xl').text()).toBe('50%');
     expect(createdTile.find('.text-sm.flex.gap-1').text()).toBe('0%');
   });
+
+  it('shows — when PRDs exist but none have a scanned AI signal', () => {
+    const metrics = {
+      createdPct: null, createdChange: null, trend: 'stable',
+      windowTotal: 1, windowAISignalTotal: 0, totalRFEs: 1
+    };
+    const wrapper = mount(MetricsRow, {
+      props: { metrics, rfes: [makeRFE({ status: 'Open', prdPrUrl: 'https://github.com/org/repo/pull/54' })] }
+    });
+    const tile = createdWithAITile(wrapper);
+
+    expect(tile.find('.text-3xl').text()).toBe('—');
+    expect(tile.find('.text-sm.flex.gap-1').exists()).toBe(false);
+  });
 });
 
 describe('MetricsRow no longer renders removed tiles', () => {
@@ -160,10 +184,10 @@ describe('MetricsRow no longer renders removed tiles', () => {
 
 describe('MetricsRow KPI InfoBubbles', () => {
   const EXPECTED_TEXT = {
-    'Total PRDs': 'PRDs that exist in the selected period.',
-    'Created with AI': 'Percentage of existing PRDs created with AI.',
+    'Total PRDs': 'PRD pull requests opened in the selected period. Drafts are included in this activity count; Jira creation dates are used only when no PR opening date is available.',
+    'Created with AI': 'Percentage of PRDs with a known AI-provenance state that were created with AI. Rows without scanned AI evidence are excluded.',
     'Approval Rate': 'Percentage of AI-assessed PRDs that passed the AI review.',
-    'Needs Action': 'AI-assessed PRDs still awaiting human review and sign-off.',
+    'Needs Action': 'Non-draft, unmerged PRDs that have not been signed off, whether or not an AI review score exists.',
     'Signed Off': 'PRDs whose pull request has been merged.'
   };
 

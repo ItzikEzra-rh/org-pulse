@@ -42,6 +42,16 @@ describe('getMeaningfulDesignReviewStatus', () => {
     expect(getMeaningfulDesignReviewStatus({ designPrStatus: 'Merged', scores: { total: 6 }, humanReviewStatus: 'awaiting-review' })).toBe('awaiting-review')
   })
 
+  it('open non-draft Design PR: awaiting human review even without scores', () => {
+    expect(getMeaningfulDesignReviewStatus({
+      designArtifactPresence: 'missing',
+      designPrStatus: 'Open',
+      designPrDraft: false,
+      scores: null,
+      humanReviewStatus: null
+    })).toBe('awaiting-review')
+  })
+
   it('missing Design: never meaningful, regardless of humanReviewStatus', () => {
     expect(getMeaningfulDesignReviewStatus({ designPrStatus: null, scores: { total: 6 }, humanReviewStatus: 'approved' })).toBeNull()
   })

@@ -59,6 +59,39 @@ describe('FeatureListItem Missing Design badge', () => {
       .toBe('https://github.com/flightctl/design-docs/pull/12');
   });
 
+  it('labels the PR activity date separately from the Jira issue creation date', () => {
+    const wrapper = mount(FeatureListItem, {
+      props: { feature: makeFeature({
+        designPrStatus: 'Merged',
+        designPrCreatedAt: '2026-10-01T12:00:00Z',
+        created: '2026-01-01T12:00:00Z'
+      }) }
+    });
+    expect(wrapper.text()).toContain('PR opened');
+    expect(wrapper.text()).not.toContain('Created');
+    expect(wrapper.text()).toContain(new Date('2026-10-01T12:00:00Z').toLocaleDateString());
+  });
+
+  it('shows an open typed Design PR with a missing main-branch file as pending human review', () => {
+    const feature = makeFeature({
+      key: 'EDM-371',
+      designArtifactPresence: 'missing',
+      designPrStatus: 'Open',
+      designPrUrl: 'https://github.com/flightctl/design-docs/pull/54',
+      designPrDraft: false,
+      humanReviewStatus: 'awaiting-review',
+      aiInvolvement: null,
+      scores: null
+    });
+    const wrapper = mount(FeatureListItem, { props: { feature } });
+    expect(wrapper.text()).toContain('Design PR in review');
+    expect(wrapper.text()).toContain('Awaiting Sign-off');
+    expect(wrapper.text()).not.toContain('No AI');
+    expect(wrapper.text()).not.toContain('AI Created');
+    expect(wrapper.find('a[title="View design pull request on GitHub"]').attributes('href'))
+      .toBe('https://github.com/flightctl/design-docs/pull/54');
+  });
+
   it('only labels canonical AI signals', () => {
     for (const aiInvolvement of [undefined, null, 'ai', 'unknown']) {
       const feature = makeFeature({

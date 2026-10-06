@@ -43,6 +43,7 @@ export function getReviewStatusClass(status) {
     case 'approved': return 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
     case 'needs-review': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
     case 'awaiting-review': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
+    case 'draft': return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
     default: return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
   }
 }
@@ -52,6 +53,7 @@ export function getReviewStatusLabel(status) {
     case 'approved': return 'Approved'
     case 'needs-review': return 'Flagged'
     case 'awaiting-review': return 'Awaiting Sign-off'
+    case 'draft': return 'Draft'
     default: return 'Awaiting Sign-off'
   }
 }
@@ -61,19 +63,31 @@ export function getReviewStatusTooltip(status) {
     case 'approved': return 'A human engineer has reviewed and signed off on this feature. No further action needed.'
     case 'needs-review': return 'The AI pipeline flagged concerns. Open in Jira, add feedback in the Staff Engineer Input section of the description, then remove the strat-creator-needs-attention label to unblock re-refinement.'
     case 'awaiting-review': return 'This feature passed AI review but still needs a human to review and sign off. Open in Jira and add the strat-creator-human-sign-off label when ready.'
+    case 'draft': return 'This pull request is still a draft and has not been submitted for human review.'
     default: return 'This feature has not yet been reviewed by a human. Open in Jira to review and sign off.'
   }
 }
 
-// Design-tab review state, gated on artifact existence. 'awaiting-review' is
-// also humanReviewStatus's unset default, so it only counts once an AI score
-// exists to actually be awaited on; explicit 'approved'/'needs-review' labels
-// are meaningful regardless of scoring. Returns null when neither applies.
+export function hasReviewableDesign(feature) {
+  const status = feature?.designPrStatus
+  const presence = feature?.designArtifactPresence
+  if (presence === 'present') return true
+  if (presence === 'missing' || presence === 'unavailable') {
+    return status === 'Open' && feature.designPrDraft !== true
+  }
+  // Older OSAC records do not carry explicit artifact-presence metadata.
+  return status != null && status !== 'Closed'
+}
+
+// An open, non-draft Design PR is explicitly awaiting human review even when
+// no AI score exists. The default awaiting-review value on legacy AI records
+// remains score-gated so it cannot invent a pending review.
 export function getMeaningfulDesignReviewStatus(feature) {
-  if (feature.designPrStatus == null) return null
+  if (!hasReviewableDesign(feature)) return null
   const status = feature.humanReviewStatus
   if (status === 'approved' || status === 'needs-review') return status
   if (status === 'awaiting-review' && feature.scores?.total != null) return status
+  if (feature.designPrStatus === 'Open' && feature.designPrDraft !== true) return 'awaiting-review'
   return null
 }
 
@@ -82,6 +96,7 @@ export function getMeaningfulDesignReviewStatus(feature) {
 export function getPrdReviewStatusTooltip(status) {
   switch (status) {
     case 'approved': return 'The PRD pull request has been merged — reviewed and signed off. No further action needed.'
+    case 'draft': return 'This PRD pull request is still a draft and has not been submitted for human review.'
     default: return 'This PRD still needs review and sign-off. Merge the PRD pull request once approved.'
   }
 }
@@ -125,9 +140,10 @@ export function getDesignStatusLabel(designPrStatus) {
 }
 
 // Same merge-based sign-off rule as Design Review, applied to the PRD PR status.
-export function getPrdSignOffStatus(prdPrStatus) {
+export function getPrdSignOffStatus(prdPrStatus, prdDraft = false) {
   if (prdPrStatus === 'No PR' || prdPrStatus === 'Unknown' || prdPrStatus == null) return null
   if (prdPrStatus === 'Merged') return 'approved'
+  if (prdDraft) return 'draft'
   return 'awaiting-review'
 }
 

@@ -40,12 +40,11 @@ const timeWindowCutoff = computed(() => {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 })
 
-const isInTimeWindow = feature => new Date(feature.created) >= timeWindowCutoff.value
+const isInTimeWindow = feature => new Date(feature.designPrCreatedAt || feature.created) >= timeWindowCutoff.value
 
-// Time-window scoped only, mirroring PRD Review's windowedRFEs, so the
-// summary KPI row and Score Insights charts reflect the selected period.
-// The feature list/table below intentionally keeps using the full,
-// unfiltered `features` store.
+// Design metrics follow the linked Design PR opening date; older artifacts
+// without that field fall back to Jira creation. The feature table remains
+// the full inventory, independent of this period filter.
 const windowedFeatures = computed(() => {
   const result = {}
   for (const [key, feature] of Object.entries(features.value)) {

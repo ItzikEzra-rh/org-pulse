@@ -21,10 +21,12 @@ function getPrdArtifactPresence(rfe) {
 
 const prdArtifactPresence = computed(() => getPrdArtifactPresence(props.rfe))
 const prdUnavailable = computed(() => prdArtifactPresence.value === 'unavailable')
-const prdMissing = computed(() => prdArtifactPresence.value === 'missing'
+const hasOpenPrdPr = computed(() => props.rfe.status === 'Open' && Boolean(props.rfe.prdPrUrl))
+const prdMissing = computed(() => (prdArtifactPresence.value === 'missing' && !hasOpenPrdPr.value)
   || (prdArtifactPresence.value !== 'unavailable' && props.rfe.status === 'No PR' && prdArtifactPresence.value !== 'present'))
 const prdHasNoLinkedPr = computed(() => prdArtifactPresence.value === 'present' && props.rfe.status === 'No PR')
-const hasVerifiedPrdPr = computed(() => prdArtifactPresence.value === 'present' && !['No PR', 'Unknown'].includes(props.rfe.status))
+const hasVerifiedPrdPr = computed(() => !['No PR', 'Unknown'].includes(props.rfe.status)
+  && (prdArtifactPresence.value === 'present' || hasOpenPrdPr.value))
 const visiblePrUrl = computed(() => {
   if (hasVerifiedPrdPr.value && props.rfe.prdPrUrl) return props.rfe.prdPrUrl
   return props.rfe.linkedPrs?.find(pr => pr?.url)?.url || null
@@ -80,23 +82,29 @@ const emit = defineEmits(['select'])
           >
             AI status unavailable
           </span>
+          <span
+            v-if="hasOpenPrdPr"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200"
+          >
+            {{ rfe.prdDraft ? 'Draft PRD PR' : 'PRD PR in review' }}
+          </span>
         </div>
         <h4 class="font-medium text-sm truncate dark:text-gray-200">{{ rfe.summary }}</h4>
         <div v-if="hasVerifiedPrdPr" class="flex items-center flex-wrap gap-2 mt-2">
           <span class="inline-flex items-center">
             <span
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-              :class="getReviewStatusClass(getPrdSignOffStatus(rfe.status))"
+              :class="getReviewStatusClass(getPrdSignOffStatus(rfe.status, rfe.prdDraft))"
             >
-              <svg v-if="getPrdSignOffStatus(rfe.status) === 'needs-review'" class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <svg v-if="getPrdSignOffStatus(rfe.status, rfe.prdDraft) === 'needs-review'" class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               <span class="font-medium opacity-75">Review</span>
-              {{ getReviewStatusLabel(getPrdSignOffStatus(rfe.status)) }}
+              {{ getReviewStatusLabel(getPrdSignOffStatus(rfe.status, rfe.prdDraft)) }}
             </span>
-            <InfoBubble :text="getPrdReviewStatusTooltip(getPrdSignOffStatus(rfe.status))" />
+            <InfoBubble :text="getPrdReviewStatusTooltip(getPrdSignOffStatus(rfe.status, rfe.prdDraft))" />
           </span>
           <span v-if="rfe.created" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
-            <span class="font-medium text-gray-500 dark:text-gray-400">Created</span>
-            <span class="text-gray-800 dark:text-gray-100">{{ new Date(rfe.created).toLocaleDateString() }}</span>
+            <span class="font-medium text-gray-500 dark:text-gray-400">{{ rfe.prdPrCreatedAt ? 'PR opened' : 'Created' }}</span>
+            <span class="text-gray-800 dark:text-gray-100">{{ new Date(rfe.prdPrCreatedAt || rfe.created).toLocaleDateString() }}</span>
           </span>
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
             <span class="font-medium text-gray-500 dark:text-gray-400">Score</span>

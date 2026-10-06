@@ -160,6 +160,37 @@ describe('FeatureReviewView', () => {
     expect(wrapper.text()).toContain('Old feature');
   });
 
+  it('uses Design PR activity date for the selected period, with Jira date only as fallback', async () => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    features.value = {
+      'RHAISTRAT-1': makeFeature({
+        key: 'RHAISTRAT-1',
+        title: 'Recent design PR, older Jira feature',
+        created: new Date(now - 200 * dayMs).toISOString(),
+        designPrCreatedAt: new Date(now - 2 * dayMs).toISOString(),
+        designPrStatus: 'Merged'
+      }),
+      'RHAISTRAT-2': makeFeature({
+        key: 'RHAISTRAT-2',
+        title: 'Old design PR, recent Jira feature',
+        created: new Date(now - 2 * dayMs).toISOString(),
+        designPrCreatedAt: new Date(now - 200 * dayMs).toISOString(),
+        designPrStatus: 'Merged'
+      })
+    };
+    featureTimeWindow.value = 'week';
+
+    const wrapper = mountView();
+    await nextTick();
+
+    const totalTile = wrapper.findAll('.space-y-1').find(d => d.find('p').text() === 'Total Designs');
+    expect(totalTile.find('.text-3xl').text()).toBe('1');
+    expect(wrapper.text()).toContain('Recent design PR, older Jira feature');
+    expect(wrapper.text()).toContain('Old design PR, recent Jira feature');
+    expect(Object.keys(wrapper.findComponent(FeatureCharts).props('features'))).toEqual(['RHAISTRAT-1']);
+  });
+
   it('re-scopes the summary KPI row when featureTimeWindow changes via the selector', async () => {
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;

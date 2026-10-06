@@ -231,12 +231,17 @@ describe('FeatureList sort (aligned with PRD Review)', () => {
     expect(renderedKeys(desc)).toEqual(['B', 'C', 'A']);
   });
 
-  it('sorts by created date for the Newest and Oldest options', () => {
-    const newest = mount(FeatureList, { props: { features, sortBy: 'newest' } });
-    expect(renderedKeys(newest)).toEqual(['B', 'C', 'A']);
+  it('sorts by Design PR activity date, with Jira creation date as fallback', () => {
+    const activityFeatures = {
+      A: makeFeature({ key: 'A', created: '2026-01-01', designPrCreatedAt: '2026-02-01' }),
+      B: makeFeature({ key: 'B', created: '2026-03-01', designPrCreatedAt: '2026-01-15' }),
+      C: makeFeature({ key: 'C', created: '2026-02-01' })
+    };
+    const newest = mount(FeatureList, { props: { features: activityFeatures, sortBy: 'newest' } });
+    expect(renderedKeys(newest)).toEqual(['A', 'C', 'B']);
 
-    const oldest = mount(FeatureList, { props: { features, sortBy: 'oldest' } });
-    expect(renderedKeys(oldest)).toEqual(['A', 'C', 'B']);
+    const oldest = mount(FeatureList, { props: { features: activityFeatures, sortBy: 'oldest' } });
+    expect(renderedKeys(oldest)).toEqual(['B', 'A', 'C']);
   });
 
   it('defaults to numeric Feature key descending across digit boundaries, matching PRD Review default ordering', () => {
