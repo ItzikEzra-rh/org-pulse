@@ -44,6 +44,12 @@ function jiraLink(key) {
   return `https://redhat.atlassian.net/browse/${key}`
 }
 
+function hasProjectIdentityMismatch(publication, requestedProjectId) {
+  if (!requestedProjectId) return false
+  return [publication?.projectId, publication?.data?.projectId]
+    .some(responseProjectId => responseProjectId != null && responseProjectId !== requestedProjectId)
+}
+
 let bootstrapRequestId = 0
 let planRequestId = 0
 let projectNameRequestId = 0
@@ -85,7 +91,7 @@ async function loadPlan(version, requestedProjectId = projectId.value) {
     if (requestedProjectId) params.set('projectId', requestedProjectId)
     const nextPublication = await apiRequest(`/modules/releases/release-plan?${params.toString()}`)
     if (requestId !== planRequestId || projectId.value !== requestedProjectId) return
-    if (requestedProjectId && nextPublication?.projectId && nextPublication.projectId !== requestedProjectId) {
+    if (hasProjectIdentityMismatch(nextPublication, requestedProjectId)) {
       throw new Error('Release plan response project identity mismatch')
     }
     planPublication.value = nextPublication?.data && typeof nextPublication.data === 'object'
@@ -124,7 +130,7 @@ async function bootstrap() {
   try {
     const publication = await apiRequest(`/modules/releases/release-plans${projectQuery(requestedProjectId)}`)
     if (requestId !== bootstrapRequestId || projectId.value !== requestedProjectId) return
-    if (requestedProjectId && publication?.projectId && publication.projectId !== requestedProjectId) {
+    if (hasProjectIdentityMismatch(publication, requestedProjectId)) {
       throw new Error('Release plan index project identity mismatch')
     }
     indexPublication.value = publication?.data && typeof publication.data === 'object'

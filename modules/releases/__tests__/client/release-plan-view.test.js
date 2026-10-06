@@ -269,6 +269,42 @@ describe('ReleasePlanView', () => {
     expect(wrapper.text()).toContain('Release plan response project identity mismatch')
   })
 
+  it('rejects a plan whose nested data belongs to another project', async () => {
+    window.location.hash = '#/releases?projectId=flightctl'
+    window.dispatchEvent(new Event('hashchange'))
+    apiRequest.mockImplementation((path) => {
+      if (path === '/projects') return Promise.resolve({ projects: [{ projectId: 'flightctl', displayName: 'Flight Control' }] })
+      if (path === '/modules/releases/release-plans?projectId=flightctl') {
+        return Promise.resolve({ projectId: 'flightctl', data: { projectId: 'flightctl', versions: [{ version: '0.10.0' }] } })
+      }
+      if (path === '/modules/releases/release-plan?version=0.10.0&projectId=flightctl') {
+        return Promise.resolve({ projectId: 'flightctl', data: { projectId: 'osac', planEntries: [] } })
+      }
+      return Promise.reject(new Error(`unexpected path: ${path}`))
+    })
+
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Release plan response project identity mismatch')
+  })
+
+  it('rejects an index whose nested data belongs to another project', async () => {
+    window.location.hash = '#/releases?projectId=flightctl'
+    window.dispatchEvent(new Event('hashchange'))
+    apiRequest.mockImplementation((path) => {
+      if (path === '/projects') return Promise.resolve({ projects: [{ projectId: 'flightctl', displayName: 'Flight Control' }] })
+      if (path === '/modules/releases/release-plans?projectId=flightctl') {
+        return Promise.resolve({ projectId: 'flightctl', data: { projectId: 'osac', versions: [] } })
+      }
+      return Promise.reject(new Error(`unexpected path: ${path}`))
+    })
+
+    const wrapper = mount(ReleasePlanView)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Release plan index project identity mismatch')
+  })
+
   it('refetches the plan when the version picker changes', async () => {
     apiRequest.mockImplementation((path) => {
       if (path === '/modules/releases/release-plans') return Promise.resolve({ versions: [makeIndexEntry('0.2'), makeIndexEntry('0.3')] })

@@ -159,6 +159,8 @@ async function loadData(versions) {
       }
     }))
 
+    if (requestId !== dataRequestId || projectId.value !== requestedProjectId) return
+
     hygieneFeatures.value = mergedHygiene
     fetchedAt.value = oldestFetchedAt
     summary.value = mergedSummary
@@ -462,7 +464,7 @@ const versionOptions = computed(() =>
 
     <!-- Summary bar -->
     <div
-      v-if="summary && hasData"
+      v-if="summary && hasData && !unavailableMessage"
       class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-5 py-3 flex flex-wrap items-center gap-6 text-sm mb-6"
     >
       <div class="flex items-center gap-2">
