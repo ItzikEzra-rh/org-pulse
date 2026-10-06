@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { getMeaningfulDesignReviewStatus } from '../utils/feature-helpers.js'
+import { getMeaningfulDesignReviewStatus, hasReviewableDesign } from '../utils/feature-helpers.js'
 import InfoBubble from './InfoBubble.vue'
 
 const props = defineProps({
@@ -12,16 +12,17 @@ const featureList = computed(() => Object.values(props.features))
 
 // Existing Designs only — a Feature with no design doc yet isn't part of any
 // Design-side population (Total, Created with AI, Approval Rate).
-const existingDesigns = computed(() => featureList.value.filter(f => f.designPrStatus != null))
+const existingDesigns = computed(() => featureList.value.filter(hasReviewableDesign))
 
 const totalDesigns = computed(() => existingDesigns.value.length)
 
 // null (not 0) with no existing-Design population, so the template renders
 // "—" instead of a misleading 0%.
 const createdWithAIRate = computed(() => {
-  if (existingDesigns.value.length === 0) return null
-  const created = existingDesigns.value.filter(f => f.aiInvolvement === 'created' || f.aiInvolvement === 'both').length
-  return Math.round((created / existingDesigns.value.length) * 100)
+  const knownEvidence = existingDesigns.value.filter(f => ['created', 'revised', 'both', 'none'].includes(f.aiInvolvement))
+  if (knownEvidence.length === 0) return null
+  const created = knownEvidence.filter(f => f.aiInvolvement === 'created' || f.aiInvolvement === 'both').length
+  return Math.round((created / knownEvidence.length) * 100)
 })
 
 // Approval Rate aggregates AI scores, so its population is existing Designs
@@ -37,9 +38,8 @@ const approvalRate = computed(() => {
   return Math.round((approved / scoredFeatures.value.length) * 100)
 })
 
-// Needs Action / Signed Off use the same meaningful-review rule as the list
-// badge/filter (see getMeaningfulDesignReviewStatus), so an unscored default
-// 'awaiting-review' doesn't inflate "Needs Action" the way a real one does.
+// Open, non-draft Design PRs are explicit human-review work even when an AI
+// score is absent. Legacy default awaiting-review still remains score-gated.
 const needsActionCount = computed(() => {
   return featureList.value.filter(f => {
     const status = getMeaningfulDesignReviewStatus(f)
@@ -58,7 +58,7 @@ const signedOffCount = computed(() => {
       <div class="space-y-1">
         <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
           Total Designs
-          <InfoBubble trigger="hover" text="Designs that exist in the selected period." />
+          <InfoBubble trigger="hover" text="Design documents present on the configured branch and non-draft Design PRs opened in the selected period. Draft PRs and missing documents are excluded. Jira creation date is used when no Design PR date is available." />
         </p>
         <span class="text-3xl font-bold dark:text-gray-100">{{ totalDesigns }}</span>
         <p v-if="allTimeTotal !== null" class="text-xs text-gray-400 dark:text-gray-500">{{ allTimeTotal }} all time</p>
@@ -67,7 +67,7 @@ const signedOffCount = computed(() => {
       <div class="space-y-1">
         <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
           Created with AI
-          <InfoBubble trigger="hover" text="Percentage of existing Designs created with AI." />
+          <InfoBubble trigger="hover" text="Percentage of Designs with a known provenance signal that were created with AI. Rows without a scanned provenance signal are excluded." />
         </p>
         <span class="text-3xl font-bold dark:text-gray-100">{{ createdWithAIRate === null ? '—' : `${createdWithAIRate}%` }}</span>
       </div>
@@ -83,7 +83,7 @@ const signedOffCount = computed(() => {
       <div class="space-y-1">
         <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center">
           Needs Action
-          <InfoBubble trigger="hover" text="AI-assessed Designs flagged for action or awaiting human sign-off." />
+          <InfoBubble trigger="hover" text="Designs with an explicit human-review request or review concern, regardless of whether an AI score exists." />
         </p>
         <span class="text-3xl font-bold" :class="needsActionCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'dark:text-gray-100'">
           {{ needsActionCount }}

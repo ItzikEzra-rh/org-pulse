@@ -186,9 +186,9 @@ function handleKeydown(e) {
                 <p class="text-gray-500 dark:text-gray-400 text-xs mb-1">Review Status</p>
                 <span
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
-                  :class="getReviewStatusClass(getPrdSignOffStatus(rfe.status))"
+                  :class="getReviewStatusClass(getPrdSignOffStatus(rfe.status, rfe.prdDraft))"
                 >
-                  {{ getReviewStatusLabel(getPrdSignOffStatus(rfe.status)) }}
+                  {{ getReviewStatusLabel(getPrdSignOffStatus(rfe.status, rfe.prdDraft)) }}
                 </span>
               </div>
             </div>

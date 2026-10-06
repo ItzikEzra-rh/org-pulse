@@ -109,7 +109,7 @@ const breakdownChartData = computed(() => ({
   labels: props.breakdown.map(b => b.name),
   datasets: [{
     data: props.breakdown.map(b => b.value),
-    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#d1d5db']
+    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#d1d5db', '#9ca3af']
   }]
 }))
 

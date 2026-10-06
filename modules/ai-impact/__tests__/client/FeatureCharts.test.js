@@ -50,6 +50,14 @@ describe('FeatureCharts excludes unscored features', () => {
       expect(colTotal).toBe(2);
     }
   });
+
+  it('explains when there are no AI marker scores instead of drawing zero-valued charts', () => {
+    const wrapper = mountCharts({
+      'EDM-371': { key: 'EDM-371', scores: null, designPrStatus: 'Open', designPrUrl: 'https://github.com/flightctl/design-docs/pull/54' }
+    });
+    expect(wrapper.text()).toContain('No AI marker scores were collected for the Designs in this period.');
+    expect(wrapper.findAllComponents(Bar)).toHaveLength(0);
+  });
 });
 
 describe('FeatureCharts semantic colors', () => {

@@ -113,6 +113,25 @@ describe('FeatureMetricsRow: unscored Design artifact', () => {
 });
 
 describe('FeatureMetricsRow: Needs Action / Signed Off use meaningful review status', () => {
+  it('counts an open non-draft Design PR as Needs Action without an artifact or AI score', () => {
+    const features = {
+      A: makeFeature({
+        key: 'A',
+        designArtifactPresence: 'missing',
+        designPrStatus: 'Open',
+        designPrUrl: 'https://github.com/flightctl/design-docs/pull/54',
+        designPrDraft: false,
+        scores: null,
+        humanReviewStatus: null,
+        aiInvolvement: null
+      })
+    };
+    const wrapper = mount(FeatureMetricsRow, { props: { features } });
+    expect(tileValue(wrapper, 'Total Designs')).toBe('1');
+    expect(tileValue(wrapper, 'Needs Action')).toBe('1');
+    expect(tileValue(wrapper, 'Created with AI')).toBe('—');
+  });
+
   it('existing + unscored + default awaiting-review: not Needs Action', () => {
     const features = { A: makeFeature({ key: 'A', designPrStatus: 'Merged', scores: null, humanReviewStatus: 'awaiting-review' }) };
     const wrapper = mount(FeatureMetricsRow, { props: { features } });
@@ -188,10 +207,10 @@ describe('FeatureMetricsRow no longer renders removed tiles', () => {
 
 describe('FeatureMetricsRow KPI InfoBubbles', () => {
   const EXPECTED_TEXT = {
-    'Total Designs': 'Designs that exist in the selected period.',
-    'Created with AI': 'Percentage of existing Designs created with AI.',
+    'Total Designs': 'Design documents present on the configured branch and non-draft Design PRs opened in the selected period. Draft PRs and missing documents are excluded. Jira creation date is used when no Design PR date is available.',
+    'Created with AI': 'Percentage of Designs with a known provenance signal that were created with AI. Rows without a scanned provenance signal are excluded.',
     'Approval Rate': 'Percentage of AI-assessed Designs that received an Approve recommendation.',
-    'Needs Action': 'AI-assessed Designs flagged for action or awaiting human sign-off.',
+    'Needs Action': 'Designs with an explicit human-review request or review concern, regardless of whether an AI score exists.',
     'Signed Off': 'Designs explicitly approved by a human reviewer.'
   };
 

@@ -27,13 +27,14 @@ function makeValidBody() {
   };
 }
 
-function makeContext(storageData = null) {
+function makeContext(storageData = null, projects = null) {
   return {
     storage: {
       readFromStorage: vi.fn().mockReturnValue(storageData)
     },
     requireAdmin: (req, res, next) => next(),
-    requireScope: () => (req, res, next) => next()
+    requireScope: () => (req, res, next) => next(),
+    projects
   };
 }
 
@@ -384,9 +385,105 @@ describe('GET /features/trend', () => {
     const createdEntry = payload.breakdown.find(b => b.name === 'AI Created');
     expect(createdEntry.value).toBe(0);
   });
+
+  it('reads project trends from project EP-review data and cohorts on Design PR date', async () => {
+    const recent = daysAgo(3);
+    const old = daysAgo(60);
+    const envelope = {
+      schemaVersion: 1,
+      projectId: 'flightctl',
+      artifactKey: 'sources/ep-review/features.json',
+      state: 'supported',
+      freshness: 'fresh',
+      partial: false,
+      generatedAt: daysAgo(1),
+      data: {
+        projectId: 'flightctl',
+        features: [
+          {
+            key: 'EDM-1', created: old, designArtifactPresence: 'missing',
+            designPrStatus: 'Open', designPrDraft: false, designPrCreatedAt: recent,
+            aiInvolvement: 'revised', designScores: { total: 7, assessedAt: recent }
+          },
+          {
+            key: 'EDM-2', created: old, designArtifactPresence: 'present',
+            designPrStatus: 'Merged', designPrCreatedAt: recent, aiInvolvement: 'none'
+          },
+          {
+            key: 'EDM-3', created: old, designArtifactPresence: 'present',
+            designPrStatus: 'Merged', designPrCreatedAt: old, aiInvolvement: 'created'
+          },
+          {
+            key: 'EDM-4', created: recent, designArtifactPresence: 'missing',
+            designPrStatus: 'Open', designPrDraft: true, designPrCreatedAt: recent,
+            aiInvolvement: 'created'
+          }
+        ]
+      }
+    };
+    const projects = { readArtifact: vi.fn(() => ({ value: envelope })) };
+    const { router, routes } = createRouter();
+    const guard = vi.fn(() => true);
+    registerFeatureRoutes(router, makeContext(null, projects), guard);
+
+    const key = 'GET /features/trend';
+    const res = { json: vi.fn(), status: vi.fn().mockReturnThis() };
+    await routes[key][routes[key].length - 1](
+      { body: {}, params: {}, query: { projectId: 'flightctl', timeWindow: 'month' } },
+      res
+    );
+    const payload = res.json.mock.calls[0][0];
+    const recentPoint = payload.trendData.find(point => point.total > 0);
+
+    expect(guard).not.toHaveBeenCalled();
+    expect(payload.projectId).toBe('flightctl');
+    expect(recentPoint.total).toBe(2);
+    expect(recentPoint.createdWithAI).toBe(0);
+    expect(recentPoint.revisedCount).toBe(1);
+    expect(payload.breakdown).toEqual(expect.arrayContaining([
+      { name: 'AI Review', value: 1 },
+      { name: 'No AI', value: 1 }
+    ]));
+    expect(payload.breakdown.reduce((sum, row) => sum + row.value, 0)).toBe(2);
+  });
 });
 
 describe('GET /features/:key', () => {
+  it('returns the selected project feature and its review evidence', async () => {
+    const feature = {
+      key: 'EDM-371', title: 'Firmware updates', designArtifactPresence: 'missing',
+      designPrStatus: 'Open', designPrDraft: false,
+      designPrUrl: 'https://github.com/flightctl/design-docs/pull/54',
+      designPrCreatedAt: '2026-09-29T14:13:24Z',
+      designHumanReviewStatus: 'AWAITING_REVIEW', aiInvolvement: null, designScores: null
+    };
+    const envelope = {
+      schemaVersion: 1,
+      projectId: 'flightctl',
+      artifactKey: 'sources/ep-review/features.json',
+      data: { projectId: 'flightctl', features: [feature] }
+    };
+    const projects = { readArtifact: vi.fn(() => ({ value: envelope })) };
+    const { router, routes } = createRouter();
+    const guard = vi.fn(() => true);
+    registerFeatureRoutes(router, makeContext(null, projects), guard);
+
+    const res = { json: vi.fn(), status: vi.fn().mockReturnThis() };
+    await routes['GET /features/:key'][routes['GET /features/:key'].length - 1](
+      { body: {}, params: { key: 'EDM-371' }, query: { projectId: 'flightctl' } },
+      res
+    );
+    const payload = res.json.mock.calls[0][0];
+
+    expect(guard).not.toHaveBeenCalled();
+    expect(payload.projectId).toBe('flightctl');
+    expect(payload.latest.designPrUrl).toBe(feature.designPrUrl);
+    expect(payload.latest.designPrCreatedAt).toBe(feature.designPrCreatedAt);
+    expect(payload.latest.humanReviewStatus).toBe('awaiting-review');
+    expect(payload.latest.scores).toBeNull();
+    expect(payload.history).toEqual([]);
+  });
+
   it('returns full feature + history for existing key', async () => {
     const entry = {
       latest: makeValidBody(),

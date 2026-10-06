@@ -134,7 +134,10 @@ const dimensionBreakdownOptions = computed(() => ({
     </button>
 
     <div v-if="expanded" class="px-6 pb-6">
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <p v-if="scoredFeatures.length === 0" class="rounded-md border border-dashed border-gray-300 dark:border-gray-600 px-4 py-6 text-sm text-gray-500 dark:text-gray-400">
+        No AI marker scores were collected for the Designs in this period. Artifact presence and human review status are shown separately.
+      </p>
+      <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 class="text-sm font-medium dark:text-gray-300 flex items-center mb-3">
             Score Distribution

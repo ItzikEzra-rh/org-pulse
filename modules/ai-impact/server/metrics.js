@@ -4,6 +4,16 @@ const FRICTION_LABELS = {
   feasibilityUnknown: 'rfe-creator-feasibility-unknown'
 };
 
+const AI_INVOLVEMENT_STATES = new Set(['created', 'revised', 'both', 'none']);
+
+function issueDate(issue) {
+  return new Date(issue.prdPrCreatedAt || issue.created);
+}
+
+function hasKnownAIInvolvement(issue) {
+  return AI_INVOLVEMENT_STATES.has(issue.aiInvolvement);
+}
+
 /**
  * Compute pipeline friction metrics for a given time window.
  *
@@ -19,10 +29,10 @@ function computePipelineFrictionMetrics(issues, timeWindow, config) {
   const { cutoff, priorCutoff } = getTimeWindowDates(now, timeWindow);
 
   const currentAI = issues.filter(i =>
-    i.aiInvolvement !== 'none' && new Date(i.created) >= cutoff);
+    ['created', 'revised', 'both'].includes(i.aiInvolvement) && issueDate(i) >= cutoff);
   const priorAI = issues.filter(i => {
-    const d = new Date(i.created);
-    return i.aiInvolvement !== 'none' && d >= priorCutoff && d < cutoff;
+    const d = issueDate(i);
+    return ['created', 'revised', 'both'].includes(i.aiInvolvement) && d >= priorCutoff && d < cutoff;
   });
 
   function pct(subset, total) {
@@ -70,7 +80,8 @@ function computePipelineFrictionMetrics(issues, timeWindow, config) {
 /**
  * Compute adoption metrics for a given time window.
  *
- * All windowing is based on issue.created (when the RFE was filed).
+ * Windowing uses the linked PRD PR's created date when available, with
+ * issue.created retained as a compatibility fallback for older artifacts.
  * The "revised" metric uses revisedLabelDate to count revisions that
  * happened within the window, reported as a count rather than a percentage.
  *
@@ -81,12 +92,12 @@ function computePipelineFrictionMetrics(issues, timeWindow, config) {
  */
 function computeAllMetrics(issues, timeWindow, config) {
   const { cutoff } = getTimeWindowDates(new Date(), timeWindow);
-  const windowIssues = issues.filter(i => new Date(i.created) >= cutoff);
+  const windowIssues = issues.filter(i => issueDate(i) >= cutoff);
   // RFEs with no PRD PR yet ('No PR') can't have AI involvement one way or
   // the other — exclude them so the breakdown reflects PRDs that actually
   // exist, matching the totalRFEs exclusion in computeMetrics().
   const breakdownIssues = windowIssues.filter(i => i.status !== 'No PR');
-  const eligibleIssues = issues.filter(i => i.status !== 'No PR');
+  const eligibleIssues = issues.filter(i => i.status !== 'No PR' && hasKnownAIInvolvement(i));
 
   // buildTrendData computes both createdPct/total (Created-with-AI) and revisedCount
   // (Review-with-AI) from one input. revisedCount must keep using all issues, so we
@@ -122,43 +133,47 @@ function computeMetrics(issues, timeWindow, config) {
   const { cutoff, priorCutoff } = getTimeWindowDates(now, timeWindow);
 
   // Excludes 'No PR' issues so the KPI denominator matches breakdown/totalRFEs.
-  const currentIssues = issues.filter(i => new Date(i.created) >= cutoff && i.status !== 'No PR');
+  const currentIssues = issues.filter(i => issueDate(i) >= cutoff && i.status !== 'No PR');
   const priorIssues = issues.filter(i => {
-    const d = new Date(i.created);
+    const d = issueDate(i);
     return d >= priorCutoff && d < cutoff && i.status !== 'No PR';
   });
 
+  const currentAIEligible = currentIssues.filter(hasKnownAIInvolvement);
+  const priorAIEligible = priorIssues.filter(hasKnownAIInvolvement);
   const currentCreated = currentIssues.filter(i =>
+    hasKnownAIInvolvement(i) && (i.aiInvolvement === 'created' || i.aiInvolvement === 'both')).length;
+  const currentTotal = currentAIEligible.length;
+
+  const priorCreated = priorAIEligible.filter(i =>
     i.aiInvolvement === 'created' || i.aiInvolvement === 'both').length;
-  const currentTotal = currentIssues.length;
+  const priorTotal = priorAIEligible.length;
 
-  const priorCreated = priorIssues.filter(i =>
-    i.aiInvolvement === 'created' || i.aiInvolvement === 'both').length;
-  const priorTotal = priorIssues.length;
+  const createdPct = currentTotal > 0 ? Math.round((currentCreated / currentTotal) * 100) : (currentIssues.length === 0 ? 0 : null);
+  const priorCreatedPct = priorTotal > 0 ? Math.round((priorCreated / priorTotal) * 100) : null;
 
-  const createdPct = currentTotal > 0 ? Math.round((currentCreated / currentTotal) * 100) : 0;
-  const priorCreatedPct = priorTotal > 0 ? Math.round((priorCreated / priorTotal) * 100) : 0;
-
-  const createdChange = createdPct - priorCreatedPct;
-  const trend = createdChange > threshold ? 'growing' : createdChange < -threshold ? 'declining' : 'stable';
+  const createdChange = createdPct !== null && priorCreatedPct !== null ? createdPct - priorCreatedPct : null;
+  const trend = createdChange === null ? 'stable' : createdChange > threshold ? 'growing' : createdChange < -threshold ? 'declining' : 'stable';
 
   // Revised count: number of RFEs revised with AI during this window (by label date)
   const revisedCount = issues.filter(i => {
     if (i.aiInvolvement !== 'revised' && i.aiInvolvement !== 'both') return false;
-    const d = new Date(i.revisedLabelDate || i.created);
+    const d = new Date(i.revisedLabelDate || i.prdPrCreatedAt || i.created);
     return d >= cutoff;
   }).length;
 
   const priorRevisedCount = issues.filter(i => {
     if (i.aiInvolvement !== 'revised' && i.aiInvolvement !== 'both') return false;
-    const d = new Date(i.revisedLabelDate || i.created);
+    const d = new Date(i.revisedLabelDate || i.prdPrCreatedAt || i.created);
     return d >= priorCutoff && d < cutoff;
   }).length;
 
   return {
     createdPct, createdChange, trend,
     revisedCount, priorRevisedCount,
-    windowTotal: currentTotal,
+    windowTotal: currentIssues.length,
+    windowAISignalTotal: currentAIEligible.length,
+    priorAISignalTotal: priorAIEligible.length,
     totalRFEs: issues.filter(i => i.status !== 'No PR').length
   };
 }
@@ -181,19 +196,19 @@ function buildTrendData(issues, timeWindow) {
 }
 
 function buildTrendPoint(issues, bucketStart, bucketEnd) {
-  // Created %: bucket by issue creation date
+  // Created %: bucket by PRD PR creation date when available.
   const bucketIssues = issues.filter(i => {
-    const d = new Date(i.created);
+    const d = issueDate(i);
     return d >= bucketStart && d < bucketEnd;
   });
-  const total = bucketIssues.length;
+  const total = bucketIssues.filter(hasKnownAIInvolvement).length;
   const createdWithAI = bucketIssues.filter(i =>
-    i.aiInvolvement === 'created' || i.aiInvolvement === 'both').length;
+    hasKnownAIInvolvement(i) && (i.aiInvolvement === 'created' || i.aiInvolvement === 'both')).length;
 
   // Revised count: bucket by revisedLabelDate (when the revision happened)
   const revisedCount = issues.filter(i => {
     if (i.aiInvolvement !== 'revised' && i.aiInvolvement !== 'both') return false;
-    const d = new Date(i.revisedLabelDate || i.created);
+    const d = new Date(i.revisedLabelDate || i.prdPrCreatedAt || i.created);
     return d >= bucketStart && d < bucketEnd;
   }).length;
 
@@ -212,6 +227,7 @@ function buildBreakdownData(issues) {
     { name: 'AI Created', value: issues.filter(i => i.aiInvolvement === 'created').length },
     { name: 'AI Review', value: issues.filter(i => i.aiInvolvement === 'revised').length },
     { name: 'No AI', value: issues.filter(i => i.aiInvolvement === 'none').length },
+    { name: 'AI status unavailable', value: issues.filter(i => !hasKnownAIInvolvement(i)).length },
   ];
 }
 

@@ -179,9 +179,9 @@ const sortedAndFilteredFeatures = computed(() => {
   } else if (props.sortBy === 'score-desc') {
     items.sort((a, b) => (b.scores?.total || 0) - (a.scores?.total || 0))
   } else if (props.sortBy === 'newest') {
-    items.sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0))
+    items.sort((a, b) => new Date(b.designPrCreatedAt || b.created || 0) - new Date(a.designPrCreatedAt || a.created || 0))
   } else if (props.sortBy === 'oldest') {
-    items.sort((a, b) => new Date(a.created || 0) - new Date(b.created || 0))
+    items.sort((a, b) => new Date(a.designPrCreatedAt || a.created || 0) - new Date(b.designPrCreatedAt || b.created || 0))
   } else {
     // Default: features with a Design first, then missing Designs, newest Feature ID (numeric) first within each group
     items.sort((a, b) => {

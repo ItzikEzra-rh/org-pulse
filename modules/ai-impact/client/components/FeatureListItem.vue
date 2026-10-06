@@ -21,8 +21,17 @@ const designArtifactPresence = computed(() => {
   return props.feature.designPrStatus == null ? 'missing' : 'present'
 })
 const hasDesignArtifact = computed(() => designArtifactPresence.value === 'present')
+const hasDesignPr = computed(() => Boolean(props.feature.designPrUrl)
+  && props.feature.designPrStatus !== 'No PR')
 const designStatusLabel = computed(() => {
-  if (designArtifactPresence.value === 'missing') return 'Missing Design'
+  if (designArtifactPresence.value === 'missing') {
+    if (hasDesignPr.value && props.feature.designPrStatus === 'Open') {
+      return props.feature.designPrDraft ? 'Draft Design PR' : 'Design PR in review'
+    }
+    if (hasDesignPr.value && props.feature.designPrStatus === 'Merged') return 'Design PR merged; artifact missing'
+    if (hasDesignPr.value && props.feature.designPrStatus === 'Closed') return 'Design PR closed'
+    return 'Missing Design'
+  }
   if (designArtifactPresence.value === 'unavailable') return 'Design unavailable'
   if (designArtifactPresence.value === 'present') {
     if (props.feature.designPrStatus === 'No PR') return 'Design doc, no linked PR'
@@ -32,13 +41,15 @@ const designStatusLabel = computed(() => {
   return getDesignStatusLabel(props.feature.designPrStatus)
 })
 const designStatusClass = computed(() => {
+  if (designArtifactPresence.value === 'missing' && hasDesignPr.value) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
   if (designArtifactPresence.value === 'missing') return getDesignStatusClass(null)
   if (designArtifactPresence.value === 'unavailable') return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
   return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
 })
 const showAiBadge = computed(() => {
-  if (designArtifactPresence.value === 'unavailable' || designArtifactPresence.value === 'missing') return false
-  return ['none', 'created', 'revised', 'both'].includes(props.feature.aiInvolvement)
+  if (designArtifactPresence.value === 'unavailable') return false
+  const hasEvidence = ['none', 'created', 'revised', 'both'].includes(props.feature.aiInvolvement)
+  return hasEvidence && (hasDesignArtifact.value || hasDesignPr.value)
 })
 const genericPrUrl = computed(() => {
   const prs = Array.isArray(props.feature.linkedPrs) ? props.feature.linkedPrs : []
@@ -80,7 +91,7 @@ const prdPrUrl = computed(() => getPrdReviewPrUrl({
           </span>
         </div>
         <h4 class="font-medium text-sm truncate dark:text-gray-200">{{ feature.title }}</h4>
-        <div v-if="hasDesignArtifact" class="flex items-center flex-wrap gap-2 mt-2">
+        <div v-if="hasDesignArtifact || hasDesignPr" class="flex items-center flex-wrap gap-2 mt-2">
           <span v-if="reviewStatus" class="inline-flex items-center">
             <span
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
@@ -92,9 +103,9 @@ const prdPrUrl = computed(() => getPrdReviewPrUrl({
             </span>
             <InfoBubble :text="getReviewStatusTooltip(reviewStatus)" />
           </span>
-          <span v-if="feature.created" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
-            <span class="font-medium text-gray-500 dark:text-gray-400">Created</span>
-            <span class="text-gray-800 dark:text-gray-100">{{ new Date(feature.created).toLocaleDateString() }}</span>
+          <span v-if="feature.designPrCreatedAt || feature.created" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
+            <span class="font-medium text-gray-500 dark:text-gray-400">{{ feature.designPrCreatedAt ? 'PR opened' : 'Created' }}</span>
+            <span class="text-gray-800 dark:text-gray-100">{{ new Date(feature.designPrCreatedAt || feature.created).toLocaleDateString() }}</span>
           </span>
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
             <span class="font-medium text-gray-500 dark:text-gray-400">Score</span>

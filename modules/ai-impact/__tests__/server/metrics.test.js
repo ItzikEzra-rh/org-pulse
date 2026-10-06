@@ -170,6 +170,28 @@ describe('computeMetrics', () => {
     expect(result.createdPct).toBe(0);
   });
 
+  it('uses PRD PR creation dates ahead of Jira feature creation dates', () => {
+    const issues = [
+      { ...makeIssue(60, 'created'), prdPrCreatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString() },
+      { ...makeIssue(5, 'none'), prdPrCreatedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString() }
+    ];
+
+    const result = computeMetrics(issues, 'month', { trendThresholdPp: 2 });
+
+    expect(result.windowTotal).toBe(1);
+    expect(result.windowAISignalTotal).toBe(1);
+    expect(result.createdPct).toBe(100);
+  });
+
+  it('does not treat a missing AI signal as No AI or as a 0% AI-creation rate', () => {
+    const issue = { ...makeIssue(5, null), status: 'Open' };
+    const result = computeMetrics([issue], 'month', { trendThresholdPp: 2 });
+
+    expect(result.windowTotal).toBe(1);
+    expect(result.windowAISignalTotal).toBe(0);
+    expect(result.createdPct).toBeNull();
+  });
+
   it('counts revisions by revisedLabelDate within the window', () => {
     const recentLabel = new Date();
     recentLabel.setDate(recentLabel.getDate() - 3);
@@ -416,6 +438,7 @@ describe('buildBreakdownData', () => {
       { name: 'AI Created', value: 1 },
       { name: 'AI Review', value: 1 },
       { name: 'No AI', value: 3 },
+      { name: 'AI status unavailable', value: 0 },
     ]);
   });
 
@@ -426,6 +449,7 @@ describe('buildBreakdownData', () => {
       { name: 'AI Created', value: 0 },
       { name: 'AI Review', value: 0 },
       { name: 'No AI', value: 0 },
+      { name: 'AI status unavailable', value: 0 },
     ]);
   });
 });
@@ -453,6 +477,17 @@ describe('computeAllMetrics', () => {
       { name: 'AI Created', value: 1 },
       { name: 'No AI', value: 0 }
     ]));
+  });
+
+  it('keeps PRDs without an AI signal in the activity breakdown but outside the AI trend denominator', () => {
+    const unknown = { ...makeIssue(2, null), status: 'Open' };
+    const result = computeAllMetrics([unknown], 'week', { trendThresholdPp: 2 });
+
+    expect(result.metrics.windowTotal).toBe(1);
+    expect(result.metrics.windowAISignalTotal).toBe(0);
+    expect(result.breakdown).toContainEqual({ name: 'AI status unavailable', value: 1 });
+    expect(result.breakdown).toContainEqual({ name: 'No AI', value: 0 });
+    expect(result.trendData.every(point => point.total === 0 && point.createdPct === null)).toBe(true);
   });
 
   it('reports createdPct as null (not 0) for a week with only "No PR" RFEs', () => {

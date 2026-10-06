@@ -6,6 +6,7 @@ import FeatureCharts from './FeatureCharts.vue'
 import FeatureList from './FeatureList.vue'
 import TrendCharts from './TrendCharts.vue'
 import { FIX_VERSION_FILTER_ALL } from '../constants.js'
+import { hasReviewableDesign } from '../utils/feature-helpers.js'
 
 const props = defineProps({
   loading: { type: Boolean, default: false },
@@ -47,7 +48,7 @@ const emit = defineEmits([
   'retry'
 ])
 
-const allTimeTotal = computed(() => Object.values(props.features).filter(f => f.designPrStatus != null).length)
+const allTimeTotal = computed(() => Object.values(props.features).filter(hasReviewableDesign).length)
 </script>
 
 <template>

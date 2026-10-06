@@ -69,12 +69,13 @@ const meAssigneeOption = computed(() => {
 
 function hasPrdArtifact(rfe) {
   if (rfe.prdArtifactPresence === 'present') return true
+  if (rfe.status === 'Open' && rfe.prdPrUrl) return true
   if (['missing', 'unavailable'].includes(rfe.prdArtifactPresence)) return false
   return !['No PR', 'Unknown'].includes(rfe.status)
 }
 
 function prdArtifactIsMissing(rfe) {
-  if (rfe.prdArtifactPresence === 'missing') return true
+  if (rfe.prdArtifactPresence === 'missing') return !(rfe.status === 'Open' && rfe.prdPrUrl)
   if (rfe.prdArtifactPresence === 'present' || rfe.prdArtifactPresence === 'unavailable') return false
   return rfe.status === 'No PR'
 }
@@ -118,7 +119,7 @@ const sortedAndFilteredRFEs = computed(() => {
 
   // Apply review status filter (derived human sign-off, independent of raw PR status)
   if (props.reviewStatusFilter !== 'all') {
-    rfes = rfes.filter(rfe => getPrdSignOffStatus(rfe.status) === props.reviewStatusFilter)
+    rfes = rfes.filter(rfe => getPrdSignOffStatus(rfe.status, rfe.prdDraft) === props.reviewStatusFilter)
   }
 
   // Apply component filter
@@ -149,9 +150,9 @@ const sortedAndFilteredRFEs = computed(() => {
       return sb.total - sa.total
     })
   } else if (props.sortBy === 'newest') {
-    rfes.sort((a, b) => new Date(b.created) - new Date(a.created))
+    rfes.sort((a, b) => new Date(b.prdPrCreatedAt || b.created) - new Date(a.prdPrCreatedAt || a.created))
   } else if (props.sortBy === 'oldest') {
-    rfes.sort((a, b) => new Date(a.created) - new Date(b.created))
+    rfes.sort((a, b) => new Date(a.prdPrCreatedAt || a.created) - new Date(b.prdPrCreatedAt || b.created))
   } else {
     // Default: verified PRDs first, then newest Feature ID (numeric) first within each group
     rfes.sort((a, b) => {

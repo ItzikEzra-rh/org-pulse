@@ -151,6 +151,40 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
     }
     return envelope;
   }
+
+  function projectFeatureView(feature) {
+    const designScores = feature.designScores;
+    const scores = designScores && designScores.scores
+      ? { ...designScores.scores, total: designScores.total ?? null }
+      : null;
+    const reviewState = feature.designHumanReviewStatus || feature.humanReview;
+    return {
+      ...feature,
+      key: feature.key,
+      title: feature.title || feature.summary || feature.key,
+      summary: feature.summary || feature.title || '',
+      jiraStatus: feature.jiraStatus || feature.status,
+      components: feature.components || [],
+      labels: feature.labels || [],
+      fixVersions: feature.fixVersions || [],
+      sourceRfe: feature.sourceRfe || feature.key,
+      artifacts: feature.artifacts || [],
+      linkedPrs: feature.linkedPrs || [],
+      scores,
+      passFail: designScores?.passFail,
+      recommendation: designScores?.recommendation,
+      verdict: designScores?.verdict,
+      reviewedAt: designScores?.assessedAt || designScores?.reviewedAt || null,
+      assessedAt: designScores?.assessedAt,
+      humanReviewStatus: reviewState === 'APPROVED'
+        ? 'approved'
+        : reviewState === 'CHANGES_REQUESTED'
+          ? 'needs-review'
+          : reviewState === 'AWAITING_REVIEW'
+            ? 'awaiting-review'
+            : null
+    };
+  }
   const { readFromStorage } = storage;
 
   // ─── 1. Static routes FIRST ───
@@ -274,57 +308,7 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
       const projected = {};
       for (const feature of projectEnvelope.data.features || []) {
         if (!feature || !feature.key) continue;
-        const designScores = feature.designScores;
-        const scores = designScores && designScores.scores
-          ? { ...designScores.scores, total: designScores.total ?? null }
-          : null;
-        const reviewState = feature.humanReview;
-        projected[feature.key] = {
-          key: feature.key,
-          title: feature.title || feature.summary || feature.key,
-          summary: feature.summary || feature.title || '',
-          status: feature.status,
-          jiraStatus: feature.jiraStatus || feature.status,
-          priority: feature.priority,
-          created: feature.created,
-          updated: feature.updated,
-          creator: feature.creator,
-          creatorDisplayName: feature.creatorDisplayName,
-          assignee: feature.assignee,
-          components: feature.components || [],
-          labels: feature.labels || [],
-          fixVersions: feature.fixVersions || [],
-          sourceRfe: feature.sourceRfe || feature.key,
-          jiraUrl: feature.jiraUrl,
-          designArtifactPresence: feature.designArtifactPresence,
-          designArtifactPath: feature.designArtifactPath,
-          designArtifactUrl: feature.designArtifactUrl,
-          designStatus: feature.designStatus,
-          designPrStatus: feature.designPrStatus,
-          designPrNumber: feature.designPrNumber,
-          designPrUrl: feature.designPrUrl,
-          designReviewState: feature.designReviewState,
-          prdArtifactPresence: feature.prdArtifactPresence,
-          prdPrStatus: feature.prdPrStatus,
-          prdPrNumber: feature.prdPrNumber,
-          prdPrUrl: feature.prdPrUrl,
-          prdRecommendation: feature.prdRecommendation,
-          prdReviewState: feature.prdReviewState,
-          aiInvolvement: feature.aiInvolvement,
-          provenanceKind: feature.provenanceKind,
-          artifacts: feature.artifacts || [],
-          linkedPrs: feature.linkedPrs || [],
-          scores,
-          passFail: designScores?.passFail,
-          recommendation: designScores?.recommendation,
-          verdict: designScores?.verdict,
-          assessedAt: designScores?.assessedAt,
-          humanReviewStatus: reviewState === 'APPROVED'
-            ? 'approved'
-            : reviewState === 'CHANGES_REQUESTED'
-              ? 'needs-review'
-              : null
-        };
+        projected[feature.key] = projectFeatureView(feature);
       }
       return res.json({
         features: projected,
@@ -350,23 +334,72 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
    *     tags: [ai-impact]
    *     parameters:
    *       - in: query
+   *         name: projectId
+   *         schema:
+   *           type: string
+   *         description: Project whose published EP-review feature inventory supplies the trend.
+   *       - in: query
    *         name: timeWindow
    *         schema:
    *           type: string
    *           enum: [week, month, 3months]
    *           default: month
-   *         description: Time window for the trend horizon and breakdown's cutoff date
+   *         description: Time window for the trend horizon and PR-created-date breakdown cohort
    *     responses:
    *       200:
-   *         description: Trend points (daily for week/month, weekly for 3months) and an AI-involvement breakdown, matching the /rfe-data trend shape
+   *         description: Trend points (daily for week/month, weekly for 3months) and an AI-involvement breakdown. Project data is read from that project's EP-review artifact; no OSAC fallback is used.
    */
   router.get('/features/trend', requireScope('ai-impact:read'), function(req, res) {
-    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     // Normalize to a supported window, matching the sibling /rfe-data route
     // (unknown values fall back to 'month' rather than erroring).
     const timeWindow = ['week', 'month', '3months'].includes(req.query.timeWindow)
       ? req.query.timeWindow
       : 'month';
+
+    const projectEnvelope = readProjectFeatureEnvelope(req);
+    if (projectEnvelope) {
+      const features = Array.isArray(projectEnvelope.data.features)
+        ? projectEnvelope.data.features
+        : [];
+      const hasDesign = function(feature) {
+        if (feature.designArtifactPresence === 'present') return true;
+        return feature.designPrStatus === 'Open' && feature.designPrDraft !== true;
+      };
+      const designFeatures = features.filter(function(feature) {
+        return feature && hasDesign(feature);
+      });
+      const trendInput = designFeatures.map(function(feature) {
+        const scores = feature.designScores || {};
+        return {
+          created: feature.designPrCreatedAt || feature.created,
+          aiInvolvement: feature.aiInvolvement,
+          revisedLabelDate: scores.assessedAt || scores.reviewedAt || null
+        };
+      });
+      const { cutoff } = getTimeWindowDates(new Date(), timeWindow);
+      const windowInput = designFeatures
+        .filter(function(feature) {
+          const date = feature.designPrCreatedAt || feature.created;
+          return date && new Date(date) >= cutoff;
+        })
+        .map(function(feature) {
+          return { aiInvolvement: feature.aiInvolvement };
+        });
+      const trendData = buildTrendData(trendInput, timeWindow).map(function(point) {
+        return point.total === 0 ? { ...point, createdPct: null } : point;
+      });
+
+      return res.json({
+        projectId: projectEnvelope.projectId,
+        state: projectEnvelope.state,
+        freshness: projectEnvelope.freshness,
+        partial: projectEnvelope.partial === true,
+        trendData,
+        breakdown: buildBreakdownData(windowInput)
+      });
+    }
+
+    if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const projection = getLatestProjection(readFeatures(readFromStorage));
 
     // buildTrendData/buildBreakdownData (shared with the PRD side) expect
@@ -381,7 +414,7 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
     const trendInput = Object.values(projection.features)
       .filter(function(f) { return f.designPrStatus != null; })
       .map(function(f) {
-        return { created: f.created, aiInvolvement: f.aiInvolvement || 'none', revisedLabelDate: f.reviewedAt };
+        return { created: f.created, aiInvolvement: f.aiInvolvement, revisedLabelDate: f.reviewedAt };
       });
 
     const { cutoff } = getTimeWindowDates(new Date(), timeWindow);
@@ -400,8 +433,43 @@ module.exports = function registerFeatureRoutes(router, context, osacOnlyDataGua
 
   // ─── 2. Parameterized routes AFTER ───
 
+  /**
+   * @openapi
+   * /modules/ai-impact/features/{key}:
+   *   get:
+   *     summary: Feature review details for the selected project
+   *     tags: [ai-impact]
+   *     parameters:
+   *       - in: path
+   *         name: key
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: projectId
+   *         schema:
+   *           type: string
+   *         description: Selected project. Non-OSAC data is read from its own EP-review artifact.
+   *     responses:
+   *       200:
+   *         description: Feature review fields and history
+   *       404:
+   *         description: Feature key is absent from the selected project's inventory
+   */
   // GET /features/:key — single feature + history
   router.get('/features/:key', requireScope('ai-impact:read'), function(req, res) {
+    const projectEnvelope = readProjectFeatureEnvelope(req);
+    if (projectEnvelope) {
+      const feature = (projectEnvelope.data.features || []).find(item => item?.key === req.params.key);
+      if (!feature) {
+        return res.status(404).json({ error: 'Not found', projectId: projectEnvelope.projectId });
+      }
+      return res.json({
+        latest: projectFeatureView(feature),
+        history: [],
+        projectId: projectEnvelope.projectId
+      });
+    }
     if (osacOnlyDataGuard && osacOnlyDataGuard(req, res)) return;
     const data = readFeatures(readFromStorage);
     const entry = data.features[req.params.key];
