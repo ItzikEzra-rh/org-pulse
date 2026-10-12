@@ -591,7 +591,14 @@ function buildHumanAssignedJql() {
         </h2>
         <p class="text-sm text-gray-500 dark:text-gray-400">
           AI-driven issue triage and automated code fixes
-          <span v-if="autofixData?.fetchedAt" class="ml-2 text-gray-400 dark:text-gray-500">&middot; {{ new Date(autofixData.fetchedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }} {{ new Date(autofixData.fetchedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) }}</span>
+          <span v-if="autofixData?.fetchedAt" class="ml-2 text-gray-400 dark:text-gray-500">&middot; Snapshot {{ new Date(autofixData.fetchedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }} {{ new Date(autofixData.fetchedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) }}</span>
+        </p>
+        <p v-if="autofixData?.collectionStatus?.lastSuccessfulRunAt" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Last collection {{ new Date(autofixData.collectionStatus.lastSuccessfulRunAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }}
+          <span v-if="autofixData.collectionStatus.contentChanged === false">&middot; No issue changes</span>
+        </p>
+        <p v-if="autofixData?.syncStatus?.lastSuccessfulSyncAt" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Last data sync {{ new Date(autofixData.syncStatus.lastSuccessfulSyncAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }}
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
