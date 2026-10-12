@@ -1,5 +1,37 @@
 # Data File Formats
 
+## AutoFix snapshot freshness
+
+The OSAC AutoFix API reads `ai-impact/autofix-data.json` through storage on each
+request. External snapshot replacements are visible without a backend restart or
+server-initiated Jira refresh. The API continues to expose `pipelineState`
+(`autofix-blocked` displays as **AI Blocked**) rather than raw Jira labels.
+
+Two optional sidecar-produced status objects accompany the OSAC API response and
+module diagnostics:
+
+- `collectionStatus`, from `ai-impact/autofix-collection-status.json`: includes
+  `schemaVersion: 1`, `status`, `lastSuccessfulRunAt`, `completedAt`,
+  `collectedSnapshotFetchedAt`, `issueCount`, `contentChanged`, `jobId`, `jobUrl`,
+  and `pipelineId`. A successful CI run with unchanged issue content still emits
+  this artifact, without committing a timestamp-only snapshot update.
+- `syncStatus`, from `pipeline-sync-status.json`: includes `schemaVersion: 1`,
+  `revision`, and `lastSuccessfulSyncAt`. This records the last successful sidecar
+  publication or validation of an unchanged revision.
+
+Missing status files produce `null`; older sidecars remain supported. Collection
+status is unknown when no heartbeat has been observed. If artifacts become
+unavailable, the sidecar retains the last observed successful heartbeat, so its
+timestamp must be used when assessing its age. The snapshot's existing `fetchedAt`
+records the data version served by the API, not the time of every successful CI
+run. These status objects apply to the OSAC pipeline; project-qualified artifact
+responses retain their own freshness contract.
+
+To verify an update, compare the collector heartbeat, synced revision, and API
+snapshot, then check the issue and its pipeline state in the dashboard. A backend
+restart can clear an old process cache during recovery. The cache-delete endpoint
+also clears stored datasets, so it is not a substitute for reloading synced data.
+
 This document describes the JSON structure of all files stored in the `data/` directory (production) and `fixtures/` directory (demo mode). **Demo fixtures must always match production format** — see [Fixture Rules](#fixture-rules) below.
 
 ## Project-qualified publication envelope

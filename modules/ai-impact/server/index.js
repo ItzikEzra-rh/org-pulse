@@ -205,19 +205,6 @@ module.exports = function registerRoutes(router, context) {
 
   const VALID_AUTOFIX_TIME_WINDOWS = ['week', 'lastWeek', 'month', '3months'];
 
-  let autofixDataCache = null;
-
-  function getAutofixData() {
-    if (!autofixDataCache) {
-      autofixDataCache = readFromStorage('ai-impact/autofix-data.json');
-    }
-    return autofixDataCache;
-  }
-
-  function invalidateAutofixCache() {
-    autofixDataCache = null;
-  }
-
   function stripIssueFields(issue) {
     return {
       key: issue.key,
@@ -239,6 +226,7 @@ module.exports = function registerRoutes(router, context) {
    * /modules/ai-impact/autofix-data:
    *   get:
    *     summary: Autofix pipeline data with computed metrics and trend
+   *     description: Reads the current stored snapshot on every request. For the OSAC pipeline, collectionStatus reports the last successful CI run and syncStatus reports the last successful sidecar poll independently of the snapshot fetchedAt.
    *     tags: [ai-impact]
    *     parameters:
    *       - in: query
@@ -280,10 +268,16 @@ module.exports = function registerRoutes(router, context) {
       ? req.query.timeWindow
       : 'month';
 
-    const data = getAutofixData();
+    // The data-sync sidecar publishes snapshots independently of this process.
+    // Always read through storage; a process-lifetime cache misses those updates.
+    const data = readFromStorage('ai-impact/autofix-data.json');
+    const collectionStatus = readFromStorage('ai-impact/autofix-collection-status.json');
+    const syncStatus = readFromStorage('pipeline-sync-status.json');
     if (!data || !data.issues) {
       return res.json({
         fetchedAt: null,
+        collectionStatus,
+        syncStatus,
         jiraHost: JIRA_HOST,
         metrics: { triageTotal: 0, triageVerdicts: {}, autofixStates: {}, autofixTotal: 0, successRate: 0, windowTotal: 0, totalIssues: 0 },
         trendData: [],
@@ -308,6 +302,8 @@ module.exports = function registerRoutes(router, context) {
 
     res.json({
       fetchedAt: data.fetchedAt,
+      collectionStatus,
+      syncStatus,
       jiraHost: JIRA_HOST,
       metrics,
       trendData,
@@ -412,7 +408,6 @@ module.exports = function registerRoutes(router, context) {
   router.delete('/cache', requireAdmin, requireScope('ai-impact:write'), function(req, res) {
     writeToStorage('ai-impact/rfe-data.json', null);
     writeToStorage('ai-impact/autofix-data.json', null);
-    invalidateAutofixCache();
     writeToStorage('ai-impact/doc-data.json', null);
     writeToStorage('ai-impact/doc-mr-kpi-data.json', null);
     res.json({ status: 'cleared' });
@@ -441,7 +436,6 @@ module.exports = function registerRoutes(router, context) {
         fetchedAt: new Date().toISOString(),
         issues: autofixIssues
       });
-      invalidateAutofixCache();
       autofixCount = autofixIssues.length;
     } catch (autofixErr) {
       console.error('[ai-impact] Autofix data refresh failed:', autofixErr.message);
@@ -569,7 +563,9 @@ module.exports = function registerRoutes(router, context) {
         autofix: {
           dataExists: !!autofixData,
           issueCount: autofixData?.issues?.length || 0,
-          fetchedAt: autofixData?.fetchedAt || null
+          fetchedAt: autofixData?.fetchedAt || null,
+          collectionStatus: readFromStorage('ai-impact/autofix-collection-status.json'),
+          syncStatus: readFromStorage('pipeline-sync-status.json')
         },
         documentation: {
           dataExists: !!docData,

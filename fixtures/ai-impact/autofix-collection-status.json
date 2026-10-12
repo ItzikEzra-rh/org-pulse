@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "status": "unknown",
+  "completedAt": null,
+  "lastSuccessfulRunAt": null,
+  "collectedSnapshotFetchedAt": null,
+  "issueCount": null,
+  "contentChanged": null,
+  "jobId": null,
+  "jobUrl": null,
+  "pipelineId": null
+}
