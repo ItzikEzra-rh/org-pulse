@@ -43,6 +43,16 @@ test('AutoFix shows a newly published blocked issue without restarting its backe
     await expect(page.getByText(/Last collection.*No issue changes/)).toBeVisible();
     const weekResponse = await page.request.get(apiUrl + '?projectId=osac&timeWindow=week');
     expect((await weekResponse.json()).metrics).toMatchObject({ windowTotal: 1, autofixStates: { blocked: 1 } });
+
+    const lastSuccessfulSyncAt = new Date(now + 60000).toISOString();
+    fixture.publishStatus(null, { schemaVersion: 1, revision: 'c'.repeat(40), lastSuccessfulSyncAt });
+    const syncOnlyResponse = page.waitForResponse(response => response.url().includes('/api/modules/ai-impact/autofix-data'));
+    await page.reload();
+    const syncOnlyPayload = await (await syncOnlyResponse).json();
+    expect(syncOnlyPayload.collectionStatus).toBeNull();
+    expect(syncOnlyPayload.syncStatus.lastSuccessfulSyncAt).toBe(lastSuccessfulSyncAt);
+    await expect(page.getByText(/Last data sync/)).toBeVisible();
+    await expect(page.getByText(/Last collection/)).toHaveCount(0);
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     fixture.cleanup();

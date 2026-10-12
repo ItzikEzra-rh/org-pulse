@@ -596,7 +596,9 @@ function buildHumanAssignedJql() {
         <p v-if="autofixData?.collectionStatus?.lastSuccessfulRunAt" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
           Last collection {{ new Date(autofixData.collectionStatus.lastSuccessfulRunAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }}
           <span v-if="autofixData.collectionStatus.contentChanged === false">&middot; No issue changes</span>
-          <span v-if="autofixData.syncStatus?.lastSuccessfulSyncAt">&middot; Last data sync {{ new Date(autofixData.syncStatus.lastSuccessfulSyncAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }}</span>
+        </p>
+        <p v-if="autofixData?.syncStatus?.lastSuccessfulSyncAt" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Last data sync {{ new Date(autofixData.syncStatus.lastSuccessfulSyncAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }}
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
