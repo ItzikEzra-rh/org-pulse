@@ -2,12 +2,18 @@
  * Project-qualified roster reads for People and Teams.
  *
  * Canonical person identity is (projectId, accountId); an unknown project
- * never falls back to the legacy OSAC roster. Optional fields not yet
- * published (title, manager, geo, identities) are always null, never
+ * never falls back to the legacy OSAC roster. Optional fields (title, geo,
+ * identities, managerRef) are joined from the roster-enrichment publication
+ * by accountId when available, and are otherwise always null, never
  * fabricated.
  */
 
 const ARTIFACT_KEY = 'sources/roster/registry.json'
+
+// Person records carry `matchStatus` and no displayName/ldapUid (roster stays
+// the sole identity/display-name source); auxiliaryManagers is a map keyed by
+// ldapUid, not an array.
+const ENRICHMENT_ARTIFACT_KEY = 'sources/roster-enrichment/registry.json'
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -102,6 +108,80 @@ function _loadProjectRosterData(projects, projectId) {
   return { kind: 'ok', envelope, generatedAt, people, teams };
 }
 
+// Enrichment never downgrades roster availability: any missing/invalid/
+// mismatched/expired condition degrades to 'omit' or 'distrust', never an
+// error. 'distrust' means identity was verified but freshness isn't; 'join'
+// means the join is safe to perform.
+function _loadProjectEnrichmentData(projects, projectId) {
+  let artifact;
+  try {
+    artifact = projects.readArtifact(projectId, ENRICHMENT_ARTIFACT_KEY);
+  } catch (error) {
+    console.warn(`[project-roster] enrichment publication rejected for ${projectId}: ${error.message}`);
+    return { kind: 'omit' };
+  }
+  if (!artifact || !isRecord(artifact.value)) {
+    return { kind: 'omit' };
+  }
+
+  const envelope = artifact.value;
+  if (envelope.schemaVersion !== 1
+      || envelope.projectId !== projectId
+      || envelope.artifactKey !== ENRICHMENT_ARTIFACT_KEY
+      || !isRecord(envelope.data)
+      || envelope.data.projectId !== projectId) {
+    console.warn(`[project-roster] enrichment publication identity/schema mismatch for ${projectId}`);
+    return { kind: 'omit' };
+  }
+
+  const generatedAt = typeof envelope.generatedAt === 'string' ? envelope.generatedAt : null;
+
+  if (!['fresh', 'stale', 'expired', 'unknown'].includes(envelope.freshness)) {
+    console.warn(`[project-roster] enrichment publication has an invalid freshness value for ${projectId}`);
+    return { kind: 'omit' };
+  }
+  if (envelope.freshness === 'expired' || envelope.freshness === 'unknown') {
+    return { kind: 'distrust', generatedAt };
+  }
+  if (!['supported', 'empty'].includes(envelope.state)) {
+    console.warn(`[project-roster] enrichment publication state is not supported for ${projectId}: ${envelope.state}`);
+    return { kind: 'omit' };
+  }
+
+  const { people, auxiliaryManagers } = envelope.data;
+  if (!Array.isArray(people) || !(auxiliaryManagers === undefined || isRecord(auxiliaryManagers))) {
+    console.warn(`[project-roster] invalid enrichment publication shape for ${projectId}`);
+    return { kind: 'omit' };
+  }
+  if (isRecord(auxiliaryManagers) && !Object.values(auxiliaryManagers).every(isRecord)) {
+    console.warn(`[project-roster] invalid enrichment auxiliaryManagers shape for ${projectId}`);
+    return { kind: 'omit' };
+  }
+
+  const byAccountId = new Map();
+  for (const record of people) {
+    if (!isRecord(record) || typeof record.accountId !== 'string' || !record.accountId) {
+      console.warn(`[project-roster] invalid enrichment person record for ${projectId}`);
+      return { kind: 'omit' };
+    }
+    if (byAccountId.has(record.accountId)) {
+      console.warn(`[project-roster] duplicate enrichment accountId for ${projectId}`);
+      return { kind: 'omit' };
+    }
+    byAccountId.set(record.accountId, record);
+  }
+
+  const state = envelope.freshness === 'stale' ? 'stale' : (envelope.partial === true ? 'partial' : 'fresh');
+
+  return {
+    kind: 'join',
+    state,
+    generatedAt,
+    byAccountId,
+    auxiliaryManagers: isRecord(auxiliaryManagers) ? auxiliaryManagers : {}
+  };
+}
+
 // `key` is the normalized projectId::teamId composite key, not a team name.
 function readProjectPeopleTeams(projects, projectId) {
   const loaded = _loadProjectRosterData(projects, projectId);
@@ -118,7 +198,8 @@ function readProjectPeopleTeams(projects, projectId) {
     };
   }
 
-  return { status: 200, model: _buildReadModel(projectId, loaded) };
+  const enrichment = _loadProjectEnrichmentData(projects, projectId);
+  return { status: 200, model: _buildReadModel(projectId, loaded, enrichment) };
 }
 
 function _normalizeTeam(projectId, team, memberAccountIds) {
@@ -134,7 +215,24 @@ function _normalizeTeam(projectId, team, memberAccountIds) {
   };
 }
 
-function _normalizePerson(projectId, person) {
+// Only a 'matched' record has usable LDAP data; 'unmatched'/'ambiguous'
+// degrade the same as no join at all.
+function _enrichedFields(enrichmentRecord) {
+  if (!enrichmentRecord || enrichmentRecord.matchStatus !== 'matched') {
+    return { title: null, geo: null, identities: {}, managerRef: null };
+  }
+  return {
+    title: typeof enrichmentRecord.title === 'string' && enrichmentRecord.title.trim() ? enrichmentRecord.title : null,
+    geo: typeof enrichmentRecord.geo === 'string' && enrichmentRecord.geo.trim() ? enrichmentRecord.geo : null,
+    identities: isRecord(enrichmentRecord.identities) ? enrichmentRecord.identities : {},
+    // Opaque typed passthrough — never interpreted or resolved here.
+    managerRef: isRecord(enrichmentRecord.managerRef) && typeof enrichmentRecord.managerRef.kind === 'string'
+      ? enrichmentRecord.managerRef
+      : null
+  };
+}
+
+function _normalizePerson(projectId, person, enrichmentRecord) {
   return {
     key: `${projectId}::${person.accountId}`,
     projectId,
@@ -143,14 +241,11 @@ function _normalizePerson(projectId, person) {
     active: person.active,
     email: typeof person.email === 'string' && person.email.trim() ? person.email : null,
     teamIds: [...person.teamIds],
-    title: null,
-    manager: null,
-    geo: null,
-    identities: {}
+    ..._enrichedFields(enrichmentRecord)
   };
 }
 
-function _buildReadModel(projectId, loaded) {
+function _buildReadModel(projectId, loaded, enrichment) {
   const { envelope, generatedAt, people, teams } = loaded;
 
   const memberAccountIdsByTeamId = new Map();
@@ -166,11 +261,15 @@ function _buildReadModel(projectId, loaded) {
   const normalizedTeams = teams.map(team =>
     _normalizeTeam(projectId, team, memberAccountIdsByTeamId.get(team.id) || [])
   );
-  const normalizedPeople = people.map(person => _normalizePerson(projectId, person));
+  const normalizedPeople = people.map(person => _normalizePerson(
+    projectId,
+    person,
+    enrichment.kind === 'join' ? enrichment.byAccountId.get(person.accountId) : null
+  ));
 
   const hasActiveTeamMembership = normalizedTeams.some(team => team.memberAccountIds.length > 0);
 
-  return {
+  const model = {
     projectId,
     availability: hasActiveTeamMembership ? 'available' : 'empty',
     reason: hasActiveTeamMembership ? null : 'no-active-team-memberships',
@@ -179,6 +278,15 @@ function _buildReadModel(projectId, loaded) {
     teams: normalizedTeams,
     people: normalizedPeople
   };
+
+  if (enrichment.kind === 'join') {
+    model.enrichment = { state: enrichment.state, generatedAt: enrichment.generatedAt };
+    model.auxiliaryManagers = enrichment.auxiliaryManagers;
+  } else if (enrichment.kind === 'distrust') {
+    model.enrichment = { state: 'absent', generatedAt: enrichment.generatedAt };
+  }
+
+  return model;
 }
 
 function _unavailableReadModel(projectId, reason, publicationState, generatedAt) {
@@ -193,4 +301,4 @@ function _unavailableReadModel(projectId, reason, publicationState, generatedAt)
   };
 }
 
-module.exports = { ARTIFACT_KEY, readProjectPeopleTeams };
+module.exports = { ARTIFACT_KEY, ENRICHMENT_ARTIFACT_KEY, readProjectPeopleTeams };

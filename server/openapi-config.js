@@ -211,11 +211,43 @@ function createOpenApiSpec() {
                     email: { type: 'string', nullable: true },
                     teamIds: { type: 'array', items: { type: 'string' } },
                     title: { type: 'string', nullable: true },
-                    manager: { type: 'object', nullable: true },
                     geo: { type: 'string', nullable: true },
-                    identities: { type: 'object' }
+                    identities: {
+                      type: 'object',
+                      description: 'Populated from roster-enrichment when a matched join exists; {} otherwise',
+                      properties: {
+                        github: { type: 'object', nullable: true, properties: { username: { type: 'string' }, source: { type: 'string' } } },
+                        gitlab: { type: 'object', nullable: true, properties: { username: { type: 'string' }, source: { type: 'string' } } }
+                      }
+                    },
+                    managerRef: {
+                      type: 'object',
+                      nullable: true,
+                      description: 'Typed, opaque passthrough from roster-enrichment; not resolved, not RBAC input',
+                      properties: {
+                        kind: { type: 'string', enum: ['roster', 'external', 'unresolved'] },
+                        accountId: { type: 'string' },
+                        ldapUid: { type: 'string' },
+                        reason: { type: 'string' }
+                      }
+                    }
                   }
                 }
+              },
+              enrichment: {
+                type: 'object',
+                nullable: true,
+                description: 'Present only when a roster-enrichment publication was read for this project',
+                properties: {
+                  state: { type: 'string', enum: ['fresh', 'stale', 'partial', 'absent'] },
+                  generatedAt: { type: 'string', nullable: true, format: 'date-time' }
+                }
+              },
+              auxiliaryManagers: {
+                type: 'object',
+                nullable: true,
+                description: 'Off-roster managers from roster-enrichment, keyed by ldapUid; present only alongside `enrichment`',
+                additionalProperties: { type: 'object' }
               }
             }
           },
