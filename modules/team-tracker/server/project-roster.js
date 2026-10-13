@@ -5,7 +5,8 @@
  * never falls back to the legacy OSAC roster. Optional fields (title, geo,
  * identities, managerRef) are joined from the roster-enrichment publication
  * by accountId when available, and are otherwise always null, never
- * fabricated.
+ * fabricated. `manager` stays a static null field for response compatibility
+ * with the pre-enrichment contract.
  */
 
 const ARTIFACT_KEY = 'sources/roster/registry.json'
@@ -241,6 +242,9 @@ function _normalizePerson(projectId, person, enrichmentRecord) {
     active: person.active,
     email: typeof person.email === 'string' && person.email.trim() ? person.email : null,
     teamIds: [...person.teamIds],
+    // `manager` is kept, unpopulated, for response compatibility with the
+    // pre-enrichment contract; `managerRef` is the new additive field.
+    manager: null,
     ..._enrichedFields(enrichmentRecord)
   };
 }

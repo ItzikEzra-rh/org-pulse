@@ -211,6 +211,7 @@ function createOpenApiSpec() {
                     email: { type: 'string', nullable: true },
                     teamIds: { type: 'array', items: { type: 'string' } },
                     title: { type: 'string', nullable: true },
+                    manager: { type: 'object', nullable: true, description: 'Always null; kept for response compatibility with the pre-enrichment contract. See managerRef.' },
                     geo: { type: 'string', nullable: true },
                     identities: {
                       type: 'object',

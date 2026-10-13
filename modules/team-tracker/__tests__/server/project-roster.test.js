@@ -158,6 +158,7 @@ describe('readProjectPeopleTeams', () => {
         email: null,
         teamIds: ['team-1', 'team-2'],
         title: null,
+        manager: null,
         managerRef: null,
         geo: null,
         identities: {}
@@ -171,6 +172,7 @@ describe('readProjectPeopleTeams', () => {
         email: null,
         teamIds: ['team-2'],
         title: null,
+        manager: null,
         managerRef: null,
         geo: null,
         identities: {}
@@ -476,14 +478,24 @@ describe('readProjectPeopleTeams enrichment join', () => {
       {
         key: 'flightctl::acct-1', projectId: 'flightctl', accountId: 'acct-1', displayName: 'Alice',
         active: true, email: null, teamIds: ['team-1', 'team-2'],
-        title: null, geo: null, identities: {}, managerRef: null
+        title: null, manager: null, geo: null, identities: {}, managerRef: null
       },
       {
         key: 'flightctl::acct-2', projectId: 'flightctl', accountId: 'acct-2', displayName: 'Bob',
         active: false, email: null, teamIds: ['team-2'],
-        title: null, geo: null, identities: {}, managerRef: null
+        title: null, manager: null, geo: null, identities: {}, managerRef: null
       }
     ]);
+  });
+
+  it('keeps the legacy manager field null and unaffected when enrichment is present and joined', () => {
+    const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+    const alice = result.model.people.find(p => p.accountId === 'acct-1');
+    // acct-1 has a real enrichment join (title/geo/identities/managerRef populated below),
+    // but `manager` — the pre-enrichment field — must stay null regardless.
+    expect(alice.manager).toBeNull();
+    expect(alice.title).toBe('Senior Engineer');
+    expect(alice.managerRef).toEqual({ kind: 'external', ldapUid: 'mhicks' });
   });
 
   it('omits enrichment on an invalid schemaVersion, warns, and does not fail the roster', () => {
