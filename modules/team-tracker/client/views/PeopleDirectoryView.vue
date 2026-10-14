@@ -300,15 +300,18 @@ function openPerson(p) {
 
 function exportCsv() {
   const fieldLabels = personFieldDefs.value.map(fd => fd.label)
+  // Same availability gate as the stat tiles: omit the columns entirely when
+  // unavailable, rather than exporting blanks that would read as "no identity".
+  const includeIdentityColumns = !isProjectRoster.value || enrichmentAvailable.value
   const rows = isProjectRoster.value
-    ? [['Project', 'Name', 'Title', 'Geo', 'Team(s)', 'GitHub', 'GitLab']]
+    ? [['Project', 'Name', 'Title', 'Geo', 'Team(s)', ...(includeIdentityColumns ? ['GitHub', 'GitLab'] : [])]]
     : [['Org', 'Name', 'UID', 'Email', 'Title', 'Geo', 'Location', 'Team(s)', 'GitHub', 'GitLab', 'Type', ...fieldLabels]]
   for (const p of filtered.value) {
     const fieldValues = personFieldDefs.value.map(fd => personFieldValue(p, fd.id))
     if (isProjectRoster.value) {
       rows.push([
         p.orgDisplayName || '', p.name, p.title || '', p.geo || '', personTeamDisplay(p),
-        p.github ? p.github.username : '', p.gitlab ? p.gitlab.username : ''
+        ...(includeIdentityColumns ? [p.github ? p.github.username : '', p.gitlab ? p.gitlab.username : ''] : [])
       ])
     } else {
       rows.push([

@@ -40,6 +40,17 @@ import { apiRequest } from '@shared/client/services/api.js'
 
 const navigateTo = vi.fn()
 
+function captureCsvExport() {
+  let csv = null
+  vi.spyOn(global, 'Blob').mockImplementation(function (parts) {
+    csv = parts.join('')
+  })
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock')
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  return () => csv
+}
+
 function mountView() {
   return mount(PeopleDirectoryView, {
     global: {
@@ -246,6 +257,81 @@ describe('PeopleDirectoryView', () => {
 
     expect(wrapper.text()).toContain('Profiles: stale')
     expect(wrapper.text()).toContain('GitHub IDs')
+  })
+
+  it('includes GitHub/GitLab columns in CSV export when enrichment is published', async () => {
+    projectId.value = 'flightctl'
+    rosterData.value = {
+      projectId: 'flightctl',
+      availability: 'available',
+      reason: null,
+      enrichment: { state: 'fresh', partial: false, generatedAt: '2026-10-14T00:00:00Z' },
+      teams: [],
+      people: []
+    }
+    mockLoadRoster.mockResolvedValue(rosterData.value)
+    rosterTeams.value = []
+    rosterPeople.value = [
+      {
+        key: 'flightctl::acc-1',
+        accountId: 'acc-1',
+        displayName: 'Ada Lovelace',
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        geo: null,
+        identities: { github: { username: 'ada-gh', source: 'ldap' }, gitlab: null },
+        managerRef: null
+      }
+    ]
+    const getCsv = captureCsvExport()
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === 'Export CSV').trigger('click')
+
+    const csv = getCsv()
+    expect(csv.split('\n')[0]).toContain('GitHub')
+    expect(csv.split('\n')[0]).toContain('GitLab')
+    expect(csv).toContain('ada-gh')
+  })
+
+  it('omits GitHub/GitLab CSV columns entirely (not blank values) when enrichment is unavailable', async () => {
+    projectId.value = 'flightctl'
+    rosterData.value = {
+      projectId: 'flightctl',
+      availability: 'available',
+      reason: null,
+      enrichment: { state: 'absent', generatedAt: '2026-10-14T00:00:00Z' },
+      teams: [],
+      people: []
+    }
+    mockLoadRoster.mockResolvedValue(rosterData.value)
+    rosterTeams.value = []
+    rosterPeople.value = [
+      {
+        key: 'flightctl::acc-1',
+        accountId: 'acc-1',
+        displayName: 'Ada Lovelace',
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        geo: null,
+        identities: {},
+        managerRef: null
+      }
+    ]
+    const getCsv = captureCsvExport()
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === 'Export CSV').trigger('click')
+
+    const csv = getCsv()
+    expect(csv.split('\n')[0]).not.toContain('GitHub')
+    expect(csv.split('\n')[0]).not.toContain('GitLab')
   })
 
   it('leaves OSAC legacy behavior unchanged (navigates by uid)', async () => {
