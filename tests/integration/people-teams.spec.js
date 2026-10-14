@@ -300,6 +300,20 @@ test.describe('People & Teams Project-Qualified Roster @people-teams', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('Flight Control People Directory surfaces published GitHub/GitLab identities without exposing managerRef', async ({ page }) => {
+    await page.goto(`/#/team-tracker/people?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    // Fixture: 2 of 3 flightctl people have a matched GitHub identity (nosei, mliu).
+    expect(bodyText).toContain('GitHub IDs');
+    expect(bodyText).toContain('GitLab IDs');
+    expect(bodyText).not.toContain('fc-acc-2');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
   test('Flight Control Team Directory navigates to Team Detail', async ({ page }) => {
     await page.goto(`/#/team-tracker/home?projectId=${FLIGHTCTL}`);
     await page.waitForLoadState('networkidle');

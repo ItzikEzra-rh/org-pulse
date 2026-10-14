@@ -100,7 +100,7 @@ describe('useRoster shared Team/Person shape across both response contracts', ()
         key: 'flightctl::team-1',
         displayKey: null,
         displayName: 'RHEM-DEV',
-        members: [{ accountId: 'acct-1', name: 'Alice', jiraDisplayName: 'Alice', email: null, title: null, geo: null, customFields: {} }],
+        members: [{ accountId: 'acct-1', name: 'Alice', jiraDisplayName: 'Alice', email: null, title: null, geo: null, identities: {}, managerRef: null, customFields: {} }],
         teamId: 'team-1',
         metadata: {},
         description: 'desc'
@@ -119,7 +119,17 @@ describe('useRoster shared Team/Person shape across both response contracts', ()
         { key: 'flightctl::team-1', id: 'team-1', displayName: 'RHEM-DEV', description: null, memberAccountIds: ['acct-1'] }
       ],
       people: [
-        { accountId: 'acct-1', displayName: 'Alice', active: true, email: 'alice@example.com', title: 'Engineer', geo: 'NA', teamIds: ['team-1'] }
+        {
+          accountId: 'acct-1',
+          displayName: 'Alice',
+          active: true,
+          email: 'alice@example.com',
+          title: 'Engineer',
+          geo: 'NA',
+          teamIds: ['team-1'],
+          identities: { github: { username: 'alice-gh', source: 'ldap' }, gitlab: null },
+          managerRef: { kind: 'roster', accountId: 'acct-mgr' }
+        }
       ]
     })
     const roster = await createRoster('flightctl')
@@ -128,7 +138,29 @@ describe('useRoster shared Team/Person shape across both response contracts', ()
     expect(roster.teams.value[0].members[0]).toMatchObject({
       email: 'alice@example.com',
       title: 'Engineer',
-      geo: 'NA'
+      geo: 'NA',
+      identities: { github: { username: 'alice-gh', source: 'ldap' }, gitlab: null },
+      managerRef: { kind: 'roster', accountId: 'acct-mgr' }
+    })
+  })
+
+  it('defaults identities/managerRef when enrichment has not populated them', async () => {
+    mocks.getRoster.mockResolvedValueOnce({
+      projectId: 'flightctl',
+      availability: 'available',
+      teams: [
+        { key: 'flightctl::team-1', id: 'team-1', displayName: 'RHEM-DEV', description: null, memberAccountIds: ['acct-1'] }
+      ],
+      people: [
+        { accountId: 'acct-1', displayName: 'Alice', active: true, teamIds: ['team-1'] }
+      ]
+    })
+    const roster = await createRoster('flightctl')
+    await roster.loadRoster()
+
+    expect(roster.teams.value[0].members[0]).toMatchObject({
+      identities: {},
+      managerRef: null
     })
   })
 
