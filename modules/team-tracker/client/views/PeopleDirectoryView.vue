@@ -42,6 +42,20 @@ const projectRosterUpdatedAt = computed(() => {
   if (projectRosterData.value?.projectId !== projectId.value) return null
   return projectRosterData.value?.generatedAt || null
 })
+// state 'absent' means identities were distrusted and nulled for everyone;
+// showing GitHub/GitLab counts then would read as a real zero, not "unpublished".
+const enrichmentAvailable = computed(() => {
+  if (!isProjectRoster.value || projectRosterData.value?.projectId !== projectId.value) return false
+  const enrichment = projectRosterData.value?.enrichment
+  return Boolean(enrichment) && enrichment.state !== 'absent'
+})
+const enrichmentStatusNote = computed(() => {
+  if (!enrichmentAvailable.value) return null
+  const enrichment = projectRosterData.value.enrichment
+  if (enrichment.state === 'stale') return 'Profiles: stale'
+  if (enrichment.partial) return 'Profiles: partial'
+  return null
+})
 const ORG_TYPE_OPTIONS = [
   { value: 'all', label: 'All' },
   { value: 'engineering', label: 'Engineering' },
@@ -123,6 +137,10 @@ async function loadData() {
         geo: person.geo,
         orgDisplayName: requestedProjectId,
         teams: person.teamIds.map(id => teamNameById.get(id)).filter(Boolean),
+        github: person.identities?.github ?? null,
+        gitlab: person.identities?.gitlab ?? null,
+        // Opaque typed passthrough; not resolved or rendered until reference resolution exists.
+        managerRef: person.managerRef ?? null,
         _appFields: {}
       }))
       return
@@ -282,13 +300,19 @@ function openPerson(p) {
 
 function exportCsv() {
   const fieldLabels = personFieldDefs.value.map(fd => fd.label)
+  // Same availability gate as the stat tiles: omit the columns entirely when
+  // unavailable, rather than exporting blanks that would read as "no identity".
+  const includeIdentityColumns = !isProjectRoster.value || enrichmentAvailable.value
   const rows = isProjectRoster.value
-    ? [['Project', 'Name', 'Title', 'Geo', 'Team(s)']]
+    ? [['Project', 'Name', 'Title', 'Geo', 'Team(s)', ...(includeIdentityColumns ? ['GitHub', 'GitLab'] : [])]]
     : [['Org', 'Name', 'UID', 'Email', 'Title', 'Geo', 'Location', 'Team(s)', 'GitHub', 'GitLab', 'Type', ...fieldLabels]]
   for (const p of filtered.value) {
     const fieldValues = personFieldDefs.value.map(fd => personFieldValue(p, fd.id))
     if (isProjectRoster.value) {
-      rows.push([p.orgDisplayName || '', p.name, p.title || '', p.geo || '', personTeamDisplay(p)])
+      rows.push([
+        p.orgDisplayName || '', p.name, p.title || '', p.geo || '', personTeamDisplay(p),
+        ...(includeIdentityColumns ? [p.github ? p.github.username : '', p.gitlab ? p.gitlab.username : ''] : [])
+      ])
     } else {
       rows.push([
         p.orgDisplayName || '', p.name, p.uid, p.email, p.title, p.geo || '',
@@ -329,19 +353,20 @@ watch(projectId, () => {
     <p v-if="isProjectRoster" class="mb-4 text-xs text-gray-500 dark:text-gray-400" role="status">
       {{ projectRosterStatus }}
       <span v-if="projectRosterUpdatedAt"> · Updated {{ new Date(projectRosterUpdatedAt).toLocaleString() }}</span>
+      <span v-if="enrichmentStatusNote"> · {{ enrichmentStatusNote }}</span>
     </p>
 
     <!-- Stats header -->
-    <div v-if="!loading && people.length > 0" class="grid gap-4 mb-6" :class="isProjectRoster ? 'grid-cols-1' : 'grid-cols-3'">
+    <div v-if="!loading && people.length > 0" class="grid gap-4 mb-6" :class="(!isProjectRoster || enrichmentAvailable) ? 'grid-cols-3' : 'grid-cols-1'">
       <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ filteredStats.total }}</div>
         <div class="text-xs text-gray-500 dark:text-gray-400">People</div>
       </div>
-      <div v-if="!isProjectRoster" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div v-if="!isProjectRoster || enrichmentAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <div class="text-2xl font-bold text-green-600">{{ filteredStats.github }} <span class="text-sm font-normal text-gray-400">/ {{ filteredStats.total }}</span></div>
         <div class="text-xs text-gray-500 dark:text-gray-400">GitHub IDs <span class="text-green-600 font-medium">{{ filteredStats.total ? Math.round(filteredStats.github / filteredStats.total * 100) : 0 }}%</span></div>
       </div>
-      <div v-if="!isProjectRoster" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div v-if="!isProjectRoster || enrichmentAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <div class="text-2xl font-bold text-orange-600">{{ filteredStats.gitlab }} <span class="text-sm font-normal text-gray-400">/ {{ filteredStats.total }}</span></div>
         <div class="text-xs text-gray-500 dark:text-gray-400">GitLab IDs <span class="text-orange-600 font-medium">{{ filteredStats.total ? Math.round(filteredStats.gitlab / filteredStats.total * 100) : 0 }}%</span></div>
       </div>

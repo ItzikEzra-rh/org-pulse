@@ -11,6 +11,8 @@ function _toNormalizedMember(person) {
     email: person.email ?? null,
     title: person.title ?? null,
     geo: person.geo ?? null,
+    identities: person.identities ?? {},
+    managerRef: person.managerRef ?? null,
     customFields: {}
   }
 }
