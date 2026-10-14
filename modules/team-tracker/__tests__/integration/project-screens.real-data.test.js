@@ -48,6 +48,16 @@ describe.skipIf(!process.env.ORG_PULSE_REAL_DATA_DIR)('published roster resolves
       expect(model.teams.length).toBeGreaterThan(0)
       const memberCount = model.teams.reduce((sum, team) => sum + team.memberAccountIds.length, 0)
       expect(memberCount).toBeGreaterThan(0)
+      expect(model.people.every(person => 'managerRef' in person)).toBe(true)
+      expect(model.people.every(person => person.manager === null)).toBe(true)
+      // Enrichment is optional: only assert its shape if the publication exists.
+      if (model.enrichment) {
+        expect(['fresh', 'stale', 'partial', 'absent']).toContain(model.enrichment.state)
+        if (model.enrichment.state !== 'absent') {
+          expect(Array.isArray(model.auxiliaryManagers)).toBe(false)
+          expect(typeof model.auxiliaryManagers).toBe('object')
+        }
+      }
     } else {
       expect(['unavailable', 'empty']).toContain(model.availability)
     }

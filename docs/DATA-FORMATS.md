@@ -151,21 +151,99 @@ response. The two shapes are never merged — callers branch on
       "active": true,
       "email": null,
       "teamIds": ["team-1"],
-      "title": null,
+      "title": "Senior Engineer",
       "manager": null,
-      "geo": null,
-      "identities": {}
+      "geo": "EMEA",
+      "identities": { "github": { "username": "ada", "source": "ldap" }, "gitlab": null },
+      "managerRef": { "kind": "external", "ldapUid": "mhicks" }
     }
-  ]
+  ],
+  "enrichment": { "state": "fresh", "partial": false, "generatedAt": "2026-09-22T11:05:00.000Z" },
+  "auxiliaryManagers": {
+    "mhicks": {
+      "ldapUid": "mhicks",
+      "displayName": "Mark Hicks",
+      "title": "VP Engineering",
+      "city": "Westford",
+      "country": "US",
+      "geo": "AMER",
+      "location": "Westford, MA",
+      "officeLocation": null,
+      "costCenter": null,
+      "identities": { "github": null, "gitlab": null },
+      "managerRef": null
+    }
+  }
 }
 ```
 
 **Invariants:**
 - Person identity is `(projectId, accountId)`; team identity is `(projectId, teamId)`. Display name is never an identity key — it can collide across people and must not be used for matching or navigation once `accountId` is present.
 - `availability` is `available`, `empty` (publication read but no active team membership), or `unavailable` (see `reason` and `publicationState`); `empty`/`unavailable` return `teams: []`/`people: []`, never partial data.
-- `title`, `manager`, `geo`, `email`, and `identities` are `null`/`{}` when not yet published by the project's roster source — never fabricated or inferred.
-- The project's roster publication (`sources/roster/registry.json`, see [Project-qualified publication envelope](#project-qualified-publication-envelope)) is the sole source; there is no fallback to the legacy OSAC roster for a known non-OSAC project.
+- `title`, `geo`, `email`, and `identities` are `null`/`{}`, and `managerRef` is `null`, when not yet published by the project's roster/enrichment sources — never fabricated or inferred.
+- `manager` is always `null`. It predates enrichment and is kept, unpopulated, for response compatibility; `managerRef` is the enrichment-joined field and the two are never conflated.
+- The project's roster publication (`sources/roster/registry.json`, see [Project-qualified publication envelope](#project-qualified-publication-envelope)) is the sole source for `key`/`accountId`/`displayName`/`active`/`email`/`teamIds`; there is no fallback to the legacy OSAC roster for a known non-OSAC project.
 - The legacy OSAC roster (`orgs`-based `RosterResponse`) remains a separate, parallel path used only for `osac`/unset `projectId` during the People & Teams migration; it is not normalized to this shape.
+
+### Roster-enrichment join (`sources/roster-enrichment/registry.json`)
+
+`title`, `geo`, `identities`, and `managerRef` are joined by `accountId` from the
+project's `sources/roster-enrichment/registry.json` publication (produced by
+IPA/LDAP enrichment), when available. The roster stays the sole source of
+`displayName` and identity — enrichment person records carry no `displayName`
+or `ldapUid` of their own, only a `matchStatus` (`matched`/`unmatched`/
+`ambiguous`). Only a `matched` record populates `title`/`geo`/`identities`/
+`managerRef`; `unmatched`/`ambiguous` records (and a missing join) leave them
+`null`/`{}`, identical to no enrichment at all.
+
+`managerRef` is a typed, opaque passthrough — not resolved, not rendered as a
+name, not fed into RBAC — with shape `{kind:"roster",accountId}` |
+`{kind:"external",ldapUid}` | `{kind:"unresolved",reason,ldapUid?}` | `null`
+(unmatched, ambiguous, or a configured manager-chain root).
+
+Top-level `enrichment` (`{state, partial, generatedAt}`) and `auxiliaryManagers`
+(an object keyed by `ldapUid`, each value matching a person record plus
+`ldapUid`/`displayName`) appear **only when an enrichment publication was
+read**; they are omitted entirely when the publication is missing or invalid.
+`enrichment.state` follows the publication's own freshness/partial signals and
+never affects `availability`/`people`/`teams`. `enrichment.partial` mirrors the
+publication's own `partial` flag independently of `state`, so a stale
+last-known-good republish that is also missing records doesn't lose that
+second signal (`state:"stale", partial:true`):
+
+| Publication condition | Person fields | `enrichment` |
+|---|---|---|
+| fresh, not partial | joined | `{state:"fresh", partial:false, generatedAt}` |
+| `freshness:"stale"` (last-known-good), not partial | joined | `{state:"stale", partial:false, generatedAt}` |
+| `partial:true`, fresh | joined (present records only) | `{state:"partial", partial:true, generatedAt}` |
+| `freshness:"stale"` and `partial:true` | joined (present records only) | `{state:"stale", partial:true, generatedAt}` |
+| `freshness:"expired"`/`"unknown"` | not joined (`null`/`{}`) | `{state:"absent", generatedAt}` |
+| missing, invalid schema, unsupported state, or project/identity mismatch | not joined | omitted |
+
+A malformed `auxiliaryManagers` entry (missing `ldapUid`/`displayName`, or
+whose `ldapUid` field disagrees with its own map key) is dropped individually
+rather than omitting the whole enrichment join. A
+`managerRef` with an unrecognized `kind` or missing kind-specific field
+(`accountId` for `roster`, `ldapUid` for `external`, `reason` for
+`unresolved`) degrades to `null` on the record that carries it, rather than
+rejecting that record or the publication.
+
+A mismatched `projectId` (envelope or `data`) is rejected the same as an
+invalid publication — never joined, regardless of per-record content — so
+enrichment can never leak another project's data.
+
+**Known gap:** the reader honors whatever `freshness` the single artifact at
+`sources/roster-enrichment/registry.json` declares, but the current producer
+(`enrich-project-roster.py`) never writes `stale`/`expired`/`unknown` there —
+on failure it preserves that artifact untouched (still reporting its old
+`freshness:"fresh"`) and writes a diagnostic to a separate
+`_publication/<key>.status.json` file instead, which this reader does not
+consult. So `enrichment.state` can read `"fresh"` on data that is, in reality,
+stale. `stale`/`expired`/`unknown` handling here is spec-correct per the
+publication envelope contract but currently unreachable with this producer;
+closing the gap means either the producer marking the main artifact stale on
+failure, or a future reader change to also consult the status file — neither
+is in scope here.
 
 ## Shared Releases → Execute contract
 
