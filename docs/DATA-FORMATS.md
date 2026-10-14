@@ -158,7 +158,7 @@ response. The two shapes are never merged — callers branch on
       "managerRef": { "kind": "external", "ldapUid": "mhicks" }
     }
   ],
-  "enrichment": { "state": "fresh", "generatedAt": "2026-09-22T11:05:00.000Z" },
+  "enrichment": { "state": "fresh", "partial": false, "generatedAt": "2026-09-22T11:05:00.000Z" },
   "auxiliaryManagers": {
     "mhicks": {
       "ldapUid": "mhicks",
@@ -201,20 +201,32 @@ name, not fed into RBAC — with shape `{kind:"roster",accountId}` |
 `{kind:"external",ldapUid}` | `{kind:"unresolved",reason,ldapUid?}` | `null`
 (unmatched, ambiguous, or a configured manager-chain root).
 
-Top-level `enrichment` (`{state, generatedAt}`) and `auxiliaryManagers` (an
-object keyed by `ldapUid`, each value matching a person record plus
+Top-level `enrichment` (`{state, partial, generatedAt}`) and `auxiliaryManagers`
+(an object keyed by `ldapUid`, each value matching a person record plus
 `ldapUid`/`displayName`) appear **only when an enrichment publication was
 read**; they are omitted entirely when the publication is missing or invalid.
 `enrichment.state` follows the publication's own freshness/partial signals and
-never affects `availability`/`people`/`teams`:
+never affects `availability`/`people`/`teams`. `enrichment.partial` mirrors the
+publication's own `partial` flag independently of `state`, so a stale
+last-known-good republish that is also missing records doesn't lose that
+second signal (`state:"stale", partial:true`):
 
 | Publication condition | Person fields | `enrichment` |
 |---|---|---|
-| fresh, not partial | joined | `{state:"fresh", generatedAt}` |
-| `freshness:"stale"` (last-known-good) | joined | `{state:"stale", generatedAt}` |
-| `partial:true` | joined (present records only) | `{state:"partial", generatedAt}` |
+| fresh, not partial | joined | `{state:"fresh", partial:false, generatedAt}` |
+| `freshness:"stale"` (last-known-good), not partial | joined | `{state:"stale", partial:false, generatedAt}` |
+| `partial:true`, fresh | joined (present records only) | `{state:"partial", partial:true, generatedAt}` |
+| `freshness:"stale"` and `partial:true` | joined (present records only) | `{state:"stale", partial:true, generatedAt}` |
 | `freshness:"expired"`/`"unknown"` | not joined (`null`/`{}`) | `{state:"absent", generatedAt}` |
 | missing, invalid schema, unsupported state, or project/identity mismatch | not joined | omitted |
+
+A malformed `auxiliaryManagers` entry (missing `ldapUid`/`displayName`, or
+whose `ldapUid` field disagrees with its own map key) is dropped individually
+rather than omitting the whole enrichment join. A
+`managerRef` with an unrecognized `kind` or missing kind-specific field
+(`accountId` for `roster`, `ldapUid` for `external`, `reason` for
+`unresolved`) degrades to `null` on the record that carries it, rather than
+rejecting that record or the publication.
 
 A mismatched `projectId` (envelope or `data`) is rejected the same as an
 invalid publication — never joined, regardless of per-record content — so

@@ -434,13 +434,14 @@ describe('readProjectPeopleTeams enrichment join', () => {
 
   it('surfaces enrichment state and generatedAt when the publication is fresh', () => {
     const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
-    expect(result.model.enrichment).toEqual({ state: 'fresh', generatedAt: '2026-10-05T00:00:00Z' });
+    expect(result.model.enrichment).toEqual({ state: 'fresh', partial: false, generatedAt: '2026-10-05T00:00:00Z' });
   });
 
   it('badges a stale (last-known-good) enrichment publication but still joins its data', () => {
     publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.freshness = 'stale';
     const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
     expect(result.model.enrichment.state).toBe('stale');
+    expect(result.model.enrichment.partial).toBe(false);
     const alice = result.model.people.find(p => p.accountId === 'acct-1');
     expect(alice.title).toBe('Senior Engineer');
   });
@@ -449,6 +450,16 @@ describe('readProjectPeopleTeams enrichment join', () => {
     publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.partial = true;
     const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
     expect(result.model.enrichment.state).toBe('partial');
+    expect(result.model.enrichment.partial).toBe(true);
+    const alice = result.model.people.find(p => p.accountId === 'acct-1');
+    expect(alice.title).toBe('Senior Engineer');
+  });
+
+  it('preserves the partial signal on a stale publication instead of collapsing it', () => {
+    publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.freshness = 'stale';
+    publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.partial = true;
+    const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+    expect(result.model.enrichment).toEqual({ state: 'stale', partial: true, generatedAt: '2026-10-05T00:00:00Z' });
     const alice = result.model.people.find(p => p.accountId === 'acct-1');
     expect(alice.title).toBe('Senior Engineer');
   });
@@ -534,6 +545,100 @@ describe('readProjectPeopleTeams enrichment join', () => {
     const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
     expect(result.status).toBe(200);
     expect(result.model.enrichment).toBeUndefined();
+  });
+
+  it('drops a malformed auxiliaryManagers entry but keeps the join and other entries', () => {
+    publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.data.auxiliaryManagers = {
+      mhicks: {
+        ldapUid: 'mhicks', displayName: 'Mark Hicks', title: null, city: null, country: null,
+        geo: null, location: null, officeLocation: null, costCenter: null,
+        identities: { github: null, gitlab: null }, managerRef: null
+      },
+      // Missing displayName — malformed, dropped individually.
+      broken: { ldapUid: 'broken', title: null }
+    };
+    const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+    expect(result.status).toBe(200);
+    expect(result.model.enrichment).toBeDefined();
+    expect(result.model.auxiliaryManagers).toEqual({
+      mhicks: expect.objectContaining({ ldapUid: 'mhicks', displayName: 'Mark Hicks' })
+    });
+  });
+
+  it('drops an auxiliaryManagers entry whose ldapUid field disagrees with its map key', () => {
+    publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.data.auxiliaryManagers = {
+      mhicks: {
+        ldapUid: 'someone-else', displayName: 'Mark Hicks', title: null, city: null, country: null,
+        geo: null, location: null, officeLocation: null, costCenter: null,
+        identities: { github: null, gitlab: null }, managerRef: null
+      }
+    };
+    const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+    expect(result.status).toBe(200);
+    expect(result.model.enrichment).toBeDefined();
+    expect(result.model.auxiliaryManagers).toEqual({});
+  });
+
+  it('drops an auxiliaryManagers entry missing ldapUid without failing the join', () => {
+    publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.data.auxiliaryManagers = {
+      mhicks: { displayName: 'Mark Hicks' }
+    };
+    const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+    expect(result.status).toBe(200);
+    expect(result.model.enrichment).toBeDefined();
+    expect(result.model.auxiliaryManagers).toEqual({});
+  });
+
+  it('sanitizes an invalid managerRef on an auxiliaryManagers entry without dropping the entry', () => {
+    publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.data.auxiliaryManagers = {
+      mhicks: {
+        ldapUid: 'mhicks', displayName: 'Mark Hicks', title: null, city: null, country: null,
+        geo: null, location: null, officeLocation: null, costCenter: null,
+        identities: { github: null, gitlab: null }, managerRef: { kind: 'roster' } // missing accountId
+      }
+    };
+    const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+    expect(result.model.auxiliaryManagers.mhicks).toMatchObject({ displayName: 'Mark Hicks', managerRef: null });
+  });
+
+  describe('managerRef kind validation', () => {
+    it.each([
+      ['an unrecognized kind', { kind: 'root-of-org' }],
+      ['a roster kind missing accountId', { kind: 'roster' }],
+      ['a roster kind with an empty accountId', { kind: 'roster', accountId: '' }],
+      ['an external kind missing ldapUid', { kind: 'external' }],
+      ['an unresolved kind missing reason', { kind: 'unresolved', ldapUid: 'mhicks' }]
+    ])('degrades %s to null without dropping the rest of the person', (_label, managerRef) => {
+      publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.data.people[0].managerRef = managerRef;
+      const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+      const alice = result.model.people.find(p => p.accountId === 'acct-1');
+      expect(alice.managerRef).toBeNull();
+      expect(alice.title).toBe('Senior Engineer');
+    });
+
+    // "no-manager-before-root" means the chain ran out of LDAP data *without*
+    // reaching a configured root — distinct from a real root, which the
+    // producer represents as managerRef:null (see the root-person test above).
+    it('accepts a well-formed unresolved managerRef with no ldapUid', () => {
+      publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.data.people[0].managerRef =
+        { kind: 'unresolved', reason: 'no-manager-before-root' };
+      const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+      const alice = result.model.people.find(p => p.accountId === 'acct-1');
+      expect(alice.managerRef).toEqual({ kind: 'unresolved', reason: 'no-manager-before-root' });
+    });
+
+    it('does not conflate a resolved chain root (managerRef:null) with an unresolved chain (managerRef.kind:"unresolved")', () => {
+      publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.data.people[0].managerRef = null;
+      const root = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl')
+        .model.people.find(p => p.accountId === 'acct-1');
+      expect(root.managerRef).toBeNull();
+
+      publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value.data.people[0].managerRef =
+        { kind: 'unresolved', reason: 'no-manager-before-root' };
+      const unresolved = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl')
+        .model.people.find(p => p.accountId === 'acct-1');
+      expect(unresolved.managerRef).toEqual({ kind: 'unresolved', reason: 'no-manager-before-root' });
+    });
   });
 
   it('rejects a cross-project enrichment publication without joining or leaking data', () => {

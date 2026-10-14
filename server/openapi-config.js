@@ -241,6 +241,7 @@ function createOpenApiSpec() {
                 description: 'Present only when a roster-enrichment publication was read for this project',
                 properties: {
                   state: { type: 'string', enum: ['fresh', 'stale', 'partial', 'absent'] },
+                  partial: { type: 'boolean', description: 'True when the publication is missing records, independent of `state` (e.g. a stale last-known-good republish can also be partial)' },
                   generatedAt: { type: 'string', nullable: true, format: 'date-time' }
                 }
               },

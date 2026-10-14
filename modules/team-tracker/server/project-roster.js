@@ -20,6 +20,19 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+// An unrecognized kind or missing kind-specific field degrades to null
+// instead of rejecting the record that carries it.
+function _validManagerRef(ref) {
+  if (!isRecord(ref)) return false;
+  if (ref.kind === 'roster') return typeof ref.accountId === 'string' && !!ref.accountId;
+  if (ref.kind === 'external') return typeof ref.ldapUid === 'string' && !!ref.ldapUid;
+  if (ref.kind === 'unresolved') {
+    return typeof ref.reason === 'string' && !!ref.reason
+      && (ref.ldapUid === undefined || (typeof ref.ldapUid === 'string' && !!ref.ldapUid));
+  }
+  return false;
+}
+
 function _loadProjectRosterData(projects, projectId) {
   if (typeof projectId !== 'string' || !projectId.trim()) {
     return { kind: 'error', status: 400, error: 'Invalid project id' };
@@ -154,9 +167,21 @@ function _loadProjectEnrichmentData(projects, projectId) {
     console.warn(`[project-roster] invalid enrichment publication shape for ${projectId}`);
     return { kind: 'omit' };
   }
-  if (isRecord(auxiliaryManagers) && !Object.values(auxiliaryManagers).every(isRecord)) {
-    console.warn(`[project-roster] invalid enrichment auxiliaryManagers shape for ${projectId}`);
-    return { kind: 'omit' };
+
+  // Dropped individually so one bad entry doesn't blank the whole enrichment join.
+  const sanitizedAuxiliaryManagers = {};
+  for (const [ldapUid, record] of Object.entries(auxiliaryManagers || {})) {
+    if (!isRecord(record)
+        || typeof record.ldapUid !== 'string' || !record.ldapUid
+        || record.ldapUid !== ldapUid
+        || typeof record.displayName !== 'string' || !record.displayName.trim()) {
+      console.warn(`[project-roster] dropping malformed auxiliary manager "${ldapUid}" for ${projectId}`);
+      continue;
+    }
+    sanitizedAuxiliaryManagers[ldapUid] = {
+      ...record,
+      managerRef: _validManagerRef(record.managerRef) ? record.managerRef : null
+    };
   }
 
   const byAccountId = new Map();
@@ -172,14 +197,16 @@ function _loadProjectEnrichmentData(projects, projectId) {
     byAccountId.set(record.accountId, record);
   }
 
+  // `partial` is independent of `state`: a stale republish can also be missing records.
   const state = envelope.freshness === 'stale' ? 'stale' : (envelope.partial === true ? 'partial' : 'fresh');
 
   return {
     kind: 'join',
     state,
+    partial: envelope.partial === true,
     generatedAt,
     byAccountId,
-    auxiliaryManagers: isRecord(auxiliaryManagers) ? auxiliaryManagers : {}
+    auxiliaryManagers: sanitizedAuxiliaryManagers
   };
 }
 
@@ -227,9 +254,7 @@ function _enrichedFields(enrichmentRecord) {
     geo: typeof enrichmentRecord.geo === 'string' && enrichmentRecord.geo.trim() ? enrichmentRecord.geo : null,
     identities: isRecord(enrichmentRecord.identities) ? enrichmentRecord.identities : {},
     // Opaque typed passthrough — never interpreted or resolved here.
-    managerRef: isRecord(enrichmentRecord.managerRef) && typeof enrichmentRecord.managerRef.kind === 'string'
-      ? enrichmentRecord.managerRef
-      : null
+    managerRef: _validManagerRef(enrichmentRecord.managerRef) ? enrichmentRecord.managerRef : null
   };
 }
 
@@ -284,7 +309,7 @@ function _buildReadModel(projectId, loaded, enrichment) {
   };
 
   if (enrichment.kind === 'join') {
-    model.enrichment = { state: enrichment.state, generatedAt: enrichment.generatedAt };
+    model.enrichment = { state: enrichment.state, partial: enrichment.partial, generatedAt: enrichment.generatedAt };
     model.auxiliaryManagers = enrichment.auxiliaryManagers;
   } else if (enrichment.kind === 'distrust') {
     model.enrichment = { state: 'absent', generatedAt: enrichment.generatedAt };
