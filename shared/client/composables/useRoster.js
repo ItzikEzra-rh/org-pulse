@@ -3,6 +3,8 @@ import { getRoster } from '../services/api'
 import { useProjectId } from './useProjectId.js'
 
 // Carries forward normalized person fields as-is; never fabricates ones the source hasn't published.
+// Physical location (city/country/location) is distinct from Geo/Region and is
+// passed through so Team Overview can display it when the publication provides it.
 function _toNormalizedMember(person) {
   return {
     accountId: person.accountId,
@@ -11,6 +13,9 @@ function _toNormalizedMember(person) {
     email: person.email ?? null,
     title: person.title ?? null,
     geo: person.geo ?? null,
+    city: person.city ?? null,
+    country: person.country ?? null,
+    location: person.location ?? null,
     identities: person.identities ?? {},
     managerRef: person.managerRef ?? null,
     customFields: {}
@@ -118,6 +123,12 @@ export function useRoster() {
 
   const managerNames = computed(() => {
     return rosterData.value?.managerNames || {}
+  })
+
+  // Project-qualified external managers, keyed by ldapUid. Present only when an
+  // enrichment publication joined; carries displayName for typed external refs.
+  const auxiliaryManagers = computed(() => {
+    return rosterData.value?.auxiliaryManagers || {}
   })
 
   const selectedOrg = computed(() => {
@@ -229,6 +240,7 @@ export function useRoster() {
     visibleFields,
     primaryDisplayField,
     managerNames,
+    auxiliaryManagers,
     loadRoster,
     reloadRoster
   }

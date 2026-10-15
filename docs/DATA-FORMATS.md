@@ -154,6 +154,9 @@ response. The two shapes are never merged — callers branch on
       "title": "Senior Engineer",
       "manager": null,
       "geo": "EMEA",
+      "city": "Cork",
+      "country": "IE",
+      "location": "Cork, Ireland",
       "identities": { "github": { "username": "ada", "source": "ldap" }, "gitlab": null },
       "managerRef": { "kind": "external", "ldapUid": "mhicks" }
     }
@@ -180,21 +183,22 @@ response. The two shapes are never merged — callers branch on
 **Invariants:**
 - Person identity is `(projectId, accountId)`; team identity is `(projectId, teamId)`. Display name is never an identity key — it can collide across people and must not be used for matching or navigation once `accountId` is present.
 - `availability` is `available`, `empty` (publication read but no active team membership), or `unavailable` (see `reason` and `publicationState`); `empty`/`unavailable` return `teams: []`/`people: []`, never partial data.
-- `title`, `geo`, `email`, and `identities` are `null`/`{}`, and `managerRef` is `null`, when not yet published by the project's roster/enrichment sources — never fabricated or inferred.
+- `title`, `geo`, `city`, `country`, `location`, `email`, and `identities` are `null`/`{}`, and `managerRef` is `null`, when not yet published by the project's roster/enrichment sources — never fabricated or inferred. `geo` is Geo/Region; `city`/`country`/`location` are physical location — the two are distinct and never substituted for each other.
 - `manager` is always `null`. It predates enrichment and is kept, unpopulated, for response compatibility; `managerRef` is the enrichment-joined field and the two are never conflated.
 - The project's roster publication (`sources/roster/registry.json`, see [Project-qualified publication envelope](#project-qualified-publication-envelope)) is the sole source for `key`/`accountId`/`displayName`/`active`/`email`/`teamIds`; there is no fallback to the legacy OSAC roster for a known non-OSAC project.
 - The legacy OSAC roster (`orgs`-based `RosterResponse`) remains a separate, parallel path used only for `osac`/unset `projectId` during the People & Teams migration; it is not normalized to this shape.
 
 ### Roster-enrichment join (`sources/roster-enrichment/registry.json`)
 
-`title`, `geo`, `identities`, and `managerRef` are joined by `accountId` from the
-project's `sources/roster-enrichment/registry.json` publication (produced by
-IPA/LDAP enrichment), when available. The roster stays the sole source of
-`displayName` and identity — enrichment person records carry no `displayName`
-or `ldapUid` of their own, only a `matchStatus` (`matched`/`unmatched`/
-`ambiguous`). Only a `matched` record populates `title`/`geo`/`identities`/
-`managerRef`; `unmatched`/`ambiguous` records (and a missing join) leave them
-`null`/`{}`, identical to no enrichment at all.
+`title`, `geo`, `city`, `country`, `location`, `identities`, and `managerRef`
+are joined by `accountId` from the project's
+`sources/roster-enrichment/registry.json` publication (produced by IPA/LDAP
+enrichment), when available. The roster stays the sole source of `displayName`
+and identity — enrichment person records carry no `displayName` or `ldapUid` of
+their own, only a `matchStatus` (`matched`/`unmatched`/`ambiguous`). Only a
+`matched` record populates these enriched fields; `unmatched`/`ambiguous`
+records (and a missing join) leave them `null`/`{}`, identical to no enrichment
+at all.
 
 `managerRef` is a typed, opaque passthrough — not resolved, not rendered as a
 name, not fed into RBAC — with shape `{kind:"roster",accountId}` |
