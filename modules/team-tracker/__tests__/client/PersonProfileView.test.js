@@ -9,7 +9,13 @@ const rosterDataValue = ref(null)
 const rosterLoadingValue = ref(false)
 const isAdminValue = ref(false)
 const mockLoadGitlabStats = vi.fn()
-const projectIdValue = ref('flightctl')
+
+// useProjectContributions calls useProjectId() at import time, so this ref must be
+// hoisted to exist before that eager call runs.
+const { projectIdValue } = vi.hoisted(() => {
+  const { ref } = require('vue')
+  return { projectIdValue: ref('flightctl') }
+})
 
 vi.mock('@shared/client/composables/useRoster.js', () => ({
   useRoster: () => ({
