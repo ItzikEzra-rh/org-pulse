@@ -18,7 +18,8 @@ function _normalizeGithub(github) {
   if (typeof github.username !== 'string' || !github.username.trim()) return null
   return {
     username: github.username,
-    totalContributions: Number.isFinite(github.totalContributions) ? github.totalContributions : 0,
+    // null = unavailable measurement; a genuine numeric zero is preserved.
+    totalContributions: Number.isFinite(github.totalContributions) ? github.totalContributions : null,
     months: isRecord(github.months) ? github.months : {},
     fetchedAt: typeof github.fetchedAt === 'string' ? github.fetchedAt : null
   }
@@ -81,7 +82,7 @@ function _loadProjectContributionsData(projects, projectId) {
         || !Array.isArray(person.teamIds)
         || person.teamIds.some(id => typeof id !== 'string' || !id)
         || (person.github !== null && !isRecord(person.github))
-        || (person.gitlab !== null && person.gitlab !== undefined)) {
+        || person.gitlab !== null) {
       return { kind: 'error', status: 502, error: 'Invalid project contributions publication' }
     }
     if (seenAccountIds.has(person.accountId)) {
@@ -152,7 +153,9 @@ function _buildReadModel(projectId, loaded, status) {
   }
 
   const normalizedPeople = people.map(person => {
-    const github = _normalizeGithub(person.github)
+    // A contested login resolves to no one: conflicted identities never receive
+    // attribution, even if the publication still carries a github object.
+    const github = conflicted.has(person.accountId) ? null : _normalizeGithub(person.github)
     return {
       key: `${projectId}::${person.accountId}`,
       projectId,

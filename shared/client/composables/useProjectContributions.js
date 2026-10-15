@@ -10,7 +10,8 @@ let dataProjectId = projectId.value
 let requestSequence = 0
 let pendingRequest = null
 
-// Reset on project switch so one project's calendars never surface under another.
+// Reset-only on project switch (never fetch): one project's calendars must not
+// surface under another, but fetching is driven by the consuming view's lifecycle.
 watch(projectId, currentProjectId => {
   dataProjectId = currentProjectId
   contributionsData.value = null
@@ -18,7 +19,6 @@ watch(projectId, currentProjectId => {
   loading.value = false
   requestSequence += 1
   pendingRequest = null
-  fetchContributions()
 }, { flush: 'sync' })
 
 function fetchContributions({ force = false } = {}) {

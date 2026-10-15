@@ -100,4 +100,20 @@ describe('useProjectContributions', () => {
     expect(result).toBeNull()
     expect(mocks.getProjectContributions).not.toHaveBeenCalled()
   })
+
+  it('does not fetch merely because the global project selector changed with no active consumer', async () => {
+    mocks.getProjectContributions.mockResolvedValue(model('osac', [person('osac-1', 'osac-gh', 3)]))
+    const c = await createContributions('flightctl')
+
+    // Importing and using the composable, then switching projects, must not fetch
+    // while no consuming view has asked for data.
+    mocks.projectId.value = 'osac'
+    await Promise.resolve()
+    expect(mocks.getProjectContributions).not.toHaveBeenCalled()
+
+    // Active consumption still triggers a fetch for the current project.
+    await c.loadContributions()
+    expect(mocks.getProjectContributions).toHaveBeenCalledWith('osac')
+    expect(c.getByAccountId('osac-1').github.totalContributions).toBe(3)
+  })
 })

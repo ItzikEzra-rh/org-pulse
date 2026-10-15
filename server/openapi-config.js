@@ -253,6 +253,50 @@ function createOpenApiSpec() {
               }
             }
           },
+          ProjectContributionsResponse: {
+            type: 'object',
+            description: 'Project-qualified GitHub contributions joined by (projectId, accountId). github=null means unavailable (never zero); gitlab is always null.',
+            properties: {
+              projectId: { type: 'string' },
+              availability: { type: 'string', enum: ['available', 'empty', 'unavailable'] },
+              reason: { type: 'string', nullable: true },
+              publicationState: { type: 'string', nullable: true },
+              freshness: { type: 'string', enum: ['fresh', 'stale', 'unknown'] },
+              partial: { type: 'boolean' },
+              generatedAt: { type: 'string', nullable: true, format: 'date-time' },
+              fetchedAt: { type: 'string', nullable: true, format: 'date-time' },
+              metric: { type: 'object', nullable: true },
+              people: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    key: { type: 'string' },
+                    projectId: { type: 'string' },
+                    accountId: { type: 'string' },
+                    displayName: { type: 'string' },
+                    active: { type: 'boolean' },
+                    teamIds: { type: 'array', items: { type: 'string' } },
+                    github: {
+                      type: 'object',
+                      nullable: true,
+                      description: 'Null when unavailable or the identity is conflicted; never fabricated as zero.',
+                      properties: {
+                        username: { type: 'string' },
+                        totalContributions: { type: 'integer', nullable: true, description: 'Null when unavailable; a genuine zero stays zero.' },
+                        months: { type: 'object', additionalProperties: { type: 'integer' } },
+                        fetchedAt: { type: 'string', nullable: true, format: 'date-time' }
+                      }
+                    },
+                    gitlab: { type: 'object', nullable: true, description: 'Always null; GitLab is unpublished by this collector.' },
+                    contributionStatus: { type: 'string', enum: ['collected', 'carried-forward', 'failed', 'unresolved', 'conflicted'] }
+                  }
+                }
+              },
+              diagnostics: { type: 'object', nullable: true },
+              publicationError: { type: 'object', nullable: true }
+            }
+          },
           GitHubContributions: {
             type: 'object',
             properties: {

@@ -178,6 +178,80 @@ describe('readProjectContributions', () => {
     expect(result.model.diagnostics.identityConflicts).toEqual([{ github: 'shared-gh', accountIds: ['acc-1', 'acc-2'] }])
   })
 
+  it('never attributes a github object to a conflicted identity, leaving valid identities intact', () => {
+    publications.flightctl[ARTIFACT_KEY].value = makeEnvelope('flightctl', {
+      data: {
+        people: [
+          { accountId: 'acc-1', displayName: 'Ada', active: true, teamIds: ['t1'], github: githubRecord('shared-gh', 99), gitlab: null },
+          { accountId: 'acc-2', displayName: 'Alan', active: true, teamIds: ['t1'], github: githubRecord('shared-gh', 77), gitlab: null },
+          { accountId: 'acc-3', displayName: 'Grace', active: true, teamIds: ['t1'], github: githubRecord('grace-gh', 5), gitlab: null }
+        ],
+        diagnostics: {
+          unresolvedIdentities: [],
+          identityConflicts: [{ github: 'shared-gh', accountIds: ['acc-1', 'acc-2'] }],
+          carriedForward: [], failedFetch: [], gitlab: { state: 'unavailable' }
+        }
+      }
+    })
+    const result = readProjectContributions(mockProjects(publications, profiles), 'flightctl')
+    const byId = id => result.model.people.find(p => p.accountId === id)
+    expect(byId('acc-1').github).toBeNull()
+    expect(byId('acc-1').contributionStatus).toBe('conflicted')
+    expect(byId('acc-2').github).toBeNull()
+    expect(byId('acc-2').contributionStatus).toBe('conflicted')
+    // An unrelated, uncontested identity keeps its contributions.
+    expect(byId('acc-3').github.totalContributions).toBe(5)
+    expect(byId('acc-3').contributionStatus).toBe('collected')
+  })
+
+  it('normalizes github totals: a genuine zero stays zero; missing, null and invalid become null', () => {
+    publications.flightctl[ARTIFACT_KEY].value = makeEnvelope('flightctl', {
+      data: {
+        people: [
+          { accountId: 'zero', displayName: 'Zero', active: true, teamIds: ['t1'], github: githubRecord('zero-gh', 0), gitlab: null },
+          { accountId: 'missing', displayName: 'Missing', active: true, teamIds: ['t1'], github: { username: 'missing-gh', months: {}, fetchedAt: null }, gitlab: null },
+          { accountId: 'nullish', displayName: 'Null', active: true, teamIds: ['t1'], github: { username: 'null-gh', totalContributions: null, months: {}, fetchedAt: null }, gitlab: null },
+          { accountId: 'invalid', displayName: 'Invalid', active: true, teamIds: ['t1'], github: { username: 'invalid-gh', totalContributions: 'NaN', months: {}, fetchedAt: null }, gitlab: null }
+        ],
+        diagnostics: { unresolvedIdentities: [], identityConflicts: [], carriedForward: [], failedFetch: [], gitlab: { state: 'unavailable' } }
+      }
+    })
+    const result = readProjectContributions(mockProjects(publications, profiles), 'flightctl')
+    const total = id => result.model.people.find(p => p.accountId === id).github.totalContributions
+    expect(total('zero')).toBe(0)
+    expect(total('missing')).toBeNull()
+    expect(total('nullish')).toBeNull()
+    expect(total('invalid')).toBeNull()
+  })
+
+  it('requires both github and gitlab to be present: rejects an omitted github', () => {
+    publications.flightctl[ARTIFACT_KEY].value = makeEnvelope('flightctl', {
+      data: { people: [{ accountId: 'acc-1', displayName: 'Ada', active: true, teamIds: ['t1'], gitlab: null }] }
+    })
+    const result = readProjectContributions(mockProjects(publications, profiles), 'flightctl')
+    expect(result.status).toBe(502)
+  })
+
+  it('requires both github and gitlab to be present: rejects an omitted gitlab', () => {
+    publications.flightctl[ARTIFACT_KEY].value = makeEnvelope('flightctl', {
+      data: { people: [{ accountId: 'acc-1', displayName: 'Ada', active: true, teamIds: ['t1'], github: null }] }
+    })
+    const result = readProjectContributions(mockProjects(publications, profiles), 'flightctl')
+    expect(result.status).toBe(502)
+  })
+
+  it('accepts github: null as an unavailable measurement on an otherwise valid record', () => {
+    publications.flightctl[ARTIFACT_KEY].value = makeEnvelope('flightctl', {
+      data: {
+        people: [{ accountId: 'acc-1', displayName: 'Ada', active: true, teamIds: ['t1'], github: null, gitlab: null }],
+        diagnostics: { unresolvedIdentities: ['acc-1'], identityConflicts: [], carriedForward: [], failedFetch: [], gitlab: { state: 'unavailable' } }
+      }
+    })
+    const result = readProjectContributions(mockProjects(publications, profiles), 'flightctl')
+    expect(result.status).toBe(200)
+    expect(result.model.people[0].github).toBeNull()
+  })
+
   it('downgrades freshness to stale when a pending failed re-collection status sidecar is present', () => {
     publications.flightctl[PUBLICATION_STATUS_KEY] = {
       value: {

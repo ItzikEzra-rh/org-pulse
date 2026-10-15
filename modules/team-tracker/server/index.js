@@ -2855,8 +2855,41 @@ module.exports = function registerRoutes(router, context) {
     }
   });
 
-  // Project-qualified canonical contributions for OSAC and Flight Control alike.
-  // The legacy /github/contributions cache endpoints are intentionally untouched.
+  /**
+   * @openapi
+   * /api/modules/team-tracker/project-contributions:
+   *   get:
+   *     tags: ['TT: Roster']
+   *     summary: Get project-qualified GitHub contributions
+   *     description: >-
+   *       Canonical GitHub-wide contribution-calendar metrics for a project,
+   *       joined to people by (projectId, accountId). The legacy
+   *       `/github/contributions` cache endpoint is unaffected.
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string }
+   *         description: Canonical project id (e.g. `osac`, `flightctl`); surrounding whitespace is rejected.
+   *     responses:
+   *       200:
+   *         description: Project contributions read model (availability available/empty/unavailable).
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ProjectContributionsResponse'
+   *       400:
+   *         description: projectId is missing, malformed, or has surrounding whitespace.
+   *       404:
+   *         description: Unknown project, or the project has no contributions publication.
+   *       500:
+   *         description: Unexpected error while reading the publication.
+   *       502:
+   *         description: Publication present but malformed or project identity mismatch.
+   *       503:
+   *         description: The project publication reader is unavailable.
+   */
+  // Legacy /github/contributions cache endpoints are intentionally untouched.
   router.get('/project-contributions', requireScope('github:read'), function(req, res) {
     try {
       const selection = resolveProjectSelection(context.projects, req.query);
