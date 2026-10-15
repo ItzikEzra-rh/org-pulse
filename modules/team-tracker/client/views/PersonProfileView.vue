@@ -6,6 +6,7 @@ import { useRoster } from '@shared/client/composables/useRoster.js'
 import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { useGithubStats } from '@shared/client/composables/useGithubStats.js'
 import { useGitlabStats } from '@shared/client/composables/useGitlabStats.js'
+import { useProjectContributions } from '@shared/client/composables/useProjectContributions.js'
 import { usePermissions } from '@shared/client/composables/usePermissions.js'
 import { useImpersonation } from '@shared/client/composables/useImpersonation.js'
 import { useFieldDefinitions } from '@shared/client/composables/useFieldDefinitions.js'
@@ -27,8 +28,14 @@ const visiblePersonFields = computed(() =>
 )
 const { getContributions: getGithubContributions } = useGithubStats()
 const { getContributions: getGitlabContributions, loadGitlabStats } = useGitlabStats()
+const { getByAccountId: getProjectContribution, loadContributions: loadProjectContributions } = useProjectContributions()
 
 const githubContribs = computed(() => {
+  // Project people read the canonical artifact by accountId; OSAC's legacy
+  // view keeps its username-keyed global cache unchanged.
+  if (isProjectPerson.value) {
+    return getProjectContribution(person.value?.accountId)?.github || null
+  }
   const username = person.value?.github?.username || rosterMember.value?.githubUsername
   return username ? getGithubContributions(username) : null
 })
@@ -211,7 +218,10 @@ function loadProjectPerson() {
     geo: projectPerson.geo,
     city: null,
     country: null,
-    github: null,
+    // Identity gates the panel; counts join from the contributions artifact by accountId.
+    github: projectPerson.identities?.github?.username
+      ? { username: projectPerson.identities.github.username }
+      : null,
     gitlab: null,
     orgType: 'engineering',
     _appFields: {},
@@ -219,6 +229,7 @@ function loadProjectPerson() {
     lastSeenAt: null,
     inactiveSince: null
   }
+  loadProjectContributions()
   loading.value = false
 }
 
