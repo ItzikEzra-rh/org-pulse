@@ -104,8 +104,9 @@ export async function getPersonMetrics(jiraDisplayName) {
   return apiRequest(`/person/${encodeURIComponent(jiraDisplayName)}/metrics`)
 }
 
-export async function getTeamMetrics(teamKey) {
-  return apiRequest(`/team/${encodeURIComponent(teamKey)}/metrics`)
+export async function getTeamMetrics(teamKey, projectId) {
+  const suffix = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+  return apiRequest(`/team/${encodeURIComponent(teamKey)}/metrics${suffix}`)
 }
 
 // ─── Unified Refresh ───
@@ -132,8 +133,9 @@ export async function getGitlabContributions() {
 
 // ─── Trends ───
 
-export async function getTrends() {
-  return apiRequest('/trends')
+export async function getTrends(projectId) {
+  const suffix = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+  return apiRequest(`/trends${suffix}`)
 }
 
 // ─── Annotations ───

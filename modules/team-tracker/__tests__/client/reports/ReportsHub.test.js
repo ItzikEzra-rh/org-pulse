@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
 import { ref, readonly } from 'vue'
 import ReportsHub from '../../../client/reports/ReportsHub.vue'
 
@@ -11,11 +11,15 @@ vi.mock('@/platform-loader', () => ({
   })
 }))
 
+const mockIsNormalizedModel = ref(false)
+const mockRosterTeams = ref([])
+
 // Mock dependencies
 vi.mock('@shared/client/composables/useRoster', () => ({
   useRoster: () => ({
     orgs: ref([]),
-    teams: ref([]),
+    teams: mockRosterTeams,
+    isNormalizedModel: mockIsNormalizedModel,
     selectedOrgKey: ref(null),
     selectOrg: vi.fn(),
     loadRoster: vi.fn(),
@@ -26,6 +30,11 @@ const mockNavigateTo = vi.fn()
 const mockParams = ref({})
 
 describe('ReportsHub', () => {
+  beforeEach(() => {
+    mockIsNormalizedModel.value = false
+    mockRosterTeams.value = []
+  })
+
   function createWrapper(params = {}) {
     mockParams.value = params
     mockNavigateTo.mockClear()
@@ -86,5 +95,21 @@ describe('ReportsHub', () => {
     const wrapper = createWrapper({ report: 'nonexistent' })
     const cards = wrapper.findAll('[data-testid="report-card"]')
     expect(cards.length).toBe(2)
+  })
+
+  it('hides the org filter and shows the team filter for Trends in project mode, with no org selected', async () => {
+    mockIsNormalizedModel.value = true
+    mockRosterTeams.value = [{ key: 'flightctl::team-1', displayName: 'Flight Team', members: [] }]
+    const wrapper = createWrapper({ report: 'trends' })
+    await flushPromises()
+    expect(wrapper.find('[aria-label="Organization filter"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="Team filter"]').exists()).toBe(true)
+  })
+
+  it('keeps the org filter and the org-gated team filter for Trends in OSAC (legacy) mode', async () => {
+    const wrapper = createWrapper({ report: 'trends' })
+    await flushPromises()
+    expect(wrapper.find('[aria-label="Organization filter"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="Team filter"]').exists()).toBe(false)
   })
 })

@@ -242,6 +242,63 @@ describe('PersonProfileView', () => {
     expect(wrapper.text()).toContain('Person not found')
   })
 
+  it('surfaces enriched github/gitlab identities for a project-qualified person', async () => {
+    isAdminValue.value = true
+    rosterPeople.value = [
+      {
+        key: 'flightctl::acc-3',
+        projectId: 'flightctl',
+        accountId: 'acc-3',
+        displayName: 'Grace Hopper',
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        manager: null,
+        geo: null,
+        identities: {
+          github: { username: 'ghopper', source: 'ldap' },
+          gitlab: { username: 'ghopper-gl', source: 'ldap' }
+        }
+      }
+    ]
+    rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+
+    const wrapper = mountView({ accountId: 'acc-3' })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('ghopper')
+    expect(wrapper.text()).toContain('ghopper-gl')
+    // Edit/remove controls stay OSAC-only even for an admin viewing a project person.
+    expect(wrapper.find('button[title="Edit"]').exists()).toBe(false)
+    expect(wrapper.find('button[title="Set"]').exists()).toBe(false)
+  })
+
+  it('shows "Not set" for a project-qualified person with no published identities', async () => {
+    rosterPeople.value = [
+      {
+        key: 'flightctl::acc-4',
+        projectId: 'flightctl',
+        accountId: 'acc-4',
+        displayName: 'No Identities',
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        manager: null,
+        geo: null,
+        identities: {}
+      }
+    ]
+    rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+
+    const wrapper = mountView({ accountId: 'acc-4' })
+    await flushPromises()
+
+    const notSet = wrapper.findAll('span').filter(s => s.text() === 'Not set')
+    expect(notSet.length).toBe(2)
+  })
+
   it('leaves OSAC legacy behavior unchanged (resolves by uid via the registry endpoint)', async () => {
     apiRequest.mockImplementation((url) => {
       if (url.includes('/registry/people/u1')) {

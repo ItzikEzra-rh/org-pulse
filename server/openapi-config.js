@@ -253,6 +253,76 @@ function createOpenApiSpec() {
               }
             }
           },
+          TrendsResponse: {
+            type: 'object',
+            description: 'Legacy OSAC-global trend data (unchanged byte-for-byte)',
+            properties: {
+              jira: { type: 'object', description: 'Monthly buckets keyed by YYYY-MM' },
+              github: { type: 'object', nullable: true },
+              gitlab: { type: 'object', nullable: true }
+            }
+          },
+          ProjectTrendsResponse: {
+            type: 'object',
+            description: 'Project-qualified Jira trend data, sourced from the jira-person-metrics publication. GitHub/GitLab are always null: no project-qualified contribution publication exists yet.',
+            properties: {
+              projectId: { type: 'string' },
+              availability: { type: 'string', enum: ['available', 'empty', 'unavailable'] },
+              reason: { type: 'string', nullable: true },
+              publicationState: { type: 'string', nullable: true },
+              partial: { type: 'boolean' },
+              generatedAt: { type: 'string', nullable: true, format: 'date-time' },
+              jira: {
+                type: 'object',
+                nullable: true,
+                description: 'Monthly buckets keyed by YYYY-MM; null when unavailable',
+                additionalProperties: {
+                  type: 'object',
+                  properties: {
+                    resolved: { type: 'integer' },
+                    points: { type: 'integer' },
+                    avgCycleTimeDays: { type: 'number', nullable: true },
+                    byTeam: {
+                      type: 'object',
+                      description: 'Keyed by the project-qualified team key (projectId::teamId)',
+                      additionalProperties: {
+                        type: 'object',
+                        properties: {
+                          resolved: { type: 'integer' },
+                          points: { type: 'integer' },
+                          avgCycleTimeDays: { type: 'number', nullable: true }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              github: { type: 'object', nullable: true, description: 'Always null: no project-qualified publication exists yet' },
+              gitlab: { type: 'object', nullable: true, description: 'Always null: no project-qualified publication exists yet' }
+            }
+          },
+          ProjectTeamMetricsResponse: {
+            type: 'object',
+            description: 'Project-qualified Jira team metrics, sourced from the jira-person-metrics publication.',
+            properties: {
+              teamKey: { type: 'string', description: 'projectId::teamId' },
+              available: { type: 'boolean' },
+              reason: { type: 'string', nullable: true, description: 'Present only when available is false' },
+              publicationState: { type: 'string', nullable: true },
+              generatedAt: { type: 'string', nullable: true, format: 'date-time' },
+              memberCount: { type: 'integer' },
+              partial: { type: 'boolean' },
+              aggregate: {
+                type: 'object',
+                properties: {
+                  resolvedCount: { type: 'integer' },
+                  resolvedPoints: { type: 'integer' },
+                  inProgressCount: { type: 'integer' },
+                  avgCycleTimeDays: { type: 'number', nullable: true }
+                }
+              }
+            }
+          },
           GitHubContributions: {
             type: 'object',
             properties: {

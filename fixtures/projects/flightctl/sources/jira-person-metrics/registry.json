@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "projectId": "flightctl",
+  "profileRevision": "84d6e4c515154de5",
+  "artifactKey": "sources/jira-person-metrics/registry.json",
+  "source": {
+    "id": "flightctl-jira-person-metrics",
+    "kind": "jira-person-metrics",
+    "revision": null,
+    "runId": null
+  },
+  "generatedAt": "2026-10-05T11:10:00Z",
+  "fetchedAt": "2026-10-05T11:10:00Z",
+  "observedAt": "2026-10-05T11:10:00Z",
+  "attemptedAt": "2026-10-05T11:10:00Z",
+  "publishedAt": "2026-10-05T11:10:00Z",
+  "state": "supported",
+  "freshness": "fresh",
+  "partial": false,
+  "error": null,
+  "lastKnownGood": null,
+  "data": {
+    "projectId": "flightctl",
+    "personCount": 3,
+    "people": [
+      {
+        "accountId": "fc-acc-1",
+        "teamIds": ["366df4de-dc38-4f71-9f0d-9916d450c20c"],
+        "fetchedAt": "2026-10-05T11:10:00.000Z",
+        "fieldsVersion": "v2",
+        "lookbackDays": 365,
+        "resolved": {
+          "count": 2,
+          "storyPoints": 8,
+          "issues": [
+            { "key": "FLPATH-101", "summary": "Fix agent reconnect loop", "issueType": "Bug", "status": "Closed", "resolution": "Done", "storyPoints": 5, "created": "2026-09-01T00:00:00.000+0000", "resolutionDate": "2026-09-15T00:00:00.000+0000", "components": ["agent"], "cycleTimeDays": 3.0 },
+            { "key": "FLPATH-102", "summary": "Document device enrollment", "issueType": "Story", "status": "Closed", "resolution": "Done", "storyPoints": 3, "created": "2026-09-10T00:00:00.000+0000", "resolutionDate": "2026-09-20T00:00:00.000+0000", "components": ["docs"], "cycleTimeDays": 1.0 }
+          ]
+        },
+        "inProgress": { "count": 1, "storyPoints": 2, "issues": [
+          { "key": "FLPATH-110", "summary": "Add device health probe", "issueType": "Story", "status": "In Progress", "resolution": null, "storyPoints": 2, "created": "2026-10-01T00:00:00.000+0000", "resolutionDate": null, "components": ["agent"] }
+        ] },
+        "cycleTime": { "avgDays": 2.0, "medianDays": 2.0 }
+      },
+      {
+        "accountId": "fc-acc-2",
+        "teamIds": ["366df4de-dc38-4f71-9f0d-9916d450c20c", "73ce1d26-43fc-4432-92eb-ce48c5e5e200"],
+        "fetchedAt": "2026-10-05T11:10:00.000Z",
+        "fieldsVersion": "v2",
+        "lookbackDays": 365,
+        "resolved": {
+          "count": 1,
+          "storyPoints": 2,
+          "issues": [
+            { "key": "FLPATH-103", "summary": "Triage UI flake", "issueType": "Bug", "status": "Closed", "resolution": "Done", "storyPoints": 2, "created": "2026-09-22T00:00:00.000+0000", "resolutionDate": "2026-09-25T00:00:00.000+0000", "components": ["ui"], "cycleTimeDays": 5.0 }
+          ]
+        },
+        "inProgress": { "count": 0, "storyPoints": 0, "issues": [] },
+        "cycleTime": { "avgDays": 5.0, "medianDays": 5.0 }
+      },
+      {
+        "accountId": "fc-acc-3",
+        "teamIds": ["73ce1d26-43fc-4432-92eb-ce48c5e5e200"],
+        "fetchedAt": "2026-10-05T11:10:00.000Z",
+        "fieldsVersion": "v2",
+        "lookbackDays": 365,
+        "resolved": { "count": 0, "storyPoints": 0, "issues": [] },
+        "inProgress": { "count": 0, "storyPoints": 0, "issues": [] },
+        "cycleTime": { "avgDays": null, "medianDays": null }
+      }
+    ],
+    "teams": [
+      {
+        "id": "366df4de-dc38-4f71-9f0d-9916d450c20c",
+        "name": "Flight Control Core",
+        "memberCount": 2,
+        "membersIncluded": 2,
+        "membersMissing": [],
+        "resolved": { "count": 3, "storyPoints": 10 },
+        "inProgress": { "count": 1, "storyPoints": 2 },
+        "cycleTime": { "avgDays": 3.0, "medianDays": 3.0 },
+        "partial": false
+      },
+      {
+        "id": "73ce1d26-43fc-4432-92eb-ce48c5e5e200",
+        "name": "Flight Control UI",
+        "memberCount": 2,
+        "membersIncluded": 2,
+        "membersMissing": [],
+        "resolved": { "count": 1, "storyPoints": 2 },
+        "inProgress": { "count": 0, "storyPoints": 0 },
+        "cycleTime": { "avgDays": 5.0, "medianDays": 5.0 },
+        "partial": false
+      }
+    ],
+    "diagnostics": {
+      "missingPeople": [],
+      "staleCarryForward": [],
+      "freshSuccessCount": 3
+    }
+  }
+}
