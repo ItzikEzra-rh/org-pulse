@@ -2,6 +2,7 @@ module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin, requireTeamAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage, listStorageFiles, deleteStorageDirectory } = storage;
   const { readProjectPeopleTeams } = require('./project-roster');
+  const { readProjectContributions } = require('./project-contributions');
   const { resolveProjectSelection } = require('../../../shared/server/project-profile');
 
   // Register module scopes
@@ -2850,6 +2851,22 @@ module.exports = function registerRoutes(router, context) {
       res.json(readLegacyRosterResponse(req));
     } catch (error) {
       console.error('Read roster error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Project-qualified canonical contributions for OSAC and Flight Control alike.
+  // The legacy /github/contributions cache endpoints are intentionally untouched.
+  router.get('/project-contributions', requireScope('github:read'), function(req, res) {
+    try {
+      const selection = resolveProjectSelection(context.projects, req.query);
+      if (selection.status) return res.status(selection.status).json({ error: selection.error });
+      if (!selection.provided) return res.status(400).json({ error: 'projectId is required' });
+      const result = readProjectContributions(context.projects, selection.projectId);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.model);
+    } catch (error) {
+      console.error('Read project contributions error:', error);
       res.status(500).json({ error: error.message });
     }
   });

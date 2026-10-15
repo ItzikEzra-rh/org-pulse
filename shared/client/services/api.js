@@ -124,6 +124,12 @@ export async function getGithubContributions() {
   return apiRequest('/github/contributions')
 }
 
+// Project-qualified contributions (canonical artifact); legacy endpoint above is unchanged.
+export async function getProjectContributions(projectId) {
+  const suffix = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+  return apiRequest(`/modules/team-tracker/project-contributions${suffix}`)
+}
+
 // ─── GitLab Contributions ───
 
 export async function getGitlabContributions() {
