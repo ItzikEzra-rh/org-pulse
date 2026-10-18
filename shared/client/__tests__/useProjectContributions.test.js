@@ -75,6 +75,30 @@ describe('useProjectContributions', () => {
     expect(c.getByAccountId('osac-1').github.totalContributions).toBe(3)
   })
 
+  it('ignores a stale flightctl response that resolves after switching to another project', async () => {
+    let resolveFlightctl
+    const flightctlPromise = new Promise(resolve => { resolveFlightctl = resolve })
+    mocks.getProjectContributions.mockImplementation(async projectId =>
+      projectId === 'flightctl' ? flightctlPromise : model('osac', [person('osac-1', 'osac-gh', 3)])
+    )
+
+    const c = await createContributions('flightctl')
+    const staleLoad = c.loadContributions()
+
+    // Switch projects before the flightctl request resolves, then load the new project.
+    mocks.projectId.value = 'osac'
+    await c.loadContributions()
+    expect(c.getByAccountId('osac-1').github.totalContributions).toBe(3)
+
+    // The stale flightctl response arrives late; it must not overwrite osac's data.
+    resolveFlightctl(model('flightctl', [person('fc-1', 'fc-gh', 7)]))
+    await staleLoad
+
+    expect(c.contributions.value?.projectId).toBe('osac')
+    expect(c.getByAccountId('fc-1')).toBeNull()
+    expect(c.getByAccountId('osac-1').github.totalContributions).toBe(3)
+  })
+
   it('surfaces an unknown project as an error without fabricating data', async () => {
     mocks.getProjectContributions.mockRejectedValueOnce(
       Object.assign(new Error('Unknown project'), { status: 404 })

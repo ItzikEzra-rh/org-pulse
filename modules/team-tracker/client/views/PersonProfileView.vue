@@ -532,12 +532,12 @@ onBeforeUnmount(() => {
                   <div class="text-xs text-gray-500 dark:text-gray-400">Avg Cycle Time</div>
                 </div>
               </template>
-              <div v-if="person.github?.username">
+              <div v-if="isProjectPerson ? githubContribs : person.github?.username">
                 <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ githubContribs?.totalContributions ?? '—' }}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400">GitHub Contributions</div>
                 <div class="text-[10px] text-gray-400 dark:text-gray-500">Last year</div>
               </div>
-              <div v-if="person.gitlab?.username">
+              <div v-if="isProjectPerson ? gitlabContribs : person.gitlab?.username">
                 <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ gitlabContribs?.totalContributions ?? '—' }}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400">GitLab Contributions</div>
                 <div class="text-[10px] text-gray-400 dark:text-gray-500">Last year</div>

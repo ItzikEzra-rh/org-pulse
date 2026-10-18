@@ -63,10 +63,11 @@ vi.mock('../../client/composables/useManagerTutorial', () => ({
 }))
 
 vi.mock('@shared/client/services/api.js', () => ({
-  apiRequest: vi.fn()
+  apiRequest: vi.fn(),
+  getProjectContributions: vi.fn()
 }))
 
-import { apiRequest } from '@shared/client/services/api.js'
+import { apiRequest, getProjectContributions } from '@shared/client/services/api.js'
 
 function mountView(params) {
   return mount(PersonProfileView, {
@@ -86,6 +87,7 @@ function mountView(params) {
 describe('PersonProfileView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    getProjectContributions.mockReset()
     projectIdValue.value = 'flightctl'
     rosterPeople.value = []
     rosterTeamsValue.value = []
@@ -303,6 +305,38 @@ describe('PersonProfileView', () => {
 
     const notSet = wrapper.findAll('span').filter(s => s.text() === 'Not set')
     expect(notSet.length).toBe(2)
+  })
+
+  it('shows the GitHub Contributions tile from the canonical artifact even when roster enrichment has no GitHub identity', async () => {
+    rosterPeople.value = [
+      {
+        key: 'flightctl::acc-5',
+        projectId: 'flightctl',
+        accountId: 'acc-5',
+        displayName: 'Katherine Johnson',
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        manager: null,
+        geo: null,
+        identities: {}
+      }
+    ]
+    rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+    getProjectContributions.mockResolvedValue({
+      projectId: 'flightctl',
+      availability: 'available',
+      people: [
+        { accountId: 'acc-5', github: { username: 'kjohnson-gh', totalContributions: 42, months: {}, fetchedAt: null }, gitlab: null }
+      ]
+    })
+
+    const wrapper = mountView({ accountId: 'acc-5' })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('GitHub Contributions')
+    expect(wrapper.text()).toContain('42')
   })
 
   it('leaves OSAC legacy behavior unchanged (resolves by uid via the registry endpoint)', async () => {
