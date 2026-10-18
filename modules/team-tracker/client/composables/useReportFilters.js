@@ -8,18 +8,28 @@ const selectedOrgKeys = ref([])
 const selectedTeamKeys = ref([])
 
 export function useReportFilters() {
-  const { orgs, loadRoster } = useRoster()
+  const { orgs, isNormalizedModel, teams: rosterTeams, loadRoster } = useRoster()
 
   // Ensure roster data is loaded (defensive -- App.vue also calls this,
   // but loadRoster() is a no-op if data is already present)
   loadRoster()
 
-  // Derive full team list from orgs -- DO NOT use useRoster().teams
-  // because it is pre-filtered by the singleton selectedOrgKey ref.
-  // Each team object includes `members` (needed by TeamComparisonReport
-  // for GitHub/GitLab contribution summation) and `memberCount` (shown
-  // as a badge in TeamFilter).
+  // OSAC builds from orgs, not useRoster().teams, since the latter is
+  // pre-filtered by the singleton selectedOrgKey ref.
   const allTeams = computed(() => {
+    if (isNormalizedModel.value) {
+      return rosterTeams.value
+        .map(team => ({
+          key: team.key,
+          displayName: team.displayName,
+          orgKey: null,
+          orgDisplayName: null,
+          members: team.members,
+          memberCount: team.members.length,
+        }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    }
+
     const result = []
     for (const org of orgs.value) {
       if (!org.teams) continue
@@ -38,20 +48,17 @@ export function useReportFilters() {
     return result.sort((a, b) => a.displayName.localeCompare(b.displayName))
   })
 
+  // Project teams have orgKey: null, so org filtering must not apply to them.
   const availableTeams = computed(() => {
-    if (selectedOrgKeys.value.length === 0) return allTeams.value
+    if (isNormalizedModel.value || selectedOrgKeys.value.length === 0) return allTeams.value
     return allTeams.value.filter(t =>
       selectedOrgKeys.value.includes(t.orgKey)
     )
   })
 
-  // When orgs change, retain team selections that are still valid.
-  // This is an intentional improvement over the old TrendsView behavior
-  // which fully cleared all team selections on any org change.
-  // Retaining valid selections is better UX: e.g., if a user has teams
-  // selected across two orgs and deselects one org, the teams from the
-  // remaining org stay selected.
-  watch(selectedOrgKeys, () => {
+  // Drop team selections that are no longer valid when the team list changes
+  // (org filter change, or switching between OSAC and a project).
+  watch(availableTeams, () => {
     selectedTeamKeys.value = selectedTeamKeys.value.filter(
       tk => availableTeams.value.some(t => t.key === tk)
     )

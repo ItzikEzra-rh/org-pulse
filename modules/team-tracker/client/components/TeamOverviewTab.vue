@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <!-- Headcount Chart -->
-    <div v-if="headcount" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+    <div v-if="headcount.totalHeadcount > 0" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
       <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Headcount by Role</h3>
       <HeadcountChart :headcount="headcount" :selectedRole="roleFilter" @select-role="roleFilter = $event" />
     </div>
@@ -54,9 +54,9 @@ import HeadcountChart from './HeadcountChart.vue'
 import TeamMembersTable from './TeamMembersTable.vue'
 import AddMemberModal from './AddMemberModal.vue'
 import { useTeams } from '@shared/client/composables/useTeams'
+import { deriveHeadcountByRole } from '../utils/member-resolution'
 
 const props = defineProps({
-  headcount: { type: Object, default: null },
   members: { type: Array, default: () => [] },
   teamKey: { type: String, default: null },
   fieldDefinitions: { type: Array, default: () => [] },
@@ -71,6 +71,11 @@ const { unassignMember } = useTeams()
 
 const showAddModal = ref(false)
 const roleFilter = ref(null)
+
+// Derived from the already-loaded members so every project shares one path:
+// deduplicated by canonical identity, missing roles bucketed as Unknown, and
+// the total always equals unique team membership.
+const headcount = computed(() => deriveHeadcountByRole(props.members, props.fieldDefinitions))
 
 const memberUids = computed(() => new Set(props.members.map(m => m.uid)))
 

@@ -1,0 +1,280 @@
+/**
+ * OSAC falls through to the legacy global computation; other projects read
+ * the project-qualified jira-person-metrics publication and never fall back
+ * to OSAC data.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('../../../../shared/server/jira', () => ({
+  JIRA_HOST: 'https://test.atlassian.net',
+  jiraRequest: vi.fn()
+}))
+vi.mock('../../server/jira/person-metrics', () => ({ fetchPersonMetrics: vi.fn() }))
+vi.mock('../../server/github/contributions', () => ({ fetchGithubData: vi.fn() }))
+vi.mock('../../server/gitlab/contributions', () => ({ fetchGitlabData: vi.fn() }))
+vi.mock('../../../../shared/server/roster-sync', () => ({
+  runSync: vi.fn(),
+  scheduleSync: vi.fn()
+}))
+vi.mock('../../server/snapshots', () => ({
+  getCompletedPeriods: vi.fn(() => []),
+  getCurrentPeriod: vi.fn(() => null)
+}))
+
+const express = require('express')
+const http = require('http')
+const registerRoutes = require('../../server/index')
+const rosterSyncConfig = require('../../../../shared/server/roster-sync/config')
+const { ARTIFACT_KEY: JIRA_METRICS_ARTIFACT_KEY } = require('../../server/project-jira-metrics')
+
+function makeStorage(data) {
+  return {
+    readFromStorage(key) {
+      return data[key] !== undefined ? JSON.parse(JSON.stringify(data[key])) : null
+    },
+    writeToStorage() {},
+    listStorageFiles() { return [] },
+    deleteStorageDirectory() {}
+  }
+}
+
+function makeProjectProfile(projectId) {
+  return { projectId, displayName: projectId === 'flightctl' ? 'Flight Control' : 'OSAC', profileRevision: 'rev' }
+}
+
+function makeJiraMetricsEnvelope(projectId, overrides = {}) {
+  return {
+    schemaVersion: 1,
+    projectId,
+    profileRevision: 'rev',
+    artifactKey: JIRA_METRICS_ARTIFACT_KEY,
+    source: { id: `${projectId}-jira-person-metrics`, kind: 'jira-person-metrics' },
+    state: 'supported',
+    freshness: 'fresh',
+    partial: false,
+    error: null,
+    lastKnownGood: null,
+    generatedAt: '2026-10-14T00:00:00Z',
+    data: {
+      projectId,
+      personCount: 1,
+      people: [{
+        accountId: `${projectId}-acct-1`,
+        teamIds: ['team-1'],
+        resolved: {
+          count: 1,
+          storyPoints: 5,
+          issues: [{ key: `${projectId.toUpperCase()}-1`, resolutionDate: '2026-09-15T00:00:00Z', storyPoints: 5, cycleTimeDays: 2 }]
+        },
+        inProgress: { count: 0, storyPoints: 0, issues: [] },
+        cycleTime: { avgDays: 2, medianDays: 2 }
+      }],
+      teams: [{
+        id: 'team-1',
+        name: `${projectId}-team`,
+        memberCount: 1,
+        membersIncluded: 1,
+        membersMissing: [],
+        resolved: { count: 1, storyPoints: 5 },
+        inProgress: { count: 0, storyPoints: 0 },
+        cycleTime: { avgDays: 2, medianDays: 2 },
+        partial: false
+      }],
+      diagnostics: { missingPeople: [], staleCarryForward: [], freshSuccessCount: 1 }
+    },
+    ...overrides
+  }
+}
+
+function makeProjectsReader({ knownProjectIds = [], jiraMetricsProjectIds = [] } = {}) {
+  const profiles = {}
+  for (const id of knownProjectIds) profiles[id] = makeProjectProfile(id)
+
+  const publications = {}
+  for (const id of jiraMetricsProjectIds) {
+    publications[id] = { [JIRA_METRICS_ARTIFACT_KEY]: { value: makeJiraMetricsEnvelope(id) } }
+  }
+
+  return {
+    get: projectId => profiles[projectId] || null,
+    readArtifact: (projectId, key) => publications[projectId]?.[key] || null
+  }
+}
+
+function makeRegistryStorageData() {
+  return {
+    'team-data/registry.json': {
+      meta: {
+        generatedAt: '2026-01-15T00:00:00.000Z',
+        provider: 'atlassian-teams',
+        orgRoots: ['uid_lead'],
+        vp: null
+      },
+      people: {
+        uid_lead: {
+          uid: 'uid_lead', name: 'Lead Person', status: 'active', orgRoot: 'uid_lead',
+          email: 'lead@example.com', title: 'Engineering Manager', managerUid: null,
+          geo: 'NA', location: 'Boston', miroTeam: 'Core'
+        }
+      }
+    },
+    'team-data/config.json': {
+      orgRoots: [{ uid: 'uid_lead' }]
+    }
+  }
+}
+
+function createTestServer(storageData, projects) {
+  const app = express()
+  app.use(express.json())
+  const router = express.Router()
+  const storage = makeStorage(storageData)
+  registerRoutes(router, {
+    storage,
+    projects,
+    requireAdmin: (_req, _res, next) => next(),
+    requireTeamAdmin: (_req, _res, next) => next(),
+    requireScope: () => (_req, _res, next) => next(),
+    registerScopes: vi.fn()
+  })
+  app.use(router)
+  return app
+}
+
+function requestGet(app, path) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(app)
+    server.listen(0, () => {
+      const port = server.address().port
+      http.get(`http://127.0.0.1:${port}${path}`, (res) => {
+        let data = ''
+        res.on('data', chunk => { data += chunk })
+        res.on('end', () => {
+          server.close()
+          try {
+            resolve({ status: res.statusCode, body: JSON.parse(data) })
+          } catch {
+            resolve({ status: res.statusCode, body: data })
+          }
+        })
+      }).on('error', (err) => {
+        server.close()
+        reject(err)
+      })
+    })
+  })
+}
+
+describe('GET /trends project-selection dispatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    rosterSyncConfig.clearDisplayNamesCache()
+  })
+
+  it('routes projectId=osac through the legacy global trends, not the project publication', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/trends?projectId=osac')
+
+    expect(status).toBe(200)
+    expect(body.projectId).toBeUndefined()
+    expect(body.availability).toBeUndefined()
+  })
+
+  it('falls through to legacy trends when no projectId is given', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/trends')
+
+    expect(status).toBe(200)
+    expect(body.projectId).toBeUndefined()
+  })
+
+  it('routes projectId=flightctl through the project-qualified jira-person-metrics publication', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/trends?projectId=flightctl')
+
+    expect(status).toBe(200)
+    expect(body.projectId).toBe('flightctl')
+    expect(body.availability).toBe('available')
+    expect(body.github).toBeNull()
+    expect(body.gitlab).toBeNull()
+    expect(JSON.stringify(body)).not.toContain('osac-acct')
+  })
+
+  it('never leaks OSAC data into a project response, even when OSAC also has a jira-person-metrics publication', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['osac', 'flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { body } = await requestGet(app, '/trends?projectId=flightctl')
+
+    expect(JSON.stringify(body)).not.toContain('osac-acct')
+    expect(JSON.stringify(body)).not.toContain('osac-team')
+  })
+
+  it('returns 404 for an unknown project', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/trends?projectId=nonexistent')
+
+    expect(status).toBe(404)
+    expect(body.error).toBe('Unknown project')
+  })
+})
+
+describe('GET /team/:teamKey/metrics project-selection dispatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    rosterSyncConfig.clearDisplayNamesCache()
+  })
+
+  it('routes projectId=flightctl through the project-qualified publication', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/team/flightctl%3A%3Ateam-1/metrics?projectId=flightctl')
+
+    expect(status).toBe(200)
+    expect(body.teamKey).toBe('flightctl::team-1')
+    expect(body.available).toBe(true)
+    expect(body.aggregate.resolvedCount).toBe(1)
+  })
+
+  it('returns 404 for a team absent from the project publication, without falling back to OSAC team metrics', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status } = await requestGet(app, '/team/flightctl%3A%3Anonexistent/metrics?projectId=flightctl')
+
+    expect(status).toBe(404)
+  })
+
+  it('returns 404 for an unknown project', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/team/nonexistent%3A%3Ateam-1/metrics?projectId=nonexistent')
+
+    expect(status).toBe(404)
+    expect(body.error).toBe('Unknown project')
+  })
+
+  it('rejects a teamKey qualified for a different project instead of reinterpreting it', async () => {
+    const projects = makeProjectsReader({
+      knownProjectIds: ['osac', 'flightctl', 'other'],
+      jiraMetricsProjectIds: ['flightctl', 'other']
+    })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/team/other%3A%3Ateam-1/metrics?projectId=flightctl')
+
+    expect(status).toBe(404)
+    expect(body.error).toContain('other::team-1')
+    expect(body.error).toContain('flightctl')
+  })
+})

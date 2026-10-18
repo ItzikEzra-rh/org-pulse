@@ -154,6 +154,9 @@ response. The two shapes are never merged — callers branch on
       "title": "Senior Engineer",
       "manager": null,
       "geo": "EMEA",
+      "city": "Cork",
+      "country": "IE",
+      "location": "Cork, Ireland",
       "identities": { "github": { "username": "ada", "source": "ldap" }, "gitlab": null },
       "managerRef": { "kind": "external", "ldapUid": "mhicks" }
     }
@@ -180,21 +183,22 @@ response. The two shapes are never merged — callers branch on
 **Invariants:**
 - Person identity is `(projectId, accountId)`; team identity is `(projectId, teamId)`. Display name is never an identity key — it can collide across people and must not be used for matching or navigation once `accountId` is present.
 - `availability` is `available`, `empty` (publication read but no active team membership), or `unavailable` (see `reason` and `publicationState`); `empty`/`unavailable` return `teams: []`/`people: []`, never partial data.
-- `title`, `geo`, `email`, and `identities` are `null`/`{}`, and `managerRef` is `null`, when not yet published by the project's roster/enrichment sources — never fabricated or inferred.
+- `title`, `geo`, `city`, `country`, `location`, `email`, and `identities` are `null`/`{}`, and `managerRef` is `null`, when not yet published by the project's roster/enrichment sources — never fabricated or inferred. `geo` is Geo/Region; `city`/`country`/`location` are physical location — the two are distinct and never substituted for each other.
 - `manager` is always `null`. It predates enrichment and is kept, unpopulated, for response compatibility; `managerRef` is the enrichment-joined field and the two are never conflated.
 - The project's roster publication (`sources/roster/registry.json`, see [Project-qualified publication envelope](#project-qualified-publication-envelope)) is the sole source for `key`/`accountId`/`displayName`/`active`/`email`/`teamIds`; there is no fallback to the legacy OSAC roster for a known non-OSAC project.
 - The legacy OSAC roster (`orgs`-based `RosterResponse`) remains a separate, parallel path used only for `osac`/unset `projectId` during the People & Teams migration; it is not normalized to this shape.
 
 ### Roster-enrichment join (`sources/roster-enrichment/registry.json`)
 
-`title`, `geo`, `identities`, and `managerRef` are joined by `accountId` from the
-project's `sources/roster-enrichment/registry.json` publication (produced by
-IPA/LDAP enrichment), when available. The roster stays the sole source of
-`displayName` and identity — enrichment person records carry no `displayName`
-or `ldapUid` of their own, only a `matchStatus` (`matched`/`unmatched`/
-`ambiguous`). Only a `matched` record populates `title`/`geo`/`identities`/
-`managerRef`; `unmatched`/`ambiguous` records (and a missing join) leave them
-`null`/`{}`, identical to no enrichment at all.
+`title`, `geo`, `city`, `country`, `location`, `identities`, and `managerRef`
+are joined by `accountId` from the project's
+`sources/roster-enrichment/registry.json` publication (produced by IPA/LDAP
+enrichment), when available. The roster stays the sole source of `displayName`
+and identity — enrichment person records carry no `displayName` or `ldapUid` of
+their own, only a `matchStatus` (`matched`/`unmatched`/`ambiguous`). Only a
+`matched` record populates these enriched fields; `unmatched`/`ambiguous`
+records (and a missing join) leave them `null`/`{}`, identical to no enrichment
+at all.
 
 `managerRef` is a typed, opaque passthrough — not resolved, not rendered as a
 name, not fed into RBAC — with shape `{kind:"roster",accountId}` |
@@ -244,6 +248,64 @@ publication envelope contract but currently unreachable with this producer;
 closing the gap means either the producer marking the main artifact stale on
 failure, or a future reader change to also consult the status file — neither
 is in scope here.
+
+## Project-qualified Jira Trends and Team Comparison (`GET /trends`, `GET /team/:teamKey/metrics`)
+
+For any `projectId` other than `osac`, these endpoints read the project's
+`sources/jira-person-metrics/registry.json` publication (see
+[Project-qualified publication envelope](#project-qualified-publication-envelope))
+instead of the legacy global computation (`buildJiraTrends()` /
+`deriveRoster()`-backed team metrics); an unset `projectId`, or
+`projectId=osac`, keeps returning the legacy response unchanged. As with
+`/roster`, there is no fallback to OSAC data for a known non-OSAC project.
+
+`GET /trends?projectId=<id>` (`ProjectTrendsResponse`):
+
+```json
+{
+  "projectId": "flightctl",
+  "availability": "available",
+  "reason": null,
+  "publicationState": "supported",
+  "partial": false,
+  "generatedAt": "2026-10-14T00:00:00Z",
+  "jira": {
+    "2026-09": {
+      "resolved": 3,
+      "points": 10,
+      "avgCycleTimeDays": 3,
+      "byTeam": {
+        "flightctl::team-1": { "resolved": 2, "points": 8, "avgCycleTimeDays": 2 }
+      }
+    }
+  },
+  "github": null,
+  "gitlab": null
+}
+```
+
+`GET /team/:teamKey/metrics?projectId=<id>` (`ProjectTeamMetricsResponse`),
+`teamKey` being `<projectId>::<teamId>`:
+
+```json
+{
+  "teamKey": "flightctl::team-1",
+  "available": true,
+  "memberCount": 3,
+  "aggregate": { "resolvedCount": 5, "resolvedPoints": 13, "inProgressCount": 2, "avgCycleTimeDays": 2.5 },
+  "partial": true
+}
+```
+
+**Invariants:**
+- `jira` buckets are keyed by `YYYY-MM` (the issue's `resolutionDate` month) and built entirely from the publication's `people[].resolved.issues`; `byTeam` keys are project-qualified team keys, matching `team.key` in the roster response.
+- `github`/`gitlab` are always `null` in project mode: no project-qualified contribution publication exists yet. This is a genuine Data-side gap, not an App omission — the client keeps the GitHub/GitLab panels and metric options visible (disabled, with an inline reason) rather than removing them.
+- `availability`/`available` is `false`/`unavailable` whenever the publication's `state` is not `supported`/`empty`, or its `freshness` is not `fresh`/`stale` — never a fabricated zero. `reason` carries the publication `state` (e.g. `inapplicable`, `disabled`, `unavailable`, `error`) or `missing-publication` / `publication-not-fresh` / `no-published-people`.
+- A publication whose top-level `projectId`, `artifactKey`, `schemaVersion`, or nested `data.projectId` does not match the request is rejected outright (never partially joined), so project isolation holds the same way it does for roster/enrichment.
+- `partial` on `ProjectTrendsResponse` mirrors the publication's own `partial` flag (some people's metrics are stale carry-forward or missing); `partial` on `ProjectTeamMetricsResponse` is per-team (`team.partial`), set when any of that team's members are missing or stale. Both are additionally forced `true` when the `_publication/<key>.status.json` sidecar confirms the current profile's latest collection failed (see below), even though the preserved artifact itself still reports `freshness:"fresh"`.
+- `availability: "available"` reflects whether the publication has any person records at all, not whether any of them have resolved issues in the requested window — a project with people but zero resolved issues this period still reports `"available"` with an empty `jira` object, same as MR !175's own `state: "empty"` meaning no roster people at all.
+
+The producer (`fetch_project_jira_person_metrics.py`) always writes `freshness:"fresh"` on its main artifact, even across a collection failure that preserves a last-known-good artifact; the failure itself is recorded only in the separate `_publication/<key>.status.json` diagnostic. This reader consults that sidecar (matching the `jira-hygiene` reader's handling of the same generic project-publication contract): when it identifies a matching `projectId`/`profileRevision`/`artifactKey` with `state:"error"`, the preserved artifact is still served (never hidden as unavailable, matching the generic contract's "leaves the project-qualified artifact untouched" behavior) but reported `partial:true`, rather than silently fresh. A total collection failure with no prior good data still publishes `state:"error"`/`freshness:"unknown"` on the main artifact directly, which is correctly surfaced as unavailable without consulting the sidecar.
 
 ## Shared Releases → Execute contract
 

@@ -8,7 +8,7 @@
       >
         <template v-if="activeReport.filters.length > 0" #filters>
           <OrgFilter
-            v-if="activeReport.filters.includes('org')"
+            v-if="activeReport.filters.includes('org') && !isNormalizedModel"
             v-model="selectedOrgKeys"
             :orgs="orgs"
           />
@@ -53,9 +53,11 @@ import ReportShell from './ReportShell.vue'
 import OrgFilter from './filters/OrgFilter.vue'
 import TeamFilter from './filters/TeamFilter.vue'
 import { useReportFilters } from '../composables/useReportFilters'
+import { useRoster } from '@shared/client/composables/useRoster'
 
 const nav = inject('moduleNav')
 const { orgs, selectedOrgKeys, selectedTeamKeys, availableTeams } = useReportFilters()
+const { isNormalizedModel } = useRoster()
 
 const visibleReports = computed(() => reports.filter(r => !r.hidden))
 
@@ -77,11 +79,11 @@ const activeReportComponent = computed(() => {
   return componentCache.get(id)
 })
 
-// For Trends: hide team filter when no orgs selected
+// Trends gates the team filter on an org being selected; project mode has no org concept.
 const showTeamFilter = computed(() => {
   if (!activeReport.value) return false
   if (activeReport.value.id === 'trends') {
-    return selectedOrgKeys.value.length > 0
+    return isNormalizedModel.value || selectedOrgKeys.value.length > 0
   }
   return activeReport.value.filters.includes('team')
 })

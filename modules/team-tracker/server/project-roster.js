@@ -243,15 +243,23 @@ function _normalizeTeam(projectId, team, memberAccountIds) {
   };
 }
 
+function _trimmedOrNull(value) {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
 // Only a 'matched' record has usable LDAP data; 'unmatched'/'ambiguous'
-// degrade the same as no join at all.
+// degrade the same as no join at all. Physical location (city/country/location)
+// is distinct from Geo/Region and is passed through verbatim when published.
 function _enrichedFields(enrichmentRecord) {
   if (!enrichmentRecord || enrichmentRecord.matchStatus !== 'matched') {
-    return { title: null, geo: null, identities: {}, managerRef: null };
+    return { title: null, geo: null, city: null, country: null, location: null, identities: {}, managerRef: null };
   }
   return {
-    title: typeof enrichmentRecord.title === 'string' && enrichmentRecord.title.trim() ? enrichmentRecord.title : null,
-    geo: typeof enrichmentRecord.geo === 'string' && enrichmentRecord.geo.trim() ? enrichmentRecord.geo : null,
+    title: _trimmedOrNull(enrichmentRecord.title),
+    geo: _trimmedOrNull(enrichmentRecord.geo),
+    city: _trimmedOrNull(enrichmentRecord.city),
+    country: _trimmedOrNull(enrichmentRecord.country),
+    location: _trimmedOrNull(enrichmentRecord.location),
     identities: isRecord(enrichmentRecord.identities) ? enrichmentRecord.identities : {},
     // Opaque typed passthrough — never interpreted or resolved here.
     managerRef: _validManagerRef(enrichmentRecord.managerRef) ? enrichmentRecord.managerRef : null

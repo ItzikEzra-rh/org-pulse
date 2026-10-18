@@ -9,15 +9,19 @@
           <label
             v-for="metric in METRICS_LIST"
             :key="metric.key"
-            class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+            class="flex items-center gap-2 px-2 py-1.5 rounded"
+            :class="isMetricDisabled(metric) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50'"
+            :title="isMetricDisabled(metric) ? 'Not published for this project' : undefined"
           >
             <input
               type="checkbox"
               :value="metric.key"
               v-model="selectedMetrics"
+              :disabled="isMetricDisabled(metric)"
               class="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
             />
             <span class="text-sm text-gray-700 dark:text-gray-300">{{ metric.label }}</span>
+            <span v-if="isMetricDisabled(metric)" class="text-xs text-gray-400 dark:text-gray-500">(not published for this project)</span>
           </label>
         </div>
       </div>
@@ -63,7 +67,11 @@
     </div>
 
     <!-- Charts -->
-    <div v-if="charts.length === 0" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-400 dark:text-gray-500">
+    <div v-if="metricsUnavailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-400 dark:text-gray-500" role="status" aria-live="polite">
+      <p class="text-lg mb-2">Jira metrics are not available for this project</p>
+      <p class="text-sm">{{ metricsUnavailableReason }}</p>
+    </div>
+    <div v-else-if="charts.length === 0" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-400 dark:text-gray-500">
       <p class="text-lg">Select teams and metrics, then click Run</p>
     </div>
     <div v-else class="space-y-6">
@@ -85,16 +93,20 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import ReportChart from '../components/ReportChart.vue'
 import { useGithubStats } from '@shared/client/composables/useGithubStats'
 import { useGitlabStats } from '@shared/client/composables/useGitlabStats'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { getTeamMetrics } from '@shared/client/services/api'
 import { useReportFilters } from '../composables/useReportFilters'
 
 const { selectedTeamKeys, availableTeams } = useReportFilters()
 const { getContributions } = useGithubStats()
 const { getContributions: getGitlabContributions } = useGitlabStats()
+const projectId = useProjectId()
+
+const isProjectMode = computed(() => !!projectId.value && projectId.value !== 'osac')
 
 const selectedMetrics = ref([])
 const chartType = ref('bar')
@@ -102,17 +114,33 @@ const loading = ref(false)
 // Component-local cache -- resets on navigation (intentional, avoids stale data)
 const metricsData = ref({})
 const charts = ref([])
+const metricsUnavailable = ref(false)
+const metricsUnavailableReason = ref('')
+
+const PROJECT_UNAVAILABLE_MESSAGES = {
+  'missing-publication': 'Jira metrics have not been published for this project yet.',
+  disabled: 'Jira metrics are disabled for this project.',
+  unavailable: 'Jira metrics are currently unavailable for this project.',
+  error: 'Jira metrics publication failed for this project.',
+  inapplicable: 'Jira metrics are not applicable for this project.'
+}
 
 const METRICS_LIST = [
   { key: 'teamSize', label: 'Team Size' },
   { key: 'resolvedCount', label: 'Issues Resolved (90d)' },
   { key: 'avgCycleTime', label: 'Avg Cycle Time' },
   { key: 'resolvedPerMember', label: 'Issues Resolved per Member (90d)' },
-  { key: 'githubContributions', label: 'GitHub Contributions (1yr)' },
-  { key: 'githubPerMember', label: 'Avg GitHub Contributions per Member (1yr)' },
-  { key: 'gitlabContributions', label: 'GitLab Contributions (1yr)' },
-  { key: 'gitlabPerMember', label: 'Avg GitLab Contributions per Member (1yr)' },
+  // osacOnly: no project-qualified contribution publication exists yet (see isMetricDisabled).
+  { key: 'githubContributions', label: 'GitHub Contributions (1yr)', osacOnly: true },
+  { key: 'githubPerMember', label: 'Avg GitHub Contributions per Member (1yr)', osacOnly: true },
+  { key: 'gitlabContributions', label: 'GitLab Contributions (1yr)', osacOnly: true },
+  { key: 'gitlabPerMember', label: 'Avg GitLab Contributions per Member (1yr)', osacOnly: true },
 ]
+
+// Disabled, not removed, so the capability stays discoverable.
+function isMetricDisabled(metric) {
+  return isProjectMode.value && metric.osacOnly
+}
 
 const CHART_TYPES = [
   { value: 'bar', label: 'Bar' },
@@ -151,15 +179,23 @@ const METRIC_DEFS = {
   gitlabPerMember: { label: 'Avg GitLab Contributions per Member (1yr)', unit: '', extract: null },
 }
 
+let runVersion = 0
+
 async function run() {
+  const version = ++runVersion
+  const runProjectId = projectId.value
   loading.value = true
+  metricsUnavailable.value = false
   try {
-    // Only fetch teams not already cached
-    const keysToFetch = selectedTeamKeys.value.filter(k => !metricsData.value[k])
+    // An unavailable placeholder isn't valid cached data; retry it every run.
+    const keysToFetch = selectedTeamKeys.value.filter(k => {
+      const cached = metricsData.value[k]
+      return !cached || cached.available === false
+    })
     const results = await Promise.all(
       keysToFetch.map(async (key) => {
         try {
-          const data = await getTeamMetrics(key)
+          const data = await getTeamMetrics(key, runProjectId)
           return { key, data }
         } catch (err) {
           console.error(`Failed to fetch metrics for ${key}:`, err)
@@ -167,9 +203,24 @@ async function run() {
         }
       })
     )
+    // A newer run or project switch has superseded this one; don't commit stale results.
+    if (version !== runVersion) return
     for (const { key, data } of results) {
       if (data) {
         metricsData.value[key] = data
+      }
+    }
+
+    // Surface an unavailable Jira-metrics source once, not as a fabricated zero per team.
+    if (isProjectMode.value) {
+      const activeData = selectedTeamKeys.value.map(k => metricsData.value[k]).filter(Boolean)
+      const unavailableEntry = activeData.find(d => d.available === false)
+      if (unavailableEntry) {
+        metricsUnavailable.value = true
+        metricsUnavailableReason.value = PROJECT_UNAVAILABLE_MESSAGES[unavailableEntry.reason]
+          || 'Jira team metrics are not available for this project.'
+        charts.value = []
+        return
       }
     }
 
@@ -180,9 +231,12 @@ async function run() {
     }
 
     const activeKeys = selectedTeamKeys.value.filter(k => metricsData.value[k])
+    const activeMetrics = selectedMetrics.value.filter(
+      k => !isMetricDisabled(METRICS_LIST.find(m => m.key === k))
+    )
     const newCharts = []
 
-    for (const metricKey of selectedMetrics.value) {
+    for (const metricKey of activeMetrics) {
       const def = METRIC_DEFS[metricKey]
 
       if (metricKey === 'githubPerMember') {
@@ -262,7 +316,15 @@ async function run() {
 
     charts.value = newCharts
   } finally {
-    loading.value = false
+    if (version === runVersion) loading.value = false
   }
 }
+
+// Clear stale rendered output on project switch rather than waiting for Run.
+watch(projectId, () => {
+  runVersion++
+  charts.value = []
+  metricsData.value = {}
+  metricsUnavailable.value = false
+})
 </script>

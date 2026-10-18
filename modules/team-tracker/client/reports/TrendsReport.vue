@@ -44,9 +44,10 @@
     </div>
 
     <!-- No data -->
-    <div v-else-if="!trendsData" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-400 dark:text-gray-500" role="status" aria-live="polite">
+    <div v-else-if="!trendsData?.jira" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-400 dark:text-gray-500" role="status" aria-live="polite">
       <p class="text-lg mb-2">No trend data available</p>
-      <p class="text-sm">Click "Refresh Data (365d)" to fetch historical data from Jira, GitHub, and GitLab.</p>
+      <p v-if="isProjectMode" class="text-sm">{{ projectUnavailableMessage }}</p>
+      <p v-else class="text-sm">Click "Refresh Data (365d)" to fetch historical data from Jira, GitHub, and GitLab.</p>
     </div>
 
     <!-- Charts -->
@@ -59,20 +60,26 @@
         />
       </div>
 
-      <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div v-if="githubAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <TrendChart
           :labels="displayLabels"
           :datasets="githubDatasets"
           title="GitHub Contributions"
         />
       </div>
+      <div v-else-if="isProjectMode" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-400 dark:text-gray-500">
+        GitHub Contributions: not published for this project.
+      </div>
 
-      <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div v-if="gitlabAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <TrendChart
           :labels="displayLabels"
           :datasets="gitlabDatasets"
           title="GitLab Contributions"
         />
+      </div>
+      <div v-else-if="isProjectMode" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-400 dark:text-gray-500">
+        GitLab Contributions: not published for this project.
       </div>
 
       <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -88,19 +95,39 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import TrendChart from '../components/TrendChart.vue'
 import { useRoster } from '@shared/client/composables/useRoster'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { getTrends } from '@shared/client/services/api'
 import { useReportFilters } from '../composables/useReportFilters'
 
-const { orgs } = useRoster()
+const { orgs, isNormalizedModel, teams: rosterTeams } = useRoster()
+const projectId = useProjectId()
 const { selectedOrgKeys, selectedTeamKeys } = useReportFilters()
 
 const trendsData = ref(null)
 const loading = ref(false)
 const error = ref(null)
 const compareMode = ref('compare')
+
+const isProjectMode = computed(() => !!projectId.value && projectId.value !== 'osac')
+const githubAvailable = computed(() => trendsData.value?.github != null)
+const gitlabAvailable = computed(() => trendsData.value?.gitlab != null)
+
+const PROJECT_UNAVAILABLE_MESSAGES = {
+  'missing-publication': 'Jira metrics have not been published for this project yet.',
+  disabled: 'Jira metrics are disabled for this project.',
+  unavailable: 'Jira metrics are currently unavailable for this project.',
+  error: 'Jira metrics publication failed for this project.',
+  inapplicable: 'Jira metrics are not applicable for this project.',
+  'no-published-people': 'No people have been published for this project yet.'
+}
+
+const projectUnavailableMessage = computed(() => {
+  const reason = trendsData.value?.reason
+  return PROJECT_UNAVAILABLE_MESSAGES[reason] || 'Jira trend data is not available for this project.'
+})
 
 const showModeToggle = computed(() => {
   return selectedOrgKeys.value.length > 1 || selectedTeamKeys.value.length > 1
@@ -135,7 +162,16 @@ const seriesConfig = computed(() => {
 })
 
 // Build team display names, org-prefixed when multiple orgs selected
+// (project mode has no org concept, so it reads useRoster().teams directly).
 const teamDisplayNames = computed(() => {
+  if (isNormalizedModel.value) {
+    const lookup = {}
+    for (const team of rosterTeams.value) {
+      lookup[team.key] = team.displayName
+    }
+    return lookup
+  }
+
   const lookup = {}
   const multiOrg = selectedOrgKeys.value.length > 1
   for (const org of orgs.value) {
@@ -341,18 +377,27 @@ const cycleTimeDatasets = computed(() => {
   }))
 })
 
+let trendsRequestVersion = 0
+
 async function loadTrends() {
+  const version = ++trendsRequestVersion
+  const requestProjectId = projectId.value
   loading.value = true
   error.value = null
   try {
-    trendsData.value = await getTrends()
+    const data = await getTrends(requestProjectId)
+    // A newer request or project switch has superseded this one; don't commit stale results.
+    if (version !== trendsRequestVersion) return
+    trendsData.value = data
   } catch (err) {
+    if (version !== trendsRequestVersion) return
     console.error('Failed to load trends:', err)
     error.value = 'Failed to load trend data. Please try again later.'
   } finally {
-    loading.value = false
+    if (version === trendsRequestVersion) loading.value = false
   }
 }
 
 onMounted(loadTrends)
+watch(projectId, loadTrends)
 </script>

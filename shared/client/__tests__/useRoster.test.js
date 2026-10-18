@@ -100,7 +100,7 @@ describe('useRoster shared Team/Person shape across both response contracts', ()
         key: 'flightctl::team-1',
         displayKey: null,
         displayName: 'RHEM-DEV',
-        members: [{ accountId: 'acct-1', name: 'Alice', jiraDisplayName: 'Alice', email: null, title: null, geo: null, identities: {}, managerRef: null, customFields: {} }],
+        members: [{ accountId: 'acct-1', name: 'Alice', jiraDisplayName: 'Alice', email: null, title: null, geo: null, city: null, country: null, location: null, identities: {}, managerRef: null, customFields: {} }],
         teamId: 'team-1',
         metadata: {},
         description: 'desc'
@@ -126,6 +126,9 @@ describe('useRoster shared Team/Person shape across both response contracts', ()
           email: 'alice@example.com',
           title: 'Engineer',
           geo: 'NA',
+          city: 'Cork',
+          country: 'IE',
+          location: 'Cork, Ireland',
           teamIds: ['team-1'],
           identities: { github: { username: 'alice-gh', source: 'ldap' }, gitlab: null },
           managerRef: { kind: 'roster', accountId: 'acct-mgr' }
@@ -139,9 +142,27 @@ describe('useRoster shared Team/Person shape across both response contracts', ()
       email: 'alice@example.com',
       title: 'Engineer',
       geo: 'NA',
+      city: 'Cork',
+      country: 'IE',
+      location: 'Cork, Ireland',
       identities: { github: { username: 'alice-gh', source: 'ldap' }, gitlab: null },
       managerRef: { kind: 'roster', accountId: 'acct-mgr' }
     })
+  })
+
+  it('exposes auxiliaryManagers from the project publication, defaulting to empty', async () => {
+    const aux = { 'ext-mgr': { ldapUid: 'ext-mgr', displayName: 'External Manager' } }
+    mocks.getRoster.mockResolvedValueOnce({
+      projectId: 'flightctl',
+      availability: 'available',
+      teams: [],
+      people: [],
+      auxiliaryManagers: aux
+    })
+    const roster = await createRoster('flightctl')
+    await roster.loadRoster()
+
+    expect(roster.auxiliaryManagers.value).toEqual(aux)
   })
 
   it('defaults identities/managerRef when enrichment has not populated them', async () => {

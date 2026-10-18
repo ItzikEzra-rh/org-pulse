@@ -41,6 +41,11 @@ const githubContribs = computed(() => {
 })
 
 const gitlabContribs = computed(() => {
+  // Project people: same canonical join as githubContribs. GitLab is unpublished
+  // by this collector, so this always resolves to null for project people.
+  if (isProjectPerson.value) {
+    return getProjectContribution(person.value?.accountId)?.gitlab || null
+  }
   const username = person.value?.gitlab?.username || rosterMember.value?.gitlabUsername
   return username ? getGitlabContributions(username) : null
 })
@@ -218,11 +223,10 @@ function loadProjectPerson() {
     geo: projectPerson.geo,
     city: null,
     country: null,
-    // Identity gates the panel; counts join from the contributions artifact by accountId.
-    github: projectPerson.identities?.github?.username
-      ? { username: projectPerson.identities.github.username }
-      : null,
-    gitlab: null,
+    // Identity display only; contribution counts join from the canonical
+    // per-project contributions artifact by accountId (see githubContribs/gitlabContribs).
+    github: projectPerson.identities?.github ?? null,
+    gitlab: projectPerson.identities?.gitlab ?? null,
     orgType: 'engineering',
     _appFields: {},
     firstSeenAt: null,
