@@ -25,8 +25,12 @@ function fetchContributions({ force = false } = {}) {
   const requestedProjectId = projectId.value
   // No explicit project context: the legacy global path owns contributions.
   if (!requestedProjectId) return Promise.resolve(null)
-  if (!force && contributionsData.value && dataProjectId === requestedProjectId) {
-    return Promise.resolve(contributionsData.value)
+  // 'unavailable' isn't cached as a hit: a publication that lands later must
+  // be picked up by the next natural call, not hidden for the rest of the session.
+  const cached = contributionsData.value
+  const cacheIsUsable = cached && dataProjectId === requestedProjectId && cached.availability !== 'unavailable'
+  if (!force && cacheIsUsable) {
+    return Promise.resolve(cached)
   }
   if (!force && pendingRequest?.projectId === requestedProjectId) {
     return pendingRequest.promise

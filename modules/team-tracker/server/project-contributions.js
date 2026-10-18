@@ -93,7 +93,7 @@ function _loadProjectContributionsData(projects, projectId) {
     seenAccountIds.add(person.accountId)
   }
 
-  return { kind: 'ok', envelope, people }
+  return { kind: 'ok', envelope, people, profile }
 }
 
 // Success deletes this sidecar, so its presence means the registry is a stale last-good.
@@ -132,7 +132,7 @@ function readProjectContributions(projects, projectId) {
 }
 
 function _buildReadModel(projectId, loaded, status) {
-  const { envelope, people } = loaded
+  const { envelope, people, profile } = loaded
   const data = envelope.data
   const generatedAt = typeof envelope.generatedAt === 'string' ? envelope.generatedAt : null
   const fetchedAt = typeof envelope.fetchedAt === 'string' ? envelope.fetchedAt : null
@@ -174,10 +174,12 @@ function _buildReadModel(projectId, loaded, status) {
     }
   })
 
-  // Stale when partial, non-fresh, or a failed re-collection is pending.
+  // A revision mismatch means the roster this was joined against may be stale.
   const partial = envelope.partial === true
   const publicationError = status && isRecord(status.error) ? status.error : null
-  const freshness = (envelope.freshness === 'fresh' && !partial && !status) ? 'fresh' : 'stale'
+  const revisionMismatch = typeof profile?.profileRevision === 'string'
+    && envelope.profileRevision !== profile.profileRevision
+  const freshness = (envelope.freshness === 'fresh' && !partial && !status && !revisionMismatch) ? 'fresh' : 'stale'
 
   return {
     projectId,

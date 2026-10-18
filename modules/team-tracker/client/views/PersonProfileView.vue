@@ -28,7 +28,12 @@ const visiblePersonFields = computed(() =>
 )
 const { getContributions: getGithubContributions } = useGithubStats()
 const { getContributions: getGitlabContributions, loadGitlabStats } = useGitlabStats()
-const { getByAccountId: getProjectContribution, loadContributions: loadProjectContributions } = useProjectContributions()
+const {
+  getByAccountId: getProjectContribution,
+  loadContributions: loadProjectContributions,
+  freshness: projectContributionsFreshness,
+  partial: projectContributionsPartial
+} = useProjectContributions()
 
 const githubContribs = computed(() => {
   // Project people read the canonical artifact by accountId; OSAC's legacy
@@ -48,6 +53,16 @@ const gitlabContribs = computed(() => {
   }
   const username = person.value?.gitlab?.username || rosterMember.value?.gitlabUsername
   return username ? getGitlabContributions(username) : null
+})
+
+// Only applies to project people: a shown tile always has a real (possibly carried-forward) value,
+// so this never needs to distinguish zero from unavailable -- that's handled by tile visibility itself.
+const githubContribsNote = computed(() => {
+  if (!isProjectPerson.value || !githubContribs.value) return null
+  const status = getProjectContribution(person.value?.accountId)?.contributionStatus
+  if (status === 'carried-forward') return 'Carried forward'
+  if (projectContributionsPartial.value || projectContributionsFreshness.value === 'stale') return 'Stale'
+  return null
 })
 
 const personTeams = computed(() => {
@@ -535,7 +550,12 @@ onBeforeUnmount(() => {
               <div v-if="isProjectPerson ? githubContribs : person.github?.username">
                 <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ githubContribs?.totalContributions ?? '—' }}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400">GitHub Contributions</div>
-                <div class="text-[10px] text-gray-400 dark:text-gray-500">Last year</div>
+                <div
+                  class="text-[10px]"
+                  :class="githubContribsNote ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'"
+                >
+                  Last year<span v-if="githubContribsNote"> · {{ githubContribsNote }}</span>
+                </div>
               </div>
               <div v-if="isProjectPerson ? gitlabContribs : person.gitlab?.username">
                 <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ gitlabContribs?.totalContributions ?? '—' }}</div>

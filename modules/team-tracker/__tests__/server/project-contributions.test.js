@@ -18,7 +18,7 @@ function mockProjects(publications = {}, profiles = {}) {
 }
 
 function makeProfile(projectId) {
-  return { projectId, displayName: projectId === 'flightctl' ? 'Flight Control' : 'OSAC' }
+  return { projectId, displayName: projectId === 'flightctl' ? 'Flight Control' : 'OSAC', profileRevision: 'rev' }
 }
 
 function githubRecord(username, total, months = { '2026-09': 5, '2026-10': 0 }) {
@@ -264,6 +264,15 @@ describe('readProjectContributions', () => {
     expect(result.model.freshness).toBe('stale')
     expect(result.model.publicationError).toEqual({ code: 'GITHUB_CONTRIBUTION_FETCH_FAILED', message: 'boom' })
     // The prior good values are still served.
+    expect(result.model.people.find(p => p.accountId === 'acc-1').github.totalContributions).toBe(10)
+  })
+
+  it('downgrades freshness to stale when the artifact predates the current profile revision', () => {
+    profiles.flightctl = { ...profiles.flightctl, profileRevision: 'newer-rev' }
+    const result = readProjectContributions(mockProjects(publications, profiles), 'flightctl')
+    expect(result.model.freshness).toBe('stale')
+    // Still served as the best available data, not hidden as unavailable.
+    expect(result.model.availability).toBe('available')
     expect(result.model.people.find(p => p.accountId === 'acc-1').github.totalContributions).toBe(10)
   })
 

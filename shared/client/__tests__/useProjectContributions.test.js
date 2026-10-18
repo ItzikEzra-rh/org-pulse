@@ -123,6 +123,31 @@ describe('useProjectContributions', () => {
     expect(c.getByAccountId('acc-1')).toBeNull()
   })
 
+  it('retries after an unavailable response instead of caching it indefinitely', async () => {
+    mocks.getProjectContributions
+      .mockResolvedValueOnce({ projectId: 'flightctl', availability: 'unavailable', reason: 'not-collected', freshness: 'unknown', partial: false, people: [] })
+      .mockResolvedValueOnce(model('flightctl', [person('fc-1', 'fc-gh', 7)]))
+    const c = await createContributions('flightctl')
+
+    await c.loadContributions()
+    expect(c.getByAccountId('fc-1')).toBeNull()
+
+    // A publication that lands later must be picked up by the next call, not hidden for the session.
+    await c.loadContributions()
+    expect(mocks.getProjectContributions).toHaveBeenCalledTimes(2)
+    expect(c.getByAccountId('fc-1').github.totalContributions).toBe(7)
+  })
+
+  it('still caches an available response: a second call does not refetch', async () => {
+    mocks.getProjectContributions.mockResolvedValue(model('flightctl', [person('fc-1', 'fc-gh', 7)]))
+    const c = await createContributions('flightctl')
+
+    await c.loadContributions()
+    await c.loadContributions()
+    expect(mocks.getProjectContributions).toHaveBeenCalledTimes(1)
+    expect(c.getByAccountId('fc-1').github.totalContributions).toBe(7)
+  })
+
   it('rejects a response whose projectId does not match the request', async () => {
     mocks.getProjectContributions.mockResolvedValue(model('osac', [person('osac-1', 'osac-gh', 3)]))
     const c = await createContributions('flightctl')
