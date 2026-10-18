@@ -75,15 +75,28 @@ describe('useProjectContributions', () => {
     expect(c.getByAccountId('osac-1').github.totalContributions).toBe(3)
   })
 
-  it('surfaces a missing publication as an error without fabricating data', async () => {
+  it('surfaces an unknown project as an error without fabricating data', async () => {
     mocks.getProjectContributions.mockRejectedValueOnce(
-      Object.assign(new Error('Project contributions publication is unavailable'), { status: 404 })
+      Object.assign(new Error('Unknown project'), { status: 404 })
     )
     const c = await createContributions('flightctl')
     await c.loadContributions()
     expect(c.contributions.value).toBeNull()
     expect(c.getByAccountId('acc-1')).toBeNull()
-    expect(c.error.value).toBe('Project contributions publication is unavailable')
+    expect(c.error.value).toBe('Unknown project')
+  })
+
+  // A project that has never published contributions is a successful 200
+  // response (availability: 'unavailable'), not a rejected request.
+  it('treats a never-published project as a normal response, not an error', async () => {
+    mocks.getProjectContributions.mockResolvedValue({
+      projectId: 'flightctl', availability: 'unavailable', reason: 'not-collected',
+      freshness: 'unknown', partial: false, people: []
+    })
+    const c = await createContributions('flightctl')
+    await c.loadContributions()
+    expect(c.error.value).toBeNull()
+    expect(c.getByAccountId('acc-1')).toBeNull()
   })
 
   it('rejects a response whose projectId does not match the request', async () => {

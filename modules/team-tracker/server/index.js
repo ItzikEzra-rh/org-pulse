@@ -2873,7 +2873,11 @@ module.exports = function registerRoutes(router, context) {
    *         description: Canonical project id (e.g. `osac`, `flightctl`); surrounding whitespace is rejected.
    *     responses:
    *       200:
-   *         description: Project contributions read model (availability available/empty/unavailable).
+   *         description: >-
+   *           Project contributions read model (availability
+   *           available/empty/unavailable). A known project that has never
+   *           published contributions is reported as unavailable here, not as
+   *           a 404.
    *         content:
    *           application/json:
    *             schema:
@@ -2881,7 +2885,7 @@ module.exports = function registerRoutes(router, context) {
    *       400:
    *         description: projectId is missing, malformed, or has surrounding whitespace.
    *       404:
-   *         description: Unknown project, or the project has no contributions publication.
+   *         description: Unknown project.
    *       500:
    *         description: Unexpected error while reading the publication.
    *       502:

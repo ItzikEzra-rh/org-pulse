@@ -334,10 +334,13 @@ describe('readProjectContributions', () => {
     expect(result.model.people).toEqual([])
   })
 
-  it('does not fall back to a legacy cache when the project publication is missing', () => {
+  it('reports a never-published project as unavailable (200), never falling back to a legacy cache', () => {
     const result = readProjectContributions(mockProjects({}, profiles), 'osac')
-    expect(result.status).toBe(404)
-    expect(result.error).toBe('Project contributions publication is unavailable')
+    expect(result.status).toBe(200)
+    expect(result.model.availability).toBe('unavailable')
+    expect(result.model.reason).toBe('not-collected')
+    expect(result.model.publicationState).toBeNull()
+    expect(result.model.people).toEqual([])
   })
 
   it('rejects an unknown project', () => {

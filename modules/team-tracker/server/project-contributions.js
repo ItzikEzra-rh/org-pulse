@@ -2,7 +2,9 @@
  * Project-qualified GitHub contribution reads, joined by (projectId, accountId).
  * Unknown projects never fall back to legacy OSAC caches; `github: null` means
  * missing (never zero); stale/carried-forward records are served but badged;
- * `gitlab` is always null (unpublished by this collector).
+ * `gitlab` is always null (unpublished by this collector). A known project that
+ * has never published contributions is `unavailable`, not a 404: the same
+ * convention the Jira Hygiene reader uses for "not yet collected" data.
  */
 
 const ARTIFACT_KEY = 'sources/contributions/registry.json'
@@ -112,8 +114,10 @@ function readProjectContributions(projects, projectId) {
   const loaded = _loadProjectContributionsData(projects, projectId)
   if (loaded.kind === 'error') return { status: loaded.status, error: loaded.error }
 
+  // A known project that has never published contributions is expected, not an
+  // error: same convention as the Jira Hygiene reader (200 + unavailable model).
   if (loaded.kind === 'missing-artifact') {
-    return { status: 404, error: 'Project contributions publication is unavailable' }
+    return { status: 200, model: _unavailableReadModel(projectId, 'not-collected', null, null) }
   }
 
   if (loaded.kind === 'unavailable') {
