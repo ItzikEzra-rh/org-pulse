@@ -299,13 +299,114 @@ instead of the legacy global computation (`buildJiraTrends()` /
 
 **Invariants:**
 - `jira` buckets are keyed by `YYYY-MM` (the issue's `resolutionDate` month) and built entirely from the publication's `people[].resolved.issues`; `byTeam` keys are project-qualified team keys, matching `team.key` in the roster response.
-- `github`/`gitlab` are always `null` in project mode: no project-qualified contribution publication exists yet. This is a genuine Data-side gap, not an App omission — the client keeps the GitHub/GitLab panels and metric options visible (disabled, with an inline reason) rather than removing them.
+- `github`/`gitlab` are always `null` on `ProjectTrendsResponse`/`ProjectTeamMetricsResponse`: these two endpoints do not join the project-qualified contributions publication described below (see [Project-qualified GitHub Contributions](#project-qualified-github-contributions-get-apimodulesteam-trackerproject-contributions)). The client keeps the GitHub/GitLab panels and metric options visible (disabled, with an inline reason) rather than removing them.
 - `availability`/`available` is `false`/`unavailable` whenever the publication's `state` is not `supported`/`empty`, or its `freshness` is not `fresh`/`stale` — never a fabricated zero. `reason` carries the publication `state` (e.g. `inapplicable`, `disabled`, `unavailable`, `error`) or `missing-publication` / `publication-not-fresh` / `no-published-people`.
 - A publication whose top-level `projectId`, `artifactKey`, `schemaVersion`, or nested `data.projectId` does not match the request is rejected outright (never partially joined), so project isolation holds the same way it does for roster/enrichment.
 - `partial` on `ProjectTrendsResponse` mirrors the publication's own `partial` flag (some people's metrics are stale carry-forward or missing); `partial` on `ProjectTeamMetricsResponse` is per-team (`team.partial`), set when any of that team's members are missing or stale. Both are additionally forced `true` when the `_publication/<key>.status.json` sidecar confirms the current profile's latest collection failed (see below), even though the preserved artifact itself still reports `freshness:"fresh"`.
 - `availability: "available"` reflects whether the publication has any person records at all, not whether any of them have resolved issues in the requested window — a project with people but zero resolved issues this period still reports `"available"` with an empty `jira` object, same as MR !175's own `state: "empty"` meaning no roster people at all.
 
 The producer (`fetch_project_jira_person_metrics.py`) always writes `freshness:"fresh"` on its main artifact, even across a collection failure that preserves a last-known-good artifact; the failure itself is recorded only in the separate `_publication/<key>.status.json` diagnostic. This reader consults that sidecar (matching the `jira-hygiene` reader's handling of the same generic project-publication contract): when it identifies a matching `projectId`/`profileRevision`/`artifactKey` with `state:"error"`, the preserved artifact is still served (never hidden as unavailable, matching the generic contract's "leaves the project-qualified artifact untouched" behavior) but reported `partial:true`, rather than silently fresh. A total collection failure with no prior good data still publishes `state:"error"`/`freshness:"unknown"` on the main artifact directly, which is correctly surfaced as unavailable without consulting the sidecar.
+
+## Project-qualified GitHub Contributions (`GET /api/modules/team-tracker/project-contributions`)
+
+For any `projectId`, this endpoint reads the project's
+`sources/contributions/registry.json` publication (see
+[Project-qualified publication envelope](#project-qualified-publication-envelope)),
+joined by `(projectId, accountId)` — the same canonical identity used by
+`/roster` and the Jira metrics readers. There is no fallback to the legacy
+global `data/github-contributions.json`/`data/gitlab-contributions.json`
+caches for a known project. GitLab is currently unpublished by this
+collector: `gitlab` is always `null`, never a fabricated value.
+
+```json
+{
+  "schemaVersion": 1,
+  "projectId": "flightctl",
+  "profileRevision": "84d6e4c515154de5",
+  "artifactKey": "sources/contributions/registry.json",
+  "source": { "id": "github-contributions", "kind": "github-contributions", "endpoint": ["https://api.github.com/graphql"], "revision": null, "runId": null },
+  "generatedAt": "2026-10-05T11:15:00Z",
+  "fetchedAt": "2026-10-05T11:15:00Z",
+  "state": "supported",
+  "freshness": "fresh",
+  "partial": false,
+  "error": null,
+  "data": {
+    "projectId": "flightctl",
+    "personCount": 3,
+    "resolvedCount": 2,
+    "metric": { "name": "githubContributionCalendar", "scope": "github-wide", "unit": "contributionCount", "buckets": "month" },
+    "repositories": [{ "fullName": "flightctl/flightctl", "role": "delivery" }],
+    "people": [
+      {
+        "accountId": "fc-acc-1",
+        "displayName": "Nadia Osei",
+        "active": true,
+        "teamIds": ["366df4de-dc38-4f71-9f0d-9916d450c20c"],
+        "github": { "username": "nosei", "totalContributions": 214, "months": { "2026-09": 88 }, "fetchedAt": "2026-10-05T11:15:00Z" },
+        "gitlab": null
+      }
+    ],
+    "diagnostics": {
+      "unresolvedIdentities": ["fc-acc-3"],
+      "identityConflicts": [],
+      "carriedForward": [],
+      "failedFetch": [],
+      "gitlab": { "state": "unavailable", "reason": "no reusable GitLab contribution collector and no validated GitLab identities published" }
+    }
+  }
+}
+```
+
+The `GET /api/modules/team-tracker/project-contributions?projectId=<id>` response reshapes this into a stable read model:
+
+```json
+{
+  "projectId": "flightctl",
+  "availability": "available",
+  "reason": null,
+  "publicationState": "supported",
+  "freshness": "fresh",
+  "partial": false,
+  "generatedAt": "2026-10-05T11:15:00Z",
+  "fetchedAt": "2026-10-05T11:15:00Z",
+  "metric": { "name": "githubContributionCalendar", "scope": "github-wide", "unit": "contributionCount", "buckets": "month" },
+  "people": [
+    {
+      "key": "flightctl::fc-acc-1",
+      "projectId": "flightctl",
+      "accountId": "fc-acc-1",
+      "displayName": "Nadia Osei",
+      "active": true,
+      "teamIds": ["366df4de-dc38-4f71-9f0d-9916d450c20c"],
+      "github": { "username": "nosei", "totalContributions": 214, "months": { "2026-09": 88 }, "fetchedAt": "2026-10-05T11:15:00Z" },
+      "gitlab": null,
+      "contributionStatus": "collected"
+    }
+  ],
+  "diagnostics": {
+    "unresolvedIdentities": ["fc-acc-3"],
+    "identityConflicts": [],
+    "carriedForward": [],
+    "failedFetch": [],
+    "gitlab": { "state": "unavailable" }
+  },
+  "publicationError": null
+}
+```
+
+**Producer contract (`fetch_project_github_contributions.py`):**
+- Person identity is the project-qualified `accountId`, never the raw git login. The `accountId -> github username` mapping comes from the project's `sources/roster-enrichment/registry.json` publication (`identities.github.username`); a login is never guessed from a display name.
+- `data.metric` describes a GitHub-wide (not repository-scoped) monthly `contributionCount` calendar — the same semantics as the legacy OSAC `github-contributions.json`. `data.repositories` is scope provenance from the project profile only; it does not narrow what is measured.
+- `github: null` means the person has no resolved GitHub identity (`contributionStatus: "unresolved"`) or their fetch failed with nothing to carry forward (`contributionStatus: "failed"`); a genuine zero-contribution month is preserved, never confused with missing data.
+- Two logins claimed by different `accountId`s is an identity conflict: neither account is attributed (`contributionStatus: "conflicted"`, `github: null`), and the pair is listed in `diagnostics.identityConflicts` (`{ github, accountIds }`).
+- A fetch failure that still has a prior good value for that login carries it forward (`contributionStatus: "carried-forward"`) and sets `partial: true`/`freshness: "stale"` on the main artifact directly — unlike the Jira Hygiene/person-metrics producers, this collector does **not** always write `freshness: "fresh"` on partial success. A total fetch failure with nothing publishable raises and leaves the main artifact untouched; the failure is recorded only in `_publication/sources%2Fcontributions%2Fregistry.json.status.json` (same sidecar convention as the other project collectors), and the reader forces `freshness: "stale"` — not `partial`, which still only reflects `envelope.partial` — when that sidecar identifies a matching `projectId`/`artifactKey`.
+- `state` is `"supported"` when the project roster has people, `"empty"` when it does not. The app reports an `"empty"` state as `availability: "empty"`, reason `"no-roster-people"` — not an error.
+- A project that has never published this artifact at all (no file yet) reports `availability: "unavailable"`, reason `"not-collected"` — the same `200`-with-unavailable-model convention the Jira Hygiene reader uses, not a 404.
+- `envelope.profileRevision` is checked against the currently loaded project profile's `profileRevision`. A mismatch (the roster/profile moved on since this artifact was published) is reported as `freshness: "stale"`, never silently `"fresh"` — the artifact is still served, following the same last-known-good-but-marked-non-fresh pattern used elsewhere in this contract, rather than being hidden as unavailable.
+- `envelope.projectId`, `artifactKey`, `schemaVersion`, and nested `data.projectId` must all agree with the request; any mismatch is rejected outright (`502`), never partially joined — the same isolation guarantee as roster/enrichment/trends.
+
+A representative fixture lives at `fixtures/projects/flightctl/sources/contributions/registry.json` (paired with that project's `sources/roster/registry.json` and `sources/roster-enrichment/registry.json` fixtures, sharing the same `accountId`s).
 
 ## Shared Releases → Execute contract
 

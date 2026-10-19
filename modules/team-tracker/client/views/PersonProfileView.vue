@@ -6,6 +6,7 @@ import { useRoster } from '@shared/client/composables/useRoster.js'
 import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { useGithubStats } from '@shared/client/composables/useGithubStats.js'
 import { useGitlabStats } from '@shared/client/composables/useGitlabStats.js'
+import { useProjectContributions } from '@shared/client/composables/useProjectContributions.js'
 import { usePermissions } from '@shared/client/composables/usePermissions.js'
 import { useImpersonation } from '@shared/client/composables/useImpersonation.js'
 import { useFieldDefinitions } from '@shared/client/composables/useFieldDefinitions.js'
@@ -27,15 +28,41 @@ const visiblePersonFields = computed(() =>
 )
 const { getContributions: getGithubContributions } = useGithubStats()
 const { getContributions: getGitlabContributions, loadGitlabStats } = useGitlabStats()
+const {
+  getByAccountId: getProjectContribution,
+  loadContributions: loadProjectContributions,
+  freshness: projectContributionsFreshness,
+  partial: projectContributionsPartial
+} = useProjectContributions()
 
 const githubContribs = computed(() => {
+  // Project people read the canonical artifact by accountId; OSAC's legacy
+  // view keeps its username-keyed global cache unchanged.
+  if (isProjectPerson.value) {
+    return getProjectContribution(person.value?.accountId)?.github || null
+  }
   const username = person.value?.github?.username || rosterMember.value?.githubUsername
   return username ? getGithubContributions(username) : null
 })
 
 const gitlabContribs = computed(() => {
+  // Project people: same canonical join as githubContribs. GitLab is unpublished
+  // by this collector, so this always resolves to null for project people.
+  if (isProjectPerson.value) {
+    return getProjectContribution(person.value?.accountId)?.gitlab || null
+  }
   const username = person.value?.gitlab?.username || rosterMember.value?.gitlabUsername
   return username ? getGitlabContributions(username) : null
+})
+
+// Only applies to project people: a shown tile always has a real (possibly carried-forward) value,
+// so this never needs to distinguish zero from unavailable -- that's handled by tile visibility itself.
+const githubContribsNote = computed(() => {
+  if (!isProjectPerson.value || !githubContribs.value) return null
+  const status = getProjectContribution(person.value?.accountId)?.contributionStatus
+  if (status === 'carried-forward') return 'Carried forward'
+  if (projectContributionsPartial.value || projectContributionsFreshness.value === 'stale') return 'Stale'
+  return null
 })
 
 const personTeams = computed(() => {
@@ -211,6 +238,8 @@ function loadProjectPerson() {
     geo: projectPerson.geo,
     city: null,
     country: null,
+    // Identity display only; contribution counts join from the canonical
+    // per-project contributions artifact by accountId (see githubContribs/gitlabContribs).
     github: projectPerson.identities?.github ?? null,
     gitlab: projectPerson.identities?.gitlab ?? null,
     orgType: 'engineering',
@@ -219,6 +248,7 @@ function loadProjectPerson() {
     lastSeenAt: null,
     inactiveSince: null
   }
+  loadProjectContributions()
   loading.value = false
 }
 
@@ -517,12 +547,17 @@ onBeforeUnmount(() => {
                   <div class="text-xs text-gray-500 dark:text-gray-400">Avg Cycle Time</div>
                 </div>
               </template>
-              <div v-if="person.github?.username">
+              <div v-if="isProjectPerson ? githubContribs : person.github?.username">
                 <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ githubContribs?.totalContributions ?? '—' }}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400">GitHub Contributions</div>
-                <div class="text-[10px] text-gray-400 dark:text-gray-500">Last year</div>
+                <div
+                  class="text-[10px]"
+                  :class="githubContribsNote ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'"
+                >
+                  Last year<span v-if="githubContribsNote"> · {{ githubContribsNote }}</span>
+                </div>
               </div>
-              <div v-if="person.gitlab?.username">
+              <div v-if="isProjectPerson ? gitlabContribs : person.gitlab?.username">
                 <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ gitlabContribs?.totalContributions ?? '—' }}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400">GitLab Contributions</div>
                 <div class="text-[10px] text-gray-400 dark:text-gray-500">Last year</div>

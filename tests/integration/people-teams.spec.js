@@ -370,3 +370,78 @@ test.describe('People & Teams Project-Qualified Roster @people-teams', () => {
     expect(page.url()).not.toContain('accountId=');
   });
 });
+
+test.describe('People & Teams Project-Qualified Contributions @people-teams', () => {
+  const FLIGHTCTL = 'flightctl';
+
+  test.beforeEach(async ({ page }) => {
+    setupErrorTracking(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    logCapturedErrors(page, testInfo);
+  });
+
+  test('project-qualified Person Profile loads GitHub contributions from the canonical artifact, attributed by (projectId, accountId)', async ({ page }) => {
+    // Fixture: fixtures/projects/flightctl/sources/contributions/registry.json.
+    // 214/97 don't appear in the legacy github-contributions.json fixture.
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-1`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    let bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).toContain('Nadia Osei');
+    expect(bodyText).toContain('GitHub Contributions');
+    expect(bodyText).toContain('214');
+
+    // A different accountId in the same project attributes its own count, not fc-acc-1's.
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-2`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).toContain('Marco Liu');
+    expect(bodyText).toContain('97');
+    expect(bodyText).not.toContain('214');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('does not fabricate a contribution count for a person with no resolved GitHub identity', async ({ page }) => {
+    // Fixture: fc-acc-3 (Priya Shah) has no identities.github entry, so the
+    // publication reports her unresolved (github: null), never a zero.
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-3`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).toContain('Priya Shah');
+    expect(bodyText).not.toContain('214');
+    expect(bodyText).not.toContain('97');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('switching the project context resets contributions instead of retaining the prior project\'s data', async ({ page }) => {
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-1`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    let bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).toContain('214');
+
+    // Switch projects via the shell's in-app selector: no full page reload.
+    const projectSelector = page.locator('#project-selector');
+    await expect(projectSelector).toBeVisible();
+    await projectSelector.selectOption('osac');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(page.url()).toContain('projectId=osac');
+    bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).not.toContain('214');
+    expect(bodyText).not.toContain('Nadia Osei');
+
+    expect(page.errors).toHaveLength(0);
+  });
+});

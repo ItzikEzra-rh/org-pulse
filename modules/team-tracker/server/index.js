@@ -2,6 +2,7 @@ module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin, requireTeamAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage, listStorageFiles, deleteStorageDirectory } = storage;
   const { readProjectPeopleTeams } = require('./project-roster');
+  const { readProjectContributions } = require('./project-contributions');
   const { readProjectTrends, readProjectTeamMetrics } = require('./project-jira-metrics');
   const { resolveProjectSelection } = require('../../../shared/server/project-profile');
 
@@ -2851,6 +2852,59 @@ module.exports = function registerRoutes(router, context) {
       res.json(readLegacyRosterResponse(req));
     } catch (error) {
       console.error('Read roster error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/modules/team-tracker/project-contributions:
+   *   get:
+   *     tags: ['TT: Roster']
+   *     summary: Get project-qualified GitHub contributions
+   *     description: >-
+   *       Canonical GitHub-wide contribution-calendar metrics for a project,
+   *       joined to people by (projectId, accountId). The legacy
+   *       `/github/contributions` cache endpoint is unaffected.
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string }
+   *         description: Canonical project id (e.g. `osac`, `flightctl`); surrounding whitespace is rejected.
+   *     responses:
+   *       200:
+   *         description: >-
+   *           Project contributions read model (availability
+   *           available/empty/unavailable). A known project that has never
+   *           published contributions is reported as unavailable here, not as
+   *           a 404.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ProjectContributionsResponse'
+   *       400:
+   *         description: projectId is missing, malformed, or has surrounding whitespace.
+   *       404:
+   *         description: Unknown project.
+   *       500:
+   *         description: Unexpected error while reading the publication.
+   *       502:
+   *         description: Publication present but malformed or project identity mismatch.
+   *       503:
+   *         description: The project publication reader is unavailable.
+   */
+  // Legacy /github/contributions cache endpoints are intentionally untouched.
+  router.get('/project-contributions', requireScope('github:read'), function(req, res) {
+    try {
+      const selection = resolveProjectSelection(context.projects, req.query);
+      if (selection.status) return res.status(selection.status).json({ error: selection.error });
+      if (!selection.provided) return res.status(400).json({ error: 'projectId is required' });
+      const result = readProjectContributions(context.projects, selection.projectId);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.model);
+    } catch (error) {
+      console.error('Read project contributions error:', error);
       res.status(500).json({ error: error.message });
     }
   });

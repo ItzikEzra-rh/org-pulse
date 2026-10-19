@@ -31,6 +31,7 @@ Core team owns `shared/` via CODEOWNERS. Changes require core team review.
 | `useMessages()` | App-wide message system: `messages` (reactive filtered list), `fetchMessages()`, `dismiss(id)` |
 | `useJiraAuth()` | Jira OAuth 2.0 client state: `isConnected`, `siteName`, `connectJira()`, `disconnectJira()`, `checkStatus()`. Used by modules with per-user Jira authentication. |
 | `useDarkMode()` | Reactive dark-mode flag (`isDark`) tracked via a `MutationObserver` on `<html>`'s `class` attribute, plus Chart.js-ready `textColor`/`gridColor`/`cardBackground` computed values. For components rendering Chart.js charts, whose canvas content Tailwind's `dark:` classes can't reach. |
+| `useProjectContributions()` | Project-qualified GitHub contributions, joined by `(projectId, accountId)` — never falls back to legacy OSAC-global data. Exports `contributions` (raw response, see `getProjectContributions()`), `loading`, `error`, `freshness` (`'fresh'` \| `'stale'` \| `'unknown'`), `partial`, `getByAccountId(accountId)` (returns a person record or `null`; missing is distinct from a resolved zero), `loadContributions()`, `reloadContributions()` (force refetch, bypassing the cache). Module-level state is keyed to the active project from `useProjectId()`: switching projects synchronously clears `contributions`/`error` before any new fetch, so one project's data never appears under another. `loadContributions()` resolves `null` without fetching when no project is selected. Concurrent calls for the same project share one in-flight request; a cached `availability: 'unavailable'` result is retried on the next call rather than kept for the rest of the session, so a publication that lands later is picked up without a hard reload. |
 
 ### Utilities
 
@@ -45,6 +46,7 @@ Core team owns `shared/` via CODEOWNERS. Changes require core team review.
 | `apiRequest(url, options)` | Fetch wrapper with error handling |
 | `getSiteConfig()` | Fetch site configuration (`{ titlePrefix, authEmailDomain }`) — no cache |
 | `saveSiteConfig(config)` | Save site configuration (admin only) |
+| `getProjectContributions(projectId)` | Fetch project-qualified GitHub contributions: `GET /api/modules/team-tracker/project-contributions?projectId=`. No client-side cache (see `useProjectContributions()`). HTTP 200 for a known project even when it has no publication yet or its publication is not a supported state (`availability: 'unavailable'` rather than 404/5xx); an invalid or unknown `projectId`, or a malformed/mismatched `supported`/`empty` publication, returns 400/404/5xx instead. Response: `{ projectId, availability: 'available'\|'empty'\|'unavailable', reason, freshness: 'fresh'\|'stale'\|'unknown', partial, generatedAt, fetchedAt, metric, people: [{ key, projectId, accountId, displayName, active, teamIds, github, gitlab: null, contributionStatus: 'collected'\|'carried-forward'\|'conflicted'\|'failed'\|'unresolved' }], diagnostics, publicationError }`. `github: null` means unmeasured, never a fabricated zero; `gitlab` is always `null` (unpublished by this collector). |
 
 ### Components
 
