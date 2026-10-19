@@ -14,7 +14,10 @@ displays them in the UI.
 ## 1. Global Jira Query Eligibility
 
 Before any issue enters classification, the `fetchAutofixData()` function
-builds a JQL query with three mandatory filters:
+builds a JQL query. Project and pipeline-label filters are always included;
+the component-exclusion clause is added only when `autofixExcludedComponents`
+is nonempty, and the created-after clause only when `autofixCreatedAfter`
+has a value:
 
 | Filter | Source | Default |
 |--------|--------|---------|
@@ -31,7 +34,7 @@ in `modules/ai-impact/server/config.js`).
 ```
 project IN ("AIPCC", "RHOAIENG")
   AND labels IN ("jira-triage-pending", "jira-triage-missing-info", …all 15 labels…)
-  AND (component IS EMPTY OR component NOT IN ("Enclave", "agentic-sdlc"))
+  [AND (component IS EMPTY OR component NOT IN ("Enclave", "agentic-sdlc")) — when autofixExcludedComponents is nonempty]
   [AND created >= "<date>" — when autofixCreatedAfter is set]
 ORDER BY created DESC
 ```
