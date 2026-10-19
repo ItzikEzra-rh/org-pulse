@@ -3,7 +3,7 @@
  * model, never a fabricated zero, and never join cross-project data.
  */
 import { describe, it, expect } from 'vitest'
-import { ARTIFACT_KEY, readProjectTrends, readProjectTeamMetrics } from '../../server/project-jira-metrics.js'
+import { ARTIFACT_KEY, readProjectTrends, readProjectTeamMetrics, readProjectPersonMetrics } from '../../server/project-jira-metrics.js'
 
 function mockProjects(publications = {}, profiles = {}) {
   return {
@@ -558,5 +558,178 @@ describe('readProjectTeamMetrics', () => {
     const { model } = readProjectTeamMetrics(projects, 'flightctl', 'team-1')
 
     expect(JSON.stringify(model)).not.toContain('osac-secret')
+  })
+})
+
+describe('readProjectPersonMetrics', () => {
+  function envelopeWithPeople(people) {
+    return makeEnvelope('flightctl', {
+      data: {
+        projectId: 'flightctl',
+        personCount: people.length,
+        people,
+        teams: [makeTeam()],
+        diagnostics: { missingPeople: [], staleCarryForward: [], freshSuccessCount: people.length }
+      }
+    })
+  }
+
+  it('looks up the correct person by accountId among several published people', () => {
+    const people = [
+      makePerson({ accountId: 'acct-1', resolved: { count: 1, storyPoints: 3, issues: [] } }),
+      makePerson({ accountId: 'acct-2', resolved: { count: 9, storyPoints: 21, issues: [] } })
+    ]
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelopeWithPeople(people) } } }, { flightctl: makeProfile('flightctl') })
+
+    const { status, model } = readProjectPersonMetrics(projects, 'flightctl', 'acct-2')
+
+    expect(status).toBe(200)
+    expect(model.availability).toBe('available')
+    expect(model.metrics.resolved).toEqual({ count: 9, storyPoints: 21, issues: [] })
+  })
+
+  it('keeps two people with the same displayName distinct by accountId', () => {
+    const people = [
+      makePerson({ accountId: 'acct-1', name: 'J. Smith', resolved: { count: 1, storyPoints: 1, issues: [] } }),
+      makePerson({ accountId: 'acct-2', name: 'J. Smith', resolved: { count: 2, storyPoints: 2, issues: [] } })
+    ]
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelopeWithPeople(people) } } }, { flightctl: makeProfile('flightctl') })
+
+    const { model } = readProjectPersonMetrics(projects, 'flightctl', 'acct-1')
+
+    expect(model.accountId).toBe('acct-1')
+    expect(model.metrics.resolved.count).toBe(1)
+    expect(JSON.stringify(model)).not.toContain('"count":2')
+  })
+
+  it('reports a known person with genuinely zero activity as available with zero counts', () => {
+    const people = [makePerson({ accountId: 'acct-1' })]
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelopeWithPeople(people) } } }, { flightctl: makeProfile('flightctl') })
+
+    const { model } = readProjectPersonMetrics(projects, 'flightctl', 'acct-1')
+
+    expect(model.availability).toBe('available')
+    expect(model.metrics.resolved).toEqual({ count: 0, storyPoints: 0, issues: [] })
+  })
+
+  it('reports a person absent from a valid publication as missing-person, not a fabricated zero', () => {
+    const people = [makePerson({ accountId: 'acct-1' })]
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelopeWithPeople(people) } } }, { flightctl: makeProfile('flightctl') })
+
+    const { status, model } = readProjectPersonMetrics(projects, 'flightctl', 'nonexistent-acct')
+
+    expect(status).toBe(200)
+    expect(model.availability).toBe('unavailable')
+    expect(model.reason).toBe('missing-person')
+    expect(model.metrics).toBeNull()
+  })
+
+  it('degrades to unavailable when the publication is missing entirely', () => {
+    const projects = mockProjects({}, { flightctl: makeProfile('flightctl') })
+
+    const { status, model } = readProjectPersonMetrics(projects, 'flightctl', 'acct-1')
+
+    expect(status).toBe(200)
+    expect(model.availability).toBe('unavailable')
+    expect(model.reason).toBe('missing-publication')
+    expect(model.metrics).toBeNull()
+  })
+
+  it('propagates publication-level partial onto a missing-person result, never implying confirmed-complete coverage', () => {
+    const envelope = makeEnvelope('flightctl', { partial: true, data: envelopeWithPeople([makePerson({ accountId: 'acct-1' })]).data })
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelope } } }, { flightctl: makeProfile('flightctl') })
+
+    const { model } = readProjectPersonMetrics(projects, 'flightctl', 'nonexistent-acct')
+
+    expect(model.availability).toBe('unavailable')
+    expect(model.reason).toBe('missing-person')
+    expect(model.partial).toBe(true)
+  })
+
+  it.each(['inapplicable', 'disabled', 'unavailable', 'error'])(
+    'degrades to unavailable with the publication state as the reason: %s',
+    (state) => {
+      const envelope = makeEnvelope('flightctl', { state, data: null })
+      const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelope } } }, { flightctl: makeProfile('flightctl') })
+
+      const { status, model } = readProjectPersonMetrics(projects, 'flightctl', 'acct-1')
+
+      expect(status).toBe(200)
+      expect(model.availability).toBe('unavailable')
+      expect(model.reason).toBe(state)
+      expect(model.metrics).toBeNull()
+    }
+  )
+
+  it('uses stale (last-known-good) data rather than distrusting it', () => {
+    const envelope = makeEnvelope('flightctl', { freshness: 'stale', data: { projectId: 'flightctl', personCount: 1, people: [makePerson({ accountId: 'acct-1' })], teams: [makeTeam()], diagnostics: { missingPeople: [], staleCarryForward: [], freshSuccessCount: 1 } } })
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelope } } }, { flightctl: makeProfile('flightctl') })
+
+    const { model } = readProjectPersonMetrics(projects, 'flightctl', 'acct-1')
+
+    expect(model.availability).toBe('available')
+  })
+
+  it('marks the result partial when the status sidecar confirms the current profile\'s latest collection failed', () => {
+    const envelope = envelopeWithPeople([makePerson({ accountId: 'acct-1' })])
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelope } } }, { flightctl: makeProfile('flightctl') })
+    const readFromStorage = mockReadFromStorage({
+      [statusSidecarKey('flightctl')]: { projectId: 'flightctl', profileRevision: 'rev', artifactKey: ARTIFACT_KEY, state: 'error' }
+    })
+
+    const { model } = readProjectPersonMetrics(projects, 'flightctl', 'acct-1', readFromStorage)
+
+    expect(model.availability).toBe('available')
+    expect(model.partial).toBe(true)
+  })
+
+  it('never joins a person from one project into a response for another (isolation)', () => {
+    const flightctlEnvelope = envelopeWithPeople([makePerson({ accountId: 'shared-acct', resolved: { count: 1, storyPoints: 1, issues: [] } })])
+    const osacEnvelope = makeEnvelope('osac', {
+      data: {
+        projectId: 'osac',
+        personCount: 1,
+        people: [makePerson({ accountId: 'shared-acct', resolved: { count: 99, storyPoints: 99, issues: [] } })],
+        teams: [makeTeam({ id: 'osac-secret-team' })],
+        diagnostics: { missingPeople: [], staleCarryForward: [], freshSuccessCount: 1 }
+      }
+    })
+    const projects = mockProjects(
+      { flightctl: { [ARTIFACT_KEY]: { value: flightctlEnvelope } }, osac: { [ARTIFACT_KEY]: { value: osacEnvelope } } },
+      { flightctl: makeProfile('flightctl'), osac: makeProfile('osac') }
+    )
+
+    const { model } = readProjectPersonMetrics(projects, 'flightctl', 'shared-acct')
+
+    expect(model.metrics.resolved.count).toBe(1)
+    expect(JSON.stringify(model)).not.toContain('99')
+  })
+
+  it('rejects a publication with duplicate accountIds rather than returning ambiguous person data', () => {
+    const envelope = envelopeWithPeople([makePerson({ accountId: 'acct-1' }), makePerson({ accountId: 'acct-1' })])
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelope } } }, { flightctl: makeProfile('flightctl') })
+
+    const { status, error } = readProjectPersonMetrics(projects, 'flightctl', 'acct-1')
+
+    expect(status).toBe(502)
+    expect(error).toMatch(/Invalid project Jira metrics publication/)
+  })
+
+  it('returns 400 for an invalid account id', () => {
+    const projects = mockProjects({}, { flightctl: makeProfile('flightctl') })
+
+    const { status, error } = readProjectPersonMetrics(projects, 'flightctl', '')
+
+    expect(status).toBe(400)
+    expect(error).toMatch(/Invalid account id/)
+  })
+
+  it('returns 404 for an unknown project', () => {
+    const projects = mockProjects({}, {})
+
+    const { status, error } = readProjectPersonMetrics(projects, 'flightctl', 'acct-1')
+
+    expect(status).toBe(404)
+    expect(error).toBe('Unknown project')
   })
 })

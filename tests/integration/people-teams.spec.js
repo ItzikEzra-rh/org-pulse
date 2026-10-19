@@ -371,6 +371,91 @@ test.describe('People & Teams Project-Qualified Roster @people-teams', () => {
   });
 });
 
+/**
+ * Project-Qualified Jira Person Metrics (OSAC-6322)
+ * Verifies the endpoint is wired end to end and never falls back to legacy OSAC metrics.
+ */
+test.describe('People & Teams Project-Qualified Jira Person Metrics @people-teams', () => {
+  const FLIGHTCTL = 'flightctl';
+
+  test.beforeEach(async ({ page }) => {
+    setupErrorTracking(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    logCapturedErrors(page, testInfo);
+  });
+
+  test('fetches metrics with the correct projectId/accountId and renders the published Jira panels', async ({ page }) => {
+    const metricsRequests = [];
+    page.on('request', request => {
+      if (request.url().includes('/api/modules/team-tracker/project-person-metrics')) {
+        metricsRequests.push(request.url());
+      }
+    });
+
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-1`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(metricsRequests).toHaveLength(1);
+    const requestUrl = new URL(metricsRequests[0]);
+    expect(requestUrl.searchParams.get('projectId')).toBe(FLIGHTCTL);
+    expect(requestUrl.searchParams.get('accountId')).toBe('fc-acc-1');
+
+    // Fixture: fc-acc-1 (Nadia Osei) has 2 resolved issues, 1 in-progress.
+    const bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).toContain('Resolved Issues');
+    expect(bodyText).toContain('FLPATH-101');
+    expect(bodyText).toContain('FLPATH-110');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('renders safely when the Jira publication is unavailable, without fabricated counts or console errors', async ({ page }) => {
+    await page.route('**/api/modules/team-tracker/project-person-metrics**', route => route.fulfill({
+      json: {
+        projectId: FLIGHTCTL,
+        accountId: 'fc-acc-2',
+        availability: 'unavailable',
+        reason: 'missing-publication',
+        publicationState: null,
+        generatedAt: null,
+        partial: false,
+        metrics: null
+      }
+    }));
+
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-2`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(await mainContentIsVisible(page)).toBe(true);
+    const bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).toContain('Marco Liu');
+    expect(bodyText).not.toContain('Resolved Issues');
+    expect(bodyText).not.toContain('Story Points');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('never falls back to the legacy OSAC per-person Jira metrics endpoint', async ({ page }) => {
+    const legacyMetricsRequests = [];
+    page.on('request', request => {
+      if (/\/api\/modules\/team-tracker\/person\/[^/]+\/metrics/.test(request.url())) {
+        legacyMetricsRequests.push(request.url());
+      }
+    });
+
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-1`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(legacyMetricsRequests).toHaveLength(0);
+    expect(page.errors).toHaveLength(0);
+  });
+});
+
 test.describe('People & Teams Project-Qualified Contributions @people-teams', () => {
   const FLIGHTCTL = 'flightctl';
 

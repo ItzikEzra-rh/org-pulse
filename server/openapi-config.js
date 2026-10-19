@@ -367,6 +367,50 @@ function createOpenApiSpec() {
               }
             }
           },
+          ProjectPersonMetricsResponse: {
+            type: 'object',
+            description: 'Project-qualified Jira person metrics, sourced from the jira-person-metrics publication, joined by (projectId, accountId).',
+            properties: {
+              projectId: { type: 'string' },
+              accountId: { type: 'string' },
+              availability: { type: 'string', enum: ['available', 'unavailable'] },
+              reason: { type: 'string', nullable: true, description: 'Present only when availability is unavailable' },
+              publicationState: { type: 'string', nullable: true },
+              generatedAt: { type: 'string', nullable: true, format: 'date-time' },
+              partial: { type: 'boolean' },
+              metrics: {
+                type: 'object',
+                nullable: true,
+                description: 'Null when unavailable',
+                properties: {
+                  lookbackDays: { type: 'integer', nullable: true },
+                  resolved: {
+                    type: 'object',
+                    properties: {
+                      count: { type: 'integer' },
+                      storyPoints: { type: 'integer' },
+                      issues: { type: 'array', items: { $ref: '#/components/schemas/JiraIssue' } }
+                    }
+                  },
+                  inProgress: {
+                    type: 'object',
+                    properties: {
+                      count: { type: 'integer' },
+                      storyPoints: { type: 'integer' },
+                      issues: { type: 'array', items: { $ref: '#/components/schemas/JiraIssue' } }
+                    }
+                  },
+                  cycleTime: {
+                    type: 'object',
+                    properties: {
+                      avgDays: { type: 'number', nullable: true },
+                      medianDays: { type: 'number', nullable: true }
+                    }
+                  }
+                }
+              }
+            }
+          },
           GitHubContributions: {
             type: 'object',
             properties: {

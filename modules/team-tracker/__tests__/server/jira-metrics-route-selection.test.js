@@ -278,3 +278,85 @@ describe('GET /team/:teamKey/metrics project-selection dispatch', () => {
     expect(body.error).toContain('flightctl')
   })
 })
+
+describe('GET /project-person-metrics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    rosterSyncConfig.clearDisplayNamesCache()
+  })
+
+  it('returns the published metrics for the requested (projectId, accountId)', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/project-person-metrics?projectId=flightctl&accountId=flightctl-acct-1')
+
+    expect(status).toBe(200)
+    expect(body.projectId).toBe('flightctl')
+    expect(body.accountId).toBe('flightctl-acct-1')
+    expect(body.availability).toBe('available')
+    expect(body.metrics.resolved.issues[0].key).toBe('FLIGHTCTL-1')
+  })
+
+  it('reports a person absent from a valid publication as missing-person, not a 404', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/project-person-metrics?projectId=flightctl&accountId=nonexistent')
+
+    expect(status).toBe(200)
+    expect(body.availability).toBe('unavailable')
+    expect(body.reason).toBe('missing-person')
+    expect(body.metrics).toBeNull()
+  })
+
+  it('reports a known project with no jira-person-metrics publication as unavailable, not a 404', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['flightctl'], jiraMetricsProjectIds: [] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/project-person-metrics?projectId=flightctl&accountId=flightctl-acct-1')
+
+    expect(status).toBe(200)
+    expect(body.availability).toBe('unavailable')
+    expect(body.reason).toBe('missing-publication')
+  })
+
+  it('returns 404 for an unknown project', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/project-person-metrics?projectId=nonexistent&accountId=acct-1')
+
+    expect(status).toBe(404)
+    expect(body.error).toBe('Unknown project')
+  })
+
+  it('returns 400 when projectId is missing', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/project-person-metrics?accountId=acct-1')
+
+    expect(status).toBe(400)
+    expect(body.error).toBe('projectId is required')
+  })
+
+  it('returns 400 when accountId is missing', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/project-person-metrics?projectId=flightctl')
+
+    expect(status).toBe(400)
+    expect(body.error).toMatch(/Invalid account id/)
+  })
+
+  it('never leaks another project\'s person data (isolation)', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['osac', 'flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { body } = await requestGet(app, '/project-person-metrics?projectId=flightctl&accountId=flightctl-acct-1')
+
+    expect(JSON.stringify(body)).not.toContain('osac-acct')
+  })
+})

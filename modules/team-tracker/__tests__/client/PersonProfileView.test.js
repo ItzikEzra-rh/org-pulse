@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import PersonProfileView from '../../client/views/PersonProfileView.vue'
@@ -62,19 +62,60 @@ vi.mock('../../client/composables/useManagerTutorial', () => ({
   useManagerTutorial: () => ({ resumeTourIfActive: vi.fn(), destroyTour: vi.fn() })
 }))
 
+const UNAVAILABLE_JIRA_METRICS = {
+  projectId: 'flightctl',
+  accountId: null,
+  availability: 'unavailable',
+  reason: 'missing-publication',
+  publicationState: null,
+  generatedAt: null,
+  partial: false,
+  metrics: null
+}
+
 vi.mock('@shared/client/services/api.js', () => ({
   apiRequest: vi.fn(),
+  getProjectPersonMetrics: vi.fn(),
   getProjectContributions: vi.fn()
 }))
 
-import { apiRequest, getProjectContributions } from '@shared/client/services/api.js'
+import { apiRequest, getProjectPersonMetrics, getProjectContributions } from '@shared/client/services/api.js'
+
+function availableJiraMetrics(overrides = {}) {
+  return {
+    projectId: 'flightctl',
+    accountId: 'acc-1',
+    availability: 'available',
+    reason: null,
+    publicationState: 'supported',
+    generatedAt: '2026-10-14T00:00:00Z',
+    partial: false,
+    metrics: {
+      lookbackDays: 365,
+      resolved: { count: 0, storyPoints: 0, issues: [] },
+      inProgress: { count: 0, storyPoints: 0, issues: [] },
+      cycleTime: { avgDays: null, medianDays: null }
+    },
+    ...overrides
+  }
+}
+
+// Reads a tile's value by label; wrapper.text() digit matches can be
+// satisfied incidentally by unrelated tiles (e.g. "365 days").
+function metricTileValue(wrapper, label) {
+  const labelEl = wrapper.findAll('div').find(d => d.text() === label)
+  return labelEl ? labelEl.element.previousElementSibling.textContent.trim() : null
+}
+
+const mountedWrappers = []
 
 function mountView(params) {
-  return mount(PersonProfileView, {
+  const navParams = ref(params)
+  const wrapper = mount(PersonProfileView, {
     global: {
       provide: {
         moduleNav: {
-          params: ref(params),
+          params: navParams,
           goBack: vi.fn(),
           navigateTo: vi.fn(),
           updateParams: vi.fn()
@@ -82,6 +123,9 @@ function mountView(params) {
       }
     }
   })
+  wrapper.navParams = navParams
+  mountedWrappers.push(wrapper)
+  return wrapper
 }
 
 describe('PersonProfileView', () => {
@@ -94,6 +138,14 @@ describe('PersonProfileView', () => {
     rosterDataValue.value = null
     rosterLoadingValue.value = false
     isAdminValue.value = false
+    getProjectPersonMetrics.mockResolvedValue(UNAVAILABLE_JIRA_METRICS)
+  })
+
+  // Mounted instances share module-level composable mocks (rosterData,
+  // projectId, ...); leaving a prior test's wrapper mounted makes it react to
+  // a later test's state changes and pollute shared mock call history.
+  afterEach(() => {
+    for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount()
   })
 
   it('resolves a project-qualified person by accountId without calling the legacy registry endpoint', async () => {
@@ -488,5 +540,249 @@ describe('PersonProfileView', () => {
 
     expect(wrapper.text()).toContain('Bob Builder')
     expect(apiRequest).toHaveBeenCalledWith(expect.stringContaining('/registry/people/u1'))
+    // OSAC profiles never call the project-qualified endpoint.
+    expect(getProjectPersonMetrics).not.toHaveBeenCalled()
+  })
+
+  describe('project-qualified Jira metrics', () => {
+    function setRoster(people) {
+      rosterPeople.value = people
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people }
+    }
+
+    function rosterPersonFixture(accountId, displayName) {
+      return {
+        key: `flightctl::${accountId}`,
+        projectId: 'flightctl',
+        accountId,
+        displayName,
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        manager: null,
+        geo: null,
+        identities: {}
+      }
+    }
+
+    it('ignores a stale legacy response after navigating to a project-qualified person (cross-mode race)', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace')])
+      getProjectPersonMetrics.mockResolvedValue(availableJiraMetrics())
+
+      let resolveLegacy
+      apiRequest.mockImplementation((url) => {
+        if (url.includes('/registry/people/u1')) {
+          return new Promise(resolve => { resolveLegacy = resolve })
+        }
+        return Promise.resolve({})
+      })
+
+      const wrapper = mountView({ uid: 'u1' })
+      await flushPromises()
+
+      // Navigate to a project-qualified person before the legacy lookup resolves.
+      wrapper.navParams.value = { accountId: 'acc-1' }
+      await flushPromises()
+      expect(wrapper.text()).toContain('Ada Lovelace')
+
+      resolveLegacy({
+        person: { uid: 'u1', name: 'Bob Builder', status: 'active', email: 'bob@example.com', orgType: 'engineering' },
+        managerChain: [],
+        directReports: [],
+        associatedTeams: []
+      })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Ada Lovelace')
+      expect(wrapper.text()).not.toContain('Bob Builder')
+    })
+
+    it('fetches metrics for the correct accountId and renders resolved/in-progress issues with working sort/links', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace')])
+      getProjectPersonMetrics.mockResolvedValue(availableJiraMetrics({
+        metrics: {
+          lookbackDays: 365,
+          resolved: {
+            count: 1, storyPoints: 5,
+            issues: [{ key: 'FLPATH-1', summary: 'Fix thing', issueType: 'Bug', status: 'Closed', storyPoints: 5, resolutionDate: '2026-09-15T00:00:00Z', cycleTimeDays: 3 }]
+          },
+          inProgress: {
+            count: 1, storyPoints: 2,
+            issues: [{ key: 'FLPATH-2', summary: 'Do thing', issueType: 'Story', status: 'In Progress', storyPoints: 2 }]
+          },
+          cycleTime: { avgDays: 3, medianDays: 3 }
+        }
+      }))
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      expect(getProjectPersonMetrics).toHaveBeenCalledWith('flightctl', 'acc-1')
+      expect(wrapper.text()).toContain('FLPATH-1')
+      expect(wrapper.text()).toContain('FLPATH-2')
+      expect(wrapper.find(`a[href="https://redhat.atlassian.net/browse/FLPATH-1"]`).exists()).toBe(true)
+    })
+
+    it('renders the Jira metrics and GitHub contributions tiles together when both are configured', async () => {
+      // Jira metrics and contributions are fetched independently; both tiles render once each resolves.
+      setRoster([{ ...rosterPersonFixture('acc-1', 'Ada Lovelace'), identities: { github: { username: 'ada' } } }])
+      getProjectPersonMetrics.mockResolvedValue(availableJiraMetrics({
+        metrics: { lookbackDays: 365, resolved: { count: 3, storyPoints: 8, issues: [] }, inProgress: { count: 0, storyPoints: 0, issues: [] }, cycleTime: { avgDays: 2, medianDays: 2 } }
+      }))
+      getProjectContributions.mockResolvedValue({
+        projectId: 'flightctl',
+        availability: 'available',
+        people: [
+          { accountId: 'acc-1', github: { username: 'ada', totalContributions: 42, months: {}, fetchedAt: null }, gitlab: null }
+        ]
+      })
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      expect(metricTileValue(wrapper, 'Resolved Issues')).toBe('3')
+      expect(wrapper.text()).toContain('GitHub Contributions')
+      expect(wrapper.text()).toContain('42')
+    })
+
+    it('shows resolved.count in the Resolved Issues tile when resolved.issues is empty (partial/truncated issues list)', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace')])
+      getProjectPersonMetrics.mockResolvedValue(availableJiraMetrics({
+        metrics: { lookbackDays: 365, resolved: { count: 7, storyPoints: 0, issues: [] }, inProgress: { count: 0, storyPoints: 0, issues: [] }, cycleTime: { avgDays: null, medianDays: null } }
+      }))
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      expect(metricTileValue(wrapper, 'Resolved Issues')).toBe('7')
+    })
+
+    it('resolves distinct metrics for two people sharing a display name', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'J. Smith'), rosterPersonFixture('acc-2', 'J. Smith')])
+      getProjectPersonMetrics.mockImplementation((projectId, accountId) => Promise.resolve(
+        availableJiraMetrics({
+          accountId,
+          metrics: {
+            lookbackDays: 365,
+            resolved: { count: accountId === 'acc-1' ? 1 : 9, storyPoints: 0, issues: [] },
+            inProgress: { count: 0, storyPoints: 0, issues: [] },
+            cycleTime: { avgDays: null, medianDays: null }
+          }
+        })
+      ))
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      expect(getProjectPersonMetrics).toHaveBeenCalledWith('flightctl', 'acc-1')
+      expect(getProjectPersonMetrics).not.toHaveBeenCalledWith('flightctl', 'acc-2')
+      expect(metricTileValue(wrapper, 'Resolved Issues')).toBe('1')
+
+      wrapper.navParams.value = { accountId: 'acc-2' }
+      await flushPromises()
+
+      expect(getProjectPersonMetrics).toHaveBeenCalledWith('flightctl', 'acc-2')
+      expect(metricTileValue(wrapper, 'Resolved Issues')).toBe('9')
+    })
+
+    it('shows no Jira metrics tile for a missing publication or a missing person, without a fabricated zero', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace')])
+      getProjectPersonMetrics.mockResolvedValue({ ...UNAVAILABLE_JIRA_METRICS, reason: 'missing-person' })
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('Resolved Issues')
+      expect(wrapper.text()).not.toContain('Story Points')
+    })
+
+    it('shows a genuine zero-activity person with explicit zero counts, not an absent metrics block', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace')])
+      getProjectPersonMetrics.mockResolvedValue(availableJiraMetrics())
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Resolved Issues')
+      expect(wrapper.text()).toContain('Avg Cycle Time')
+      expect(wrapper.text()).toContain('—')
+    })
+
+    it('surfaces a partial publication without hiding otherwise-valid metrics', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace')])
+      getProjectPersonMetrics.mockResolvedValue(availableJiraMetrics({
+        partial: true,
+        metrics: { lookbackDays: 365, resolved: { count: 1, storyPoints: 10, issues: [{ key: 'FLPATH-1', summary: 'x', issueType: 'Bug', status: 'Closed', storyPoints: 10, resolutionDate: '2026-09-15T00:00:00Z', cycleTimeDays: 2 }] }, inProgress: { count: 0, storyPoints: 0, issues: [] }, cycleTime: { avgDays: 2, medianDays: 2 } }
+      }))
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Jira: partial')
+      expect(wrapper.text()).toContain('10')
+      expect(wrapper.text()).toContain('FLPATH-1')
+    })
+
+    it('uses the publication lookbackDays for the timeframe label instead of hardcoding 365 days', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace')])
+      getProjectPersonMetrics.mockResolvedValue(availableJiraMetrics({
+        metrics: { lookbackDays: 180, resolved: { count: 1, storyPoints: 1, issues: [] }, inProgress: { count: 0, storyPoints: 0, issues: [] }, cycleTime: { avgDays: 1, medianDays: 1 } }
+      }))
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('180 days')
+      expect(wrapper.text()).not.toContain('365 days')
+    })
+
+    it('ignores a stale response after the project changes mid-fetch', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace')])
+      let resolveFirst
+      getProjectPersonMetrics.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      // Switch projects before the first fetch resolves.
+      getProjectPersonMetrics.mockResolvedValue(UNAVAILABLE_JIRA_METRICS)
+      projectIdValue.value = 'other-project'
+      rosterDataValue.value = { projectId: 'other-project', teams: [], people: [] }
+      await flushPromises()
+
+      resolveFirst(availableJiraMetrics({
+        metrics: { lookbackDays: 365, resolved: { count: 99, storyPoints: 99, issues: [] }, inProgress: { count: 0, storyPoints: 0, issues: [] }, cycleTime: { avgDays: 1, medianDays: 1 } }
+      }))
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('99')
+    })
+
+    it('ignores a stale response after the person changes mid-fetch', async () => {
+      setRoster([rosterPersonFixture('acc-1', 'Ada Lovelace'), rosterPersonFixture('acc-2', 'Grace Hopper')])
+      let resolveFirst
+      getProjectPersonMetrics.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+
+      const wrapper = mountView({ accountId: 'acc-1' })
+      await flushPromises()
+
+      // Switch to a different person before the first (acc-1) fetch resolves.
+      getProjectPersonMetrics.mockResolvedValue(availableJiraMetrics({
+        accountId: 'acc-2',
+        metrics: { lookbackDays: 365, resolved: { count: 2, storyPoints: 2, issues: [] }, inProgress: { count: 0, storyPoints: 0, issues: [] }, cycleTime: { avgDays: 1, medianDays: 1 } }
+      }))
+      wrapper.navParams.value = { accountId: 'acc-2' }
+      await flushPromises()
+
+      resolveFirst(availableJiraMetrics({
+        accountId: 'acc-1',
+        metrics: { lookbackDays: 365, resolved: { count: 99, storyPoints: 99, issues: [] }, inProgress: { count: 0, storyPoints: 0, issues: [] }, cycleTime: { avgDays: 1, medianDays: 1 } }
+      }))
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('2')
+      expect(wrapper.text()).not.toContain('99')
+    })
   })
 })

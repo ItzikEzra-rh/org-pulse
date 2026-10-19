@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, inject } from 'vue'
-import { apiRequest } from '@shared/client/services/api.js'
+import { apiRequest, getProjectPersonMetrics } from '@shared/client/services/api.js'
 import { useAuth } from '@shared/client/composables/useAuth.js'
 import { useRoster } from '@shared/client/composables/useRoster.js'
 import { useProjectId } from '@shared/client/composables/useProjectId.js'
@@ -103,6 +103,9 @@ const person = ref(null)
 const managerChain = ref([])
 const directReports = ref([])
 const jiraMetrics = ref(null)
+// Project-qualified Jira metadata (availability/reason/partial/lookbackDays),
+// kept separate from jiraMetrics since the legacy OSAC path never sets it.
+const projectJiraMeta = ref(null)
 const loading = ref(true)
 const error = ref(null)
 
@@ -204,6 +207,18 @@ const accountId = computed(() => nav.params.value?.accountId)
 const fromTeamKey = computed(() => nav.params.value?.teamKey)
 const isProjectPerson = computed(() => Boolean(accountId.value))
 
+const jiraLookbackLabel = computed(() => {
+  if (isProjectPerson.value && projectJiraMeta.value?.lookbackDays != null) {
+    return `${projectJiraMeta.value.lookbackDays} days`
+  }
+  return '365 days'
+})
+
+const jiraStatusNote = computed(() => {
+  if (!isProjectPerson.value || projectJiraMeta.value?.availability !== 'available') return null
+  return projectJiraMeta.value.partial ? 'Jira: partial' : null
+})
+
 // Never resolves via the legacy registry or name fallback: a name
 // collision there could surface an unrelated OSAC person's profile.
 function loadProjectPerson() {
@@ -216,6 +231,7 @@ function loadProjectPerson() {
   directReports.value = []
   associatedTeams.value = []
   jiraMetrics.value = null
+  projectJiraMeta.value = null
 
   // Stay loading until the roster matches this project, to avoid flashing "not found".
   if (rosterData.value?.projectId !== expectedProjectId || rosterLoading.value) {
@@ -248,11 +264,46 @@ function loadProjectPerson() {
     lastSeenAt: null,
     inactiveSince: null
   }
+  loadProjectJiraMetrics(expectedProjectId, expectedAccountId)
   loadProjectContributions()
   loading.value = false
 }
 
+let jiraMetricsRequestSeq = 0
+
+// Fire-and-forget, guarded by sequence + current nav params: a slow response
+// for a person/project the user has since navigated away from must not
+// repopulate this profile.
+function loadProjectJiraMetrics(expectedProjectId, expectedAccountId) {
+  const requestId = ++jiraMetricsRequestSeq
+  const stillCurrent = () =>
+    requestId === jiraMetricsRequestSeq &&
+    projectId.value === expectedProjectId &&
+    accountId.value === expectedAccountId
+
+  getProjectPersonMetrics(expectedProjectId, expectedAccountId).then(result => {
+    if (!stillCurrent()) return
+    projectJiraMeta.value = {
+      availability: result.availability,
+      reason: result.reason,
+      partial: result.partial,
+      lookbackDays: result.metrics?.lookbackDays ?? null
+    }
+    jiraMetrics.value = result.availability === 'available' ? result.metrics : null
+  }).catch(() => {
+    if (!stillCurrent()) return
+    projectJiraMeta.value = null
+    jiraMetrics.value = null
+  })
+}
+
+let personRequestSeq = 0
+
+// Guards a legacy fetch that resolves after a newer loadPerson() call from overwriting its state.
 async function loadPerson() {
+  const requestId = ++personRequestSeq
+  const stillCurrent = () => requestId === personRequestSeq
+
   if (isProjectPerson.value) {
     loadProjectPerson()
     return
@@ -264,6 +315,7 @@ async function loadPerson() {
   error.value = null
   try {
     const data = await apiRequest('/modules/team-tracker/registry/people/' + encodeURIComponent(lookupId))
+    if (!stillCurrent()) return
     person.value = data.person
     managerChain.value = data.managerChain || []
     directReports.value = data.directReports || []
@@ -272,20 +324,24 @@ async function loadPerson() {
     // Suppress Jira/GitHub/GitLab API calls for auxiliary people
     if (person.value?.name && person.value?.orgType !== 'auxiliary') {
       try {
-        jiraMetrics.value = await apiRequest(
+        const metrics = await apiRequest(
           '/modules/team-tracker/person/' + encodeURIComponent(person.value.name) + '/metrics'
         )
+        if (!stillCurrent()) return
+        jiraMetrics.value = metrics
       } catch {
+        if (!stillCurrent()) return
         jiraMetrics.value = null
       }
     } else {
       jiraMetrics.value = null
     }
   } catch (e) {
+    if (!stillCurrent()) return
     error.value = e.message || 'Person not found'
     person.value = null
   } finally {
-    loading.value = false
+    if (stillCurrent()) loading.value = false
   }
 }
 
@@ -529,18 +585,21 @@ onBeforeUnmount(() => {
 
           <!-- Metrics (hidden for auxiliary/non-engineering people) -->
           <div v-if="!isAuxiliary && ((jiraMetrics && !jiraMetrics.nameNotFound) || githubContribs || gitlabContribs)" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-wider">Metrics</h3>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-wider">
+              Metrics
+              <span v-if="jiraStatusNote" class="ml-2 font-normal normal-case text-gray-400 dark:text-gray-500 text-xs tracking-normal">· {{ jiraStatusNote }}</span>
+            </h3>
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <template v-if="jiraMetrics && !jiraMetrics.nameNotFound">
                 <div>
-                  <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ jiraMetrics.resolved?.issues?.length || 0 }}</div>
+                  <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ jiraMetrics.resolved?.count || 0 }}</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Resolved Issues</div>
-                  <div class="text-[10px] text-gray-400 dark:text-gray-500">365 days</div>
+                  <div class="text-[10px] text-gray-400 dark:text-gray-500">{{ jiraLookbackLabel }}</div>
                 </div>
                 <div>
                   <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ jiraMetrics.resolved?.storyPoints || 0 }}</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Story Points</div>
-                  <div class="text-[10px] text-gray-400 dark:text-gray-500">365 days</div>
+                  <div class="text-[10px] text-gray-400 dark:text-gray-500">{{ jiraLookbackLabel }}</div>
                 </div>
                 <div>
                   <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ jiraMetrics.cycleTime?.avgDays != null ? jiraMetrics.cycleTime.avgDays + 'd' : '—' }}</div>

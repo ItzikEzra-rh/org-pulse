@@ -109,6 +109,10 @@ export async function getTeamMetrics(teamKey, projectId) {
   return apiRequest(`/team/${encodeURIComponent(teamKey)}/metrics${suffix}`)
 }
 
+export async function getProjectPersonMetrics(projectId, accountId) {
+  return apiRequest(`/modules/team-tracker/project-person-metrics?projectId=${encodeURIComponent(projectId)}&accountId=${encodeURIComponent(accountId)}`)
+}
+
 // ─── Unified Refresh ───
 
 export async function refreshMetrics({ scope, name, teamKey, orgKey, force, sources } = {}) {

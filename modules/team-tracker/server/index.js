@@ -3,7 +3,7 @@ module.exports = function registerRoutes(router, context) {
   const { readFromStorage, writeToStorage, listStorageFiles, deleteStorageDirectory } = storage;
   const { readProjectPeopleTeams } = require('./project-roster');
   const { readProjectContributions } = require('./project-contributions');
-  const { readProjectTrends, readProjectTeamMetrics } = require('./project-jira-metrics');
+  const { readProjectTrends, readProjectTeamMetrics, readProjectPersonMetrics } = require('./project-jira-metrics');
   const { resolveProjectSelection } = require('../../../shared/server/project-profile');
 
   // Register module scopes
@@ -2986,6 +2986,64 @@ module.exports = function registerRoutes(router, context) {
       return res.status(404).json({ error: `No cached data for ${name}. Trigger a refresh to fetch data.` });
     } catch (error) {
       console.error(`Person metrics error (${req.params.jiraDisplayName}):`, error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/modules/team-tracker/project-person-metrics:
+   *   get:
+   *     tags: ['TT: Metrics']
+   *     summary: Get project-qualified Jira person metrics
+   *     description: >-
+   *       Canonical per-person Jira metrics for a project, sourced from the
+   *       jira-person-metrics publication and joined by (projectId, accountId).
+   *       Never falls back to the legacy OSAC display-name-keyed metrics cache.
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string }
+   *         description: Canonical project id (e.g. `flightctl`); surrounding whitespace is rejected.
+   *       - in: query
+   *         name: accountId
+   *         required: true
+   *         schema: { type: string }
+   *         description: Jira account id of the person.
+   *     responses:
+   *       200:
+   *         description: >-
+   *           Project person metrics read model (availability
+   *           available/unavailable). A person with no published Jira
+   *           activity, or a project that has not published this source, is
+   *           reported as unavailable here, not as a 404.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ProjectPersonMetricsResponse'
+   *       400:
+   *         description: projectId or accountId is missing or malformed.
+   *       404:
+   *         description: Unknown project.
+   *       500:
+   *         description: Unexpected error while reading the publication.
+   *       502:
+   *         description: Publication present but malformed or project identity mismatch.
+   *       503:
+   *         description: The project publication reader is unavailable.
+   */
+  router.get('/project-person-metrics', requireScope('metrics:read'), function(req, res) {
+    try {
+      const selection = resolveProjectSelection(context.projects, req.query);
+      if (selection.status) return res.status(selection.status).json({ error: selection.error });
+      if (!selection.provided) return res.status(400).json({ error: 'projectId is required' });
+      const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : '';
+      const result = readProjectPersonMetrics(context.projects, selection.projectId, accountId, readFromStorage);
+      if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+      return res.json(result.model);
+    } catch (error) {
+      console.error('Read project person metrics error:', error);
       res.status(500).json({ error: error.message });
     }
   });

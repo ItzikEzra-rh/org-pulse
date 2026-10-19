@@ -256,4 +256,59 @@ function readProjectTeamMetrics(projects, projectId, teamId, readFromStorage) {
   return { status: 200, model: _buildTeamMetricsModel(projectId, team, loaded.partial) };
 }
 
-module.exports = { ARTIFACT_KEY, readProjectTrends, readProjectTeamMetrics };
+function _buildPersonMetricsModel(projectId, accountId, loaded) {
+  const person = loaded.people.find(p => p.accountId === accountId);
+  if (!person) {
+    // loaded.partial, not false: a partial publication's absent person may
+    // just be missing from an incomplete collection, not a confirmed zero.
+    return _unavailablePersonMetricsModel(projectId, accountId, loaded, {
+      reason: 'missing-person',
+      partial: loaded.partial
+    });
+  }
+
+  return {
+    projectId,
+    accountId,
+    availability: 'available',
+    reason: null,
+    publicationState: loaded.publicationState,
+    generatedAt: loaded.generatedAt,
+    partial: loaded.partial,
+    metrics: {
+      lookbackDays: typeof person.lookbackDays === 'number' ? person.lookbackDays : null,
+      resolved: person.resolved,
+      inProgress: person.inProgress,
+      cycleTime: person.cycleTime
+    }
+  };
+}
+
+function _unavailablePersonMetricsModel(projectId, accountId, loaded, overrides = {}) {
+  return {
+    projectId,
+    accountId,
+    availability: 'unavailable',
+    reason: loaded.reason,
+    publicationState: loaded.publicationState,
+    generatedAt: loaded.generatedAt,
+    partial: false,
+    metrics: null,
+    ...overrides
+  };
+}
+
+// A person absent from the publication is "missing-person", not a 404: an
+// accountId may legitimately have no published Jira activity yet.
+function readProjectPersonMetrics(projects, projectId, accountId, readFromStorage) {
+  if (typeof accountId !== 'string' || !accountId.trim()) {
+    return { status: 400, error: 'Invalid account id' };
+  }
+
+  const loaded = _loadProjectJiraMetricsData(projects, projectId, readFromStorage);
+  if (loaded.kind === 'error') return { status: loaded.status, error: loaded.error };
+  if (loaded.kind === 'unavailable') return { status: 200, model: _unavailablePersonMetricsModel(projectId, accountId, loaded) };
+  return { status: 200, model: _buildPersonMetricsModel(projectId, accountId, loaded) };
+}
+
+module.exports = { ARTIFACT_KEY, readProjectTrends, readProjectTeamMetrics, readProjectPersonMetrics };
