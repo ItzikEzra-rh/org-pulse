@@ -10,12 +10,21 @@ import { useProjectContributions } from '@shared/client/composables/useProjectCo
 import { usePermissions } from '@shared/client/composables/usePermissions.js'
 import { useImpersonation } from '@shared/client/composables/useImpersonation.js'
 import { useFieldDefinitions } from '@shared/client/composables/useFieldDefinitions.js'
+import { getManagerChain, getDirectReports, getHierarchyAvailability } from '@shared/client/composables/useManagerHierarchy.js'
 import PersonFieldEditor from '../components/PersonFieldEditor.vue'
 import { useManagerTutorial } from '../composables/useManagerTutorial'
 
 const nav = inject('moduleNav')
 const { isAdmin, refresh: refreshAuth } = useAuth()
-const { getTeamsForPerson, teams: allTeams, rosterData, loading: rosterLoading, getPersonByAccountId } = useRoster()
+const {
+  getTeamsForPerson,
+  teams: allTeams,
+  rosterData,
+  loading: rosterLoading,
+  getPersonByAccountId,
+  people: rosterPeople,
+  auxiliaryManagers
+} = useRoster()
 const projectId = useProjectId()
 const { canEdit, refresh: refreshPermissions } = usePermissions()
 const { startImpersonating } = useImpersonation()
@@ -207,6 +216,21 @@ const accountId = computed(() => nav.params.value?.accountId)
 const fromTeamKey = computed(() => nav.params.value?.teamKey)
 const isProjectPerson = computed(() => Boolean(accountId.value))
 
+// OSAC's registry endpoint always returns a resolved chain; only the
+// project path depends on whether enrichment actually joined.
+const hierarchyAvailability = computed(() => {
+  if (!isProjectPerson.value) return { available: true, indicator: null }
+  return getHierarchyAvailability(rosterData.value?.enrichment)
+})
+const hierarchyAvailable = computed(() => hierarchyAvailability.value.available)
+const hierarchyIndicator = computed(() => hierarchyAvailability.value.indicator)
+
+// Terminal sentinels (`end`/`unresolved`) carry no `name` and are filtered
+// from display; an `unresolved` tail is flagged separately as incomplete.
+const managerChainDisplay = computed(() => managerChain.value.filter(node => node.name))
+const managerChainReversed = computed(() => [...managerChainDisplay.value].reverse())
+const managerChainIncomplete = computed(() => managerChain.value[managerChain.value.length - 1]?.kind === 'unresolved')
+
 const jiraLookbackLabel = computed(() => {
   if (isProjectPerson.value && projectJiraMeta.value?.lookbackDays != null) {
     return `${projectJiraMeta.value.lookbackDays} days`
@@ -264,6 +288,11 @@ function loadProjectPerson() {
     lastSeenAt: null,
     inactiveSince: null
   }
+  managerChain.value = getManagerChain(expectedAccountId, {
+    people: rosterPeople.value,
+    auxiliaryManagers: auxiliaryManagers.value
+  })
+  directReports.value = getDirectReports(expectedAccountId, { people: rosterPeople.value })
   loadProjectJiraMetrics(expectedProjectId, expectedAccountId)
   loadProjectContributions()
   loading.value = false
@@ -358,8 +387,14 @@ function goBack() {
   }
 }
 
-function openPerson(personUid) {
-  nav.navigateTo('person-detail', { uid: personUid })
+// Legacy OSAC nodes carry `uid`; project nodes carry `accountId` and are only
+// clickable when `navigable` (external auxiliary managers never are).
+function openHierarchyNode(node) {
+  if (node.uid) {
+    nav.navigateTo('person-detail', { uid: node.uid })
+  } else if (node.navigable && node.accountId) {
+    nav.navigateTo('person-detail', { accountId: node.accountId })
+  }
 }
 
 function startEdit(field) {
@@ -783,15 +818,20 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-wider">Manager Chain</h3>
-            <div v-if="managerChain.length === 0" class="text-sm text-gray-400 dark:text-gray-500">No managers found</div>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-wider">
+              Manager Chain
+              <span v-if="hierarchyIndicator" class="font-normal normal-case tracking-normal text-gray-400"> · {{ hierarchyIndicator }}</span>
+            </h3>
+            <div v-if="isProjectPerson && !hierarchyAvailable" class="text-sm text-gray-400 dark:text-gray-500">Manager hierarchy unavailable</div>
+            <div v-else-if="managerChainDisplay.length === 0 && !managerChainIncomplete" class="text-sm text-gray-400 dark:text-gray-500">No manager on record</div>
             <div v-else class="space-y-1">
-              <div v-for="(mgr, i) in [...managerChain].reverse()" :key="mgr.uid" class="flex items-center gap-2">
+              <div v-for="(mgr, i) in managerChainReversed" :key="mgr.uid || mgr.accountId || mgr.ldapUid" class="flex items-center gap-2">
                 <div class="flex flex-col items-center" style="width: 16px">
                   <div v-if="i > 0" class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
-                  <div class="w-2 h-2 rounded-full" :class="i === managerChain.length - 1 ? 'bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'"></div>
+                  <div class="w-2 h-2 rounded-full" :class="i === managerChainReversed.length - 1 ? 'bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'"></div>
                 </div>
-                <button @click="openPerson(mgr.uid)" class="text-sm text-primary-600 dark:text-primary-400 hover:underline truncate">{{ mgr.name }}</button>
+                <button v-if="mgr.uid || mgr.navigable" @click="openHierarchyNode(mgr)" class="text-sm text-primary-600 dark:text-primary-400 hover:underline truncate">{{ mgr.name }}</button>
+                <span v-else class="text-sm text-gray-500 dark:text-gray-400 truncate">{{ mgr.name }}</span>
               </div>
               <div class="flex items-center gap-2">
                 <div class="flex flex-col items-center" style="width: 16px">
@@ -800,18 +840,20 @@ onBeforeUnmount(() => {
                 </div>
                 <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ person.name }}</span>
               </div>
+              <div v-if="managerChainIncomplete" class="text-xs text-gray-400 dark:text-gray-500 pt-1">Chain incomplete beyond this point</div>
             </div>
           </div>
 
-          <div v-if="directReports.length > 0" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <div v-if="directReports.length > 0 || (isProjectPerson && !hierarchyAvailable)" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-wider">
-              Direct Reports <span class="font-normal text-gray-400">({{ directReports.length }})</span>
+              Direct Reports <span v-if="directReports.length > 0" class="font-normal text-gray-400">({{ directReports.length }})</span>
             </h3>
-            <div class="space-y-2">
+            <div v-if="isProjectPerson && !hierarchyAvailable" class="text-sm text-gray-400 dark:text-gray-500">Direct reports unavailable</div>
+            <div v-else class="space-y-2">
               <button
                 v-for="dr in directReports"
-                :key="dr.uid"
-                @click="openPerson(dr.uid)"
+                :key="dr.uid || dr.accountId"
+                @click="openHierarchyNode(dr)"
                 class="w-full text-left flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
               >
                 <div class="min-w-0">

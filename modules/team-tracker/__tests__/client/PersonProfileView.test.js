@@ -8,6 +8,7 @@ const rosterTeamsValue = ref([])
 const rosterDataValue = ref(null)
 const rosterLoadingValue = ref(false)
 const isAdminValue = ref(false)
+const auxiliaryManagersValue = ref({})
 const mockLoadGitlabStats = vi.fn()
 
 // useProjectContributions calls useProjectId() at import time, so this ref must be
@@ -23,7 +24,9 @@ vi.mock('@shared/client/composables/useRoster.js', () => ({
     teams: rosterTeamsValue,
     rosterData: rosterDataValue,
     loading: rosterLoadingValue,
-    getPersonByAccountId: (accountId) => rosterPeople.value.find(p => p.accountId === accountId) || null
+    getPersonByAccountId: (accountId) => rosterPeople.value.find(p => p.accountId === accountId) || null,
+    people: rosterPeople,
+    auxiliaryManagers: auxiliaryManagersValue
   })
 }))
 
@@ -138,6 +141,7 @@ describe('PersonProfileView', () => {
     rosterDataValue.value = null
     rosterLoadingValue.value = false
     isAdminValue.value = false
+    auxiliaryManagersValue.value = {}
     getProjectPersonMetrics.mockResolvedValue(UNAVAILABLE_JIRA_METRICS)
   })
 
@@ -783,6 +787,206 @@ describe('PersonProfileView', () => {
 
       expect(wrapper.text()).toContain('2')
       expect(wrapper.text()).not.toContain('99')
+    })
+  })
+
+  describe('project-qualified manager hierarchy', () => {
+    function mountViewWithNav(params) {
+      const navigateTo = vi.fn()
+      const wrapper = mount(PersonProfileView, {
+        global: {
+          provide: {
+            moduleNav: { params: ref(params), goBack: vi.fn(), navigateTo, updateParams: vi.fn() }
+          }
+        }
+      })
+      mountedWrappers.push(wrapper)
+      return { wrapper, navigateTo }
+    }
+
+    function person(accountId, overrides = {}) {
+      return {
+        accountId,
+        displayName: accountId,
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        manager: null,
+        managerRef: null,
+        geo: null,
+        identities: {},
+        ...overrides
+      }
+    }
+
+    it('renders the manager chain and direct reports, and navigates by accountId', async () => {
+      rosterPeople.value = [
+        person('ic-1', { displayName: 'IC One', managerRef: { kind: 'roster', accountId: 'mgr-1' } }),
+        person('mgr-1', { displayName: 'Manager One' }),
+        person('report-1', { displayName: 'Report One', title: 'Engineer', managerRef: { kind: 'roster', accountId: 'ic-1' } })
+      ]
+      rosterDataValue.value = {
+        projectId: 'flightctl',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'fresh', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+
+      const { wrapper, navigateTo } = mountViewWithNav({ accountId: 'ic-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Manager One')
+      expect(wrapper.text()).toContain('Report One')
+
+      await wrapper.findAll('button').find(b => b.text() === 'Manager One').trigger('click')
+      expect(navigateTo).toHaveBeenCalledWith('person-detail', { accountId: 'mgr-1' })
+
+      await wrapper.findAll('button').find(b => b.text().includes('Report One')).trigger('click')
+      expect(navigateTo).toHaveBeenCalledWith('person-detail', { accountId: 'report-1' })
+    })
+
+    it('renders an external auxiliary manager as non-navigable text', async () => {
+      rosterPeople.value = [
+        person('ic-1', { displayName: 'IC One', managerRef: { kind: 'external', ldapUid: 'director1' } })
+      ]
+      auxiliaryManagersValue.value = {
+        director1: { ldapUid: 'director1', displayName: 'Director One', managerRef: null }
+      }
+      rosterDataValue.value = {
+        projectId: 'flightctl',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'fresh', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+
+      const wrapper = mountView({ accountId: 'ic-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Director One')
+      expect(wrapper.findAll('button').find(b => b.text() === 'Director One')).toBeUndefined()
+    })
+
+    it('reports the hierarchy as unavailable, not as an empty org, when enrichment never joined', async () => {
+      rosterPeople.value = [person('ic-1', { displayName: 'IC One' })]
+      // No `enrichment` key at all: the publication never joined.
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+
+      const wrapper = mountView({ accountId: 'ic-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Manager hierarchy unavailable')
+      expect(wrapper.text()).toContain('Direct reports unavailable')
+      expect(wrapper.text()).not.toContain('No manager on record')
+    })
+
+    it('flags an unresolved chain as incomplete and surfaces a stale indicator, without claiming the org has no managers', async () => {
+      rosterPeople.value = [
+        person('ic-1', { displayName: 'IC One', managerRef: { kind: 'roster', accountId: 'ghost' } })
+      ]
+      rosterDataValue.value = {
+        projectId: 'flightctl',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'stale', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+
+      const wrapper = mountView({ accountId: 'ic-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('stale')
+      expect(wrapper.text()).toContain('Chain incomplete beyond this point')
+      expect(wrapper.text()).not.toContain('No manager on record')
+    })
+
+    it('hedges a null managerRef as "no manager on record" rather than a verified empty org', async () => {
+      rosterPeople.value = [person('ic-1', { displayName: 'IC One', managerRef: null })]
+      rosterDataValue.value = {
+        projectId: 'flightctl',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'fresh', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+
+      const wrapper = mountView({ accountId: 'ic-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('No manager on record')
+    })
+
+    it('surfaces both the stale and partial enrichment signals together', async () => {
+      rosterPeople.value = [
+        person('ic-1', { displayName: 'IC One', managerRef: { kind: 'roster', accountId: 'mgr-1' } }),
+        person('mgr-1', { displayName: 'Manager One' })
+      ]
+      rosterDataValue.value = {
+        projectId: 'flightctl',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'stale', partial: true, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+
+      const wrapper = mountView({ accountId: 'ic-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('stale, partial')
+    })
+
+    it('isolates hierarchy data per project: the same accountId in two projects does not leak managers', async () => {
+      rosterPeople.value = [
+        person('shared-id', { displayName: 'Shared Person', managerRef: { kind: 'roster', accountId: 'mgr-flightctl' } }),
+        person('mgr-flightctl', { displayName: 'FlightCtl Manager' })
+      ]
+      rosterDataValue.value = {
+        projectId: 'flightctl',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'fresh', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+
+      const wrapper = mountView({ accountId: 'shared-id' })
+      await flushPromises()
+      expect(wrapper.text()).toContain('FlightCtl Manager')
+
+      projectIdValue.value = 'other-project'
+      rosterPeople.value = [
+        person('shared-id', { displayName: 'Shared Person', managerRef: { kind: 'roster', accountId: 'mgr-other' } }),
+        person('mgr-other', { displayName: 'Other Project Manager' })
+      ]
+      rosterDataValue.value = {
+        projectId: 'other-project',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'fresh', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Other Project Manager')
+      expect(wrapper.text()).not.toContain('FlightCtl Manager')
+    })
+
+    it('clears a prior person\'s manager chain and direct reports while the next one is still resolving', async () => {
+      rosterPeople.value = [
+        person('ic-1', { displayName: 'IC One', managerRef: { kind: 'roster', accountId: 'mgr-1' } }),
+        person('mgr-1', { displayName: 'Manager One' })
+      ]
+      rosterDataValue.value = {
+        projectId: 'flightctl',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'fresh', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+
+      const wrapper = mountView({ accountId: 'ic-1' })
+      await flushPromises()
+      expect(wrapper.text()).toContain('Manager One')
+
+      // Roster clears mid project-switch, before the next project's publication lands.
+      rosterDataValue.value = null
+      rosterLoadingValue.value = true
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('Manager One')
     })
   })
 })
