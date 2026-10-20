@@ -372,6 +372,50 @@ test.describe('People & Teams Project-Qualified Roster @people-teams', () => {
 });
 
 /**
+ * Project-Qualified Manager Dashboard (OSAC-6322)
+ *
+ * Demo mode's local-dev user is a privileged (admin) identity, not a verified
+ * manager, so these tests exercise the admin nav bypass and the honest
+ * no-registry-identity empty state rather than a populated purview.
+ */
+test.describe('People & Teams Manager Dashboard @people-teams', () => {
+  const FLIGHTCTL = 'flightctl';
+
+  test.beforeEach(async ({ page }) => {
+    setupErrorTracking(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    logCapturedErrors(page, testInfo);
+  });
+
+  test('My Teams nav item appears for a privileged user once a Flight Control project is selected', async ({ page }) => {
+    await page.goto(`/#/team-tracker/home?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const myTeamsItem = page.locator('aside nav button').filter({ hasText: 'My Teams' });
+    await expect(myTeamsItem.first()).toBeVisible();
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Manager Dashboard honestly reports no registry identity for Flight Control', async ({ page }) => {
+    await page.goto(`/#/team-tracker/manager-dashboard?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(await mainContentIsVisible(page)).toBe(true);
+    expect(await pageLoadComplete(page)).toBe(true);
+
+    const bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).toContain('No Registry Identity');
+
+    expect(page.errors).toHaveLength(0);
+  });
+});
+
+/**
  * Project-Qualified Jira Person Metrics (OSAC-6322)
  * Verifies the endpoint is wired end to end and never falls back to legacy OSAC metrics.
  */

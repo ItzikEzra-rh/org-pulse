@@ -22,7 +22,7 @@ Core team owns `shared/` via CODEOWNERS. Changes require core team review.
 | `useAuth()` | Current user info, admin status, team-admin status, roles. Exports `isAdmin`, `isTeamAdmin`, `roles`, `apiBaseUrl`, `jiraDisplayName` (resolved via roster registry, null if unavailable), `refresh()`. |
 | `useGithubStats()` | GitHub contribution data with fetch/refresh |
 | `useGitlabStats()` | GitLab contribution data with fetch/refresh. Exports `getProfileUrls(gitlabUsername)` returning `[{ baseUrl, label, url }]` for per-instance profile links. |
-| `usePermissions()` | Reactive permission state: roles, managed UIDs, `isAdmin`, `isTeamAdmin`, `isManager`, `canEdit(uid)`, `canEditTeam(teamId)` |
+| `usePermissions()` | Reactive permission state: roles, managed UIDs, `isAdmin`, `isTeamAdmin`, `isManager`, `canEdit(uid)`, `canEditTeam(teamId)`. In project mode also exposes `hierarchyStatus` (`'available'`/`'stale'`/`'partial'`/`'absent'`/`'unavailable'`/`null`) and `hierarchyAvailable` — a read-only availability signal, independent of `isManager`, so UI can explain an absent/partial/expired manager hierarchy without granting privileges. |
 | `useTeams()` | Team CRUD, member assignment, bulk assign, unassigned people |
 | `useFieldDefinitions()` | Field definition CRUD, person field value updates |
 | `useAllowlist()` | Allowlist management (admin only) |

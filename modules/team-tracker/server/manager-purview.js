@@ -88,4 +88,72 @@ function getManagerPurview(managerUid, registry, teamsData, options = {}) {
   return result;
 }
 
-module.exports = { getManagerPurview };
+/**
+ * Adapts a project-qualified roster read model into the `{ registry, teamsData }`
+ * shapes getManagerPurview consumes, so projects reuse the OSAC hierarchy engine.
+ *
+ * Identity is `accountId`. Only a `roster` managerRef whose target is present in
+ * the model becomes a `managerUid` edge; `external`/`unresolved`/dangling refs
+ * produce no edge (relationship kept on the record for display, never fabricated).
+ */
+function buildProjectManagerModel(model) {
+  const people = {};
+  const teams = {};
+  if (!model || typeof model !== 'object') {
+    return { registry: { people }, teamsData: { teams } };
+  }
+
+  // A missing/blank accountId can't be a registry key without colliding across records.
+  const validPeople = (model.people || []).filter(p => p && typeof p.accountId === 'string' && p.accountId);
+  const accountIds = new Set(validPeople.map(p => p.accountId));
+  for (const person of validPeople) {
+    const ref = person.managerRef;
+    const managerUid = ref && ref.kind === 'roster' && accountIds.has(ref.accountId)
+      ? ref.accountId
+      : null;
+    people[person.accountId] = {
+      uid: person.accountId,
+      accountId: person.accountId,
+      projectId: model.projectId,
+      name: person.displayName,
+      email: person.email || null,
+      title: person.title || null,
+      status: person.active ? 'active' : 'inactive',
+      managerUid,
+      managerRef: ref || null,
+      teamIds: Array.isArray(person.teamIds) ? [...person.teamIds] : []
+    };
+  }
+
+  for (const team of model.teams || []) {
+    teams[team.id] = {
+      id: team.id,
+      name: team.displayName,
+      // In a project read model every team belongs to the one project, so the
+      // projectId plays the org-scoping role that orgKey plays for OSAC.
+      orgKey: model.projectId,
+      metadata: {},
+      boards: []
+    };
+  }
+
+  return { registry: { people }, teamsData: { teams } };
+}
+
+/** Resolve the user's accountId by email (active people only, never by name); fails closed on an ambiguous match. */
+function resolveProjectManagerAccountId(model, email) {
+  if (!model || !email || typeof email !== 'string') return null;
+  const target = email.toLowerCase();
+  const matches = new Set();
+  for (const person of model.people || []) {
+    if (!person.active) continue;
+    if (person.email && person.email.toLowerCase() === target) matches.add(person.accountId);
+  }
+  return matches.size === 1 ? [...matches][0] : null;
+}
+
+module.exports = {
+  getManagerPurview,
+  buildProjectManagerModel,
+  resolveProjectManagerAccountId
+};

@@ -1,5 +1,6 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { apiRequest } from '@shared/client/services/api'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 
 const manager = ref(null)
 const directReports = ref([])
@@ -14,15 +15,46 @@ const loading = ref(false)
 const error = ref(null)
 const reason = ref(null)
 const includeIndirect = ref(false)
+const availability = ref(null)
+const generatedAt = ref(null)
+const enrichment = ref(null)
+const projectId = useProjectId()
+
+// Guards against a slow earlier request overwriting a later project's state.
+let loadSequence = 0
 
 export function useManagerDashboard() {
+  const isProjectMode = computed(() => Boolean(projectId.value) && projectId.value !== 'osac')
+
+  function resetState() {
+    manager.value = null
+    directReports.value = []
+    indirectReports.value = []
+    teams.value = []
+    allOrgTeams.value = []
+    allPeople.value = []
+    referencedPeople.value = {}
+    fieldDefinitions.value = { person: [], team: [] }
+    fieldExceptions.value = []
+    reason.value = null
+    availability.value = null
+    generatedAt.value = null
+    enrichment.value = null
+  }
+
   async function load() {
+    const requestId = ++loadSequence
+    const requestedProjectId = projectId.value
     loading.value = true
     error.value = null
     reason.value = null
     try {
-      const params = includeIndirect.value ? '?includeIndirect=true' : ''
-      const data = await apiRequest(`/modules/team-tracker/manager/dashboard${params}`)
+      const params = new URLSearchParams()
+      if (requestedProjectId) params.set('projectId', requestedProjectId)
+      if (includeIndirect.value) params.set('includeIndirect', 'true')
+      const query = params.toString() ? `?${params.toString()}` : ''
+      const data = await apiRequest(`/modules/team-tracker/manager/dashboard${query}`)
+      if (requestId !== loadSequence || projectId.value !== requestedProjectId) return
       manager.value = data.manager || null
       directReports.value = data.directReports || []
       indirectReports.value = data.indirectReports || []
@@ -33,10 +65,15 @@ export function useManagerDashboard() {
       fieldDefinitions.value = data.fieldDefinitions || { person: [], team: [] }
       fieldExceptions.value = data.fieldExceptions || []
       reason.value = data.reason || null
+      availability.value = data.availability || null
+      generatedAt.value = data.generatedAt || null
+      enrichment.value = data.enrichment || null
     } catch (err) {
+      if (requestId !== loadSequence || projectId.value !== requestedProjectId) return
       error.value = err.message
+      resetState()
     } finally {
-      loading.value = false
+      if (requestId === loadSequence) loading.value = false
     }
   }
 
@@ -58,7 +95,13 @@ export function useManagerDashboard() {
     error,
     reason,
     includeIndirect,
+    availability,
+    generatedAt,
+    enrichment,
+    projectId,
+    isProjectMode,
     load,
-    refresh
+    refresh,
+    resetState
   }
 }

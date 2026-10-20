@@ -12,6 +12,7 @@
       :is-admin="authIsAdmin"
       :is-team-admin="authIsTeamAdmin"
       :is-manager="authIsManager"
+      :hierarchy-available="authHierarchyAvailable"
       :roles="authRoles"
       :modules="gitStaticModules"
       :built-in-manifests="builtInManifests"
@@ -267,7 +268,7 @@ export default {
   setup() {
     const { user: authUser, isAdmin: authIsAdmin, isTeamAdmin: authIsTeamAdmin, roles: authRoles, refresh: refreshAuth } = useAuth()
     const { isImpersonating, impersonatingUid: impersonatingUidRef, impersonatingName: impersonatingNameRef, stopImpersonating } = useImpersonation()
-    const { isManager: authIsManager, refresh: refreshPermissions } = usePermissions()
+    const { isManager: authIsManager, hierarchyAvailable: authHierarchyAvailable, refresh: refreshPermissions } = usePermissions()
     const { loadRoster, reloadRoster, teams, selectedOrgKey, selectOrg, rosterData } = useRoster()
     const { loadGithubStats, reloadGithubStats } = useGithubStats()
     const { loadGitlabStats, reloadGitlabStats } = useGitlabStats()
@@ -415,6 +416,7 @@ export default {
       authIsTeamAdmin,
       authRoles,
       authIsManager,
+      authHierarchyAvailable,
       isImpersonating,
       impersonatingUidValue,
       impersonatingDisplayName,

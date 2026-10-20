@@ -129,6 +129,8 @@ import {
 } from 'lucide-vue-next'
 import Sortable from 'sortablejs'
 import { useAuth } from '@shared/client/composables/useAuth.js'
+import { usePermissions } from '@shared/client/composables/usePermissions.js'
+import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { loadModuleWidget } from '../module-loader'
 import { useSotuLayout } from '../composables/useSotuLayout.js'
 import SotuWidget from './SotuWidget.vue'
@@ -141,7 +143,13 @@ const props = defineProps({
 
 defineEmits(['navigate'])
 
-const { isManager, isTeamAdmin } = useAuth()
+const { isManager: isOsacManager, isTeamAdmin } = useAuth()
+const { isManager: isProjectManager, hierarchyAvailable: isProjectHierarchyAvailable } = usePermissions()
+const projectId = useProjectId()
+const isProjectMode = computed(() => Boolean(projectId.value) && projectId.value !== 'osac')
+// A project-only manager has no legacy OSAC manager flag, so OSAC and project
+// mode each need their own source of truth here.
+const isManager = computed(() => isProjectMode.value ? isProjectManager.value : isOsacManager.value)
 const showWidgetPicker = ref(false)
 const gridRef = ref(null)
 const topSectionRef = ref(null)
@@ -204,7 +212,14 @@ const allWidgets = computed(() => {
     const sotuWidgets = mod.client?.sotuWidgets
     if (!sotuWidgets || !Array.isArray(sotuWidgets)) continue
     for (const w of sotuWidgets) {
-      if (w.requireRole === 'manager' && !isManager.value) continue
+      if (w.requireRole === 'manager' && !isManager.value) {
+        // In project mode, keep a manager widget visible when the project's manager
+        // hierarchy can't be determined (absent/partial/expired), so it can render a
+        // read-only explanation instead of silently vanishing. The widget self-gates
+        // data loading on isManager, so this grants no manager data or privilege.
+        const keepForUnknownHierarchy = isProjectMode.value && !isProjectHierarchyAvailable.value
+        if (!keepForUnknownHierarchy) continue
+      }
       if (w.requireRole === 'team-admin' && !isTeamAdmin.value) continue
       widgets.push({
         qualifiedId: `${mod.slug}:${w.id}`,
@@ -223,13 +238,28 @@ const allWidgets = computed(() => {
   return widgets
 })
 
-// Seed first-time layout with default widgets, then prune stale widgets when manifests change
+// Unfiltered by role — only a widget missing from every manifest is "stale".
+const allManifestWidgetIds = computed(() => {
+  const ids = []
+  for (const mod of props.builtInManifests) {
+    const sotuWidgets = mod.client?.sotuWidgets
+    if (!sotuWidgets || !Array.isArray(sotuWidgets)) continue
+    for (const w of sotuWidgets) {
+      ids.push(`${mod.slug}:${w.id}`)
+    }
+  }
+  return ids
+})
+
+// Seed first-time layout with default widgets, then prune stale widgets when manifests change.
+// Guards on the unfiltered id list, not role-filtered `widgets` — a role that
+// currently hides every widget must not be mistaken for manifests not loaded yet.
 watch(allWidgets, (widgets) => {
-  if (widgets.length === 0) return
+  if (allManifestWidgetIds.value.length === 0) return
   if (isFirstVisit.value) {
     initWithDefaults(widgets.filter(w => w.default))
   }
-  pruneStaleWidgets(widgets.map(w => w.qualifiedId))
+  pruneStaleWidgets(allManifestWidgetIds.value)
 }, { immediate: true })
 
 // Widget component cache

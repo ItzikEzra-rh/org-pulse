@@ -257,6 +257,7 @@ const props = defineProps({
   isAdmin: Boolean,
   isTeamAdmin: { type: Boolean, default: false },
   isManager: { type: Boolean, default: false },
+  hierarchyAvailable: { type: Boolean, default: true },
   roles: { type: Array, default: () => [] },
   modules: { type: Array, default: () => [] },
   builtInManifests: { type: Array, default: () => [] },
@@ -334,12 +335,17 @@ const navSections = computed(() => {
       headerIcon: resolveIcon(manifest.icon),
       items: navItems
         .filter(item => {
-          if (item.requireCondition === 'in-app-mode' && props.teamDataSource !== 'in-app') return false
+          // Project rosters have no teamDataSource; a selected non-OSAC project satisfies this gate instead.
+          const inProjectContext = Boolean(props.projectId) && props.projectId !== 'osac'
+          if (item.requireCondition === 'in-app-mode' && props.teamDataSource !== 'in-app' && !inProjectContext) return false
           if (!item.requireRole) return true
           if (props.isAdmin) return true
           if (props.roles.includes(item.requireRole)) return true
           // Fallback: team-admin sees manager items too
           if (item.requireRole === 'manager' && (props.isTeamAdmin || props.isManager)) return true
+          // Unknown hierarchy (not a verified non-manager): surface the read-only
+          // explanation instead of hiding the nav; isManager itself stays fail-closed.
+          if (item.requireRole === 'manager' && inProjectContext && !props.hierarchyAvailable) return true
           if (item.requireRole === 'team-admin' && props.isTeamAdmin) return true
           return false
         })

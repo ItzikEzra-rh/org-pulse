@@ -26,11 +26,14 @@ vi.mock('@shared/client/composables/useAuth', () => ({
 }))
 
 const mockUserUid = ref('jsmith')
+const mockProjectIsManager = ref(false)
+const mockPermissionsLoading = ref(false)
 
 vi.mock('@shared/client/composables/usePermissions', () => ({
   usePermissions: () => ({
     userUid: mockUserUid,
-    loading: ref(false)
+    isManager: mockProjectIsManager,
+    loading: mockPermissionsLoading
   })
 }))
 
@@ -60,7 +63,10 @@ const mockManagedTeams = ref([])
 const mockManagerLoading = ref(false)
 const mockManagerError = ref(null)
 const mockIncludeIndirect = ref(false)
+const mockProjectId = ref(null)
+const mockIsProjectMode = computed(() => Boolean(mockProjectId.value) && mockProjectId.value !== 'osac')
 const mockLoadManagerDashboard = vi.fn(() => Promise.resolve())
+const mockResetState = vi.fn()
 
 vi.mock('../../client/composables/useManagerDashboard', () => ({
   useManagerDashboard: () => ({
@@ -68,7 +74,10 @@ vi.mock('../../client/composables/useManagerDashboard', () => ({
     loading: mockManagerLoading,
     error: mockManagerError,
     includeIndirect: mockIncludeIndirect,
-    load: mockLoadManagerDashboard
+    projectId: mockProjectId,
+    isProjectMode: mockIsProjectMode,
+    load: mockLoadManagerDashboard,
+    resetState: mockResetState
   })
 }))
 
@@ -90,6 +99,8 @@ function makeFieldDefs({ personFields = [], teamFields = [] } = {}) {
 beforeEach(() => {
   mockUser.value = { email: 'jsmith@redhat.com', isManager: false }
   mockUserUid.value = 'jsmith'
+  mockProjectIsManager.value = false
+  mockPermissionsLoading.value = false
   mockTeams.value = []
   mockRosterLoading.value = false
   mockDefinitions.value = { personFields: [], teamFields: [] }
@@ -98,9 +109,11 @@ beforeEach(() => {
   mockManagerLoading.value = false
   mockManagerError.value = null
   mockIncludeIndirect.value = false
+  mockProjectId.value = null
   mockNavigateTo.mockClear()
   mockLoadManagerDashboard.mockClear()
   mockLoadManagerDashboard.mockImplementation(() => Promise.resolve())
+  mockResetState.mockClear()
 })
 
 describe('ManagedTeamsWidget', () => {

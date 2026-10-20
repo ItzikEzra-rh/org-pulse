@@ -549,17 +549,63 @@ module.exports = function registerRoutes(router, context) {
     };
   }
 
+  const {
+    getManagerPurview,
+    buildProjectManagerModel,
+    resolveProjectManagerAccountId
+  } = require('./manager-purview');
+
   /**
    * @openapi
    * /api/modules/team-tracker/permissions/me:
    *   get:
    *     tags: ['TT: Permissions']
    *     summary: Get current user's permission tier and managed UIDs
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         schema: { type: string }
+   *         description: OSAC/unset returns the legacy registry-based permission tier; any other project returns its project-qualified manager status.
    *     responses:
    *       200:
    *         description: Permission info
    */
   router.get('/permissions/me', requireScope('roster:read'), function(req, res) {
+    // Manager status comes from the published read model, not the OSAC registry.
+    const permSelection = resolveProjectSelection(context.projects, req.query);
+    if (permSelection.provided && permSelection.status) {
+      return res.status(permSelection.status).json({ error: permSelection.error });
+    }
+    if (permSelection.provided && permSelection.projectId !== 'osac') {
+      const result = readProjectPeopleTeams(context.projects, permSelection.projectId);
+      if (result.status !== 200 || !result.model) {
+        return res.status(result.status).json({ error: result.error });
+      }
+      const { projectHierarchyStatus } = require('./project-manager-dashboard');
+      const accountId = resolveProjectManagerAccountId(result.model, req.userEmail);
+      let isManager = false;
+      let managedAccountIds = [];
+      if (accountId) {
+        const { registry, teamsData } = buildProjectManagerModel(result.model);
+        const purview = getManagerPurview(accountId, registry, teamsData, {});
+        isManager = purview.directReportUids.length > 0;
+        managedAccountIds = purview.directReportUids;
+      }
+      return res.json({
+        email: req.userEmail,
+        uid: accountId,
+        roles: req.userRoles || [],
+        // Fail closed: true only when a verified downward edge exists. An
+        // absent/partial/expired hierarchy yields false (unknown), never true.
+        isManager,
+        managedUids: managedAccountIds,
+        // Separate, identity-independent availability signal so read-only UI can
+        // explain an absent/partial/expired hierarchy without mistaking a
+        // fail-closed isManager:false for a verified non-manager. Never affects authz.
+        hierarchy: projectHierarchyStatus(result.model)
+      });
+    }
+
     const managed = req.userUid
       ? [...permissions.getManagedUids(req.userUid, managerMap)]
       : [];
@@ -574,14 +620,21 @@ module.exports = function registerRoutes(router, context) {
 
   // ─── Manager Dashboard ───
 
-  const { getManagerPurview } = require('./manager-purview');
-
   /**
    * @openapi
    * /api/modules/team-tracker/manager/dashboard:
    *   get:
    *     tags: ['TT: Manager']
    *     summary: Get manager dashboard data (purview, reports, teams, field definitions)
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         schema: { type: string }
+   *         description: OSAC/unset returns the legacy registry dashboard; any other project returns its read-only project-qualified purview.
+   *       - in: query
+   *         name: includeIndirect
+   *         schema: { type: boolean }
+   *         description: Include transitive (indirect) reports.
    *     responses:
    *       200:
    *         description: Manager purview data
@@ -589,6 +642,26 @@ module.exports = function registerRoutes(router, context) {
    *         description: User is not a manager
    */
   router.get('/manager/dashboard', requireScope('roster:read'), function(req, res) {
+    // Project-qualified roster: compute purview from the published read model.
+    // OSAC and an unset projectId fall through to the legacy registry path.
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (selection.provided && selection.status) {
+      return res.status(selection.status).json({ error: selection.error });
+    }
+    if (selection.provided && selection.projectId !== 'osac') {
+      const result = readProjectPeopleTeams(context.projects, selection.projectId);
+      if (result.status !== 200 || !result.model) {
+        return res.status(result.status).json({ error: result.error });
+      }
+      const { buildProjectManagerDashboard } = require('./project-manager-dashboard');
+      const { status, body } = buildProjectManagerDashboard(result.model, {
+        email: req.userEmail,
+        includeIndirect: req.query?.includeIndirect === 'true',
+        isPrivileged: Boolean(req.isAdmin || req.isTeamAdmin)
+      });
+      return res.status(status).json(body);
+    }
+
     // Handle null userUid (e.g. local dev where email isn't in registry)
     if (!req.userUid) {
       return res.json({
