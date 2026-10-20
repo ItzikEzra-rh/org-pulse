@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref, readonly } from 'vue'
 import ReportsHub from '../../../client/reports/ReportsHub.vue'
@@ -10,6 +10,25 @@ vi.mock('@/platform-loader', () => ({
     categories: []
   })
 }))
+
+// Replace the report `component` loaders with deterministic, instantly
+// resolving stubs. The real registry renders reports via
+// defineAsyncComponent(() => import(...)) through <component :is="...">,
+// which has no registered name, so `global.stubs` keyed by name never
+// matches it — the real dynamic import of the full .vue file runs instead,
+// racing against test teardown. Metadata (titles, filters, hidden flags)
+// stays real so catalog/filter assertions keep testing actual registry data.
+vi.mock('../../../client/reports/registry', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    reports: actual.reports.map((report) => ({
+      ...report,
+      component: () => Promise.resolve({
+        default: { template: `<div data-testid="${report.id}-report">${report.title}</div>` }
+      }),
+    })),
+  }
+})
 
 const mockIsNormalizedModel = ref(false)
 const mockRosterTeams = ref([])
@@ -30,15 +49,25 @@ const mockNavigateTo = vi.fn()
 const mockParams = ref({})
 
 describe('ReportsHub', () => {
+  let wrapper
+
   beforeEach(() => {
     mockIsNormalizedModel.value = false
     mockRosterTeams.value = []
   })
 
+  afterEach(() => {
+    // Unmounting stops each instance's reactivity; without this, every
+    // instance stays subscribed to the shared `mockParams` ref and keeps
+    // reacting (and re-triggering async component loads) on later tests'
+    // param changes, including past the end of the test run.
+    wrapper?.unmount()
+  })
+
   function createWrapper(params = {}) {
     mockParams.value = params
     mockNavigateTo.mockClear()
-    return mount(ReportsHub, {
+    wrapper = mount(ReportsHub, {
       global: {
         provide: {
           moduleNav: {
@@ -47,15 +76,10 @@ describe('ReportsHub', () => {
             params: readonly(mockParams),
             moduleSlug: readonly(ref('team-tracker')),
           }
-        },
-        stubs: {
-          // Stub out async components that would fail to load in tests
-          TrendsReport: { template: '<div data-testid="trends-report">Trends</div>' },
-          TeamComparisonReport: { template: '<div>Comparison</div>' },
-          AllocationReport: { template: '<div>Allocation</div>' },
         }
       }
     })
+    return wrapper
   }
 
   it('renders catalog with report cards when no report param', () => {
@@ -78,15 +102,17 @@ describe('ReportsHub', () => {
     expect(mockNavigateTo).toHaveBeenCalledWith('reports', { report: 'trends' })
   })
 
-  it('renders report shell when report param is present', () => {
+  it('renders report shell when report param is present', async () => {
     const wrapper = createWrapper({ report: 'trends' })
+    await flushPromises()
     expect(wrapper.find('[data-testid="report-shell-back"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Productivity Trends')
   })
 
-  it('still renders a hidden report directly via its report param', () => {
+  it('still renders a hidden report directly via its report param', async () => {
     // Allocation is hidden from the catalog, but its route stays functional.
     const wrapper = createWrapper({ report: 'allocation' })
+    await flushPromises()
     expect(wrapper.find('[data-testid="report-shell-back"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Work Allocation')
   })
