@@ -11,6 +11,7 @@ import { usePermissions } from '@shared/client/composables/usePermissions.js'
 import { useImpersonation } from '@shared/client/composables/useImpersonation.js'
 import { useFieldDefinitions } from '@shared/client/composables/useFieldDefinitions.js'
 import { getManagerChain, getDirectReports, getHierarchyAvailability } from '@shared/client/composables/useManagerHierarchy.js'
+import { resolveMemberLocation } from '../utils/member-resolution.js'
 import PersonFieldEditor from '../components/PersonFieldEditor.vue'
 import { useManagerTutorial } from '../composables/useManagerTutorial'
 
@@ -31,7 +32,7 @@ const { startImpersonating } = useImpersonation()
 const { definitions, fetchDefinitions } = useFieldDefinitions()
 const { resumeTourIfActive, destroyTour } = useManagerTutorial()
 
-const isInAppMode = computed(() => rosterData.value?.teamDataSource === 'in-app')
+const isInAppMode = computed(() => !isProjectPerson.value && rosterData.value?.teamDataSource === 'in-app')
 const visiblePersonFields = computed(() =>
   (definitions.value.personFields || []).filter(f => f.visible && !f.deleted)
 )
@@ -231,6 +232,24 @@ const managerChainDisplay = computed(() => managerChain.value.filter(node => nod
 const managerChainReversed = computed(() => [...managerChainDisplay.value].reverse())
 const managerChainIncomplete = computed(() => managerChain.value[managerChain.value.length - 1]?.kind === 'unresolved')
 
+// Physical location, distinct from Geo/Region (person.geo).
+const personLocation = computed(() => resolveMemberLocation(person.value))
+
+// Unlabeled uid requires a verified LDAP match; otherwise no badge (never accountId).
+const identityBadge = computed(() => {
+  if (!person.value) return null
+  if (person.value.uid) {
+    return {
+      label: null,
+      value: person.value.uid,
+      title: isProjectPerson.value && person.value.accountId ? `Jira Account ID: ${person.value.accountId}` : undefined
+    }
+  }
+  if (isProjectPerson.value) return null
+  if (person.value.accountId) return { label: 'Jira ID', value: person.value.accountId }
+  return null
+})
+
 const jiraLookbackLabel = computed(() => {
   if (isProjectPerson.value && projectJiraMeta.value?.lookbackDays != null) {
     return `${projectJiraMeta.value.lookbackDays} days`
@@ -270,14 +289,15 @@ function loadProjectPerson() {
   }
   person.value = {
     accountId: projectPerson.accountId,
-    uid: null,
+    uid: projectPerson.ldapUid,
     name: projectPerson.displayName,
     status: projectPerson.active ? 'active' : 'inactive',
     email: projectPerson.email,
     title: projectPerson.title,
     geo: projectPerson.geo,
-    city: null,
-    country: null,
+    city: projectPerson.city,
+    country: projectPerson.country,
+    location: projectPerson.location,
     // Identity display only; contribution counts join from the canonical
     // per-project contributions artifact by accountId (see githubContribs/gitlabContribs).
     github: projectPerson.identities?.github ?? null,
@@ -548,14 +568,17 @@ onBeforeUnmount(() => {
                 <svg class="h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0" />
                 </svg>
-                <span class="text-gray-900 dark:text-gray-100 font-mono text-xs">{{ person.uid || person.accountId || '—' }}</span>
+                <span v-if="identityBadge" :title="identityBadge.title" class="text-gray-900 dark:text-gray-100 font-mono text-xs">
+                  <span v-if="identityBadge.label" class="text-gray-400 dark:text-gray-500 font-sans not-italic mr-1">{{ identityBadge.label }}</span>{{ identityBadge.value }}
+                </span>
+                <span v-else class="text-gray-400 dark:text-gray-500">—</span>
               </div>
               <div class="flex items-center gap-2.5">
                 <svg class="h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span class="text-gray-900 dark:text-gray-100">{{ [person.city, person.country].filter(Boolean).join(', ') || '—' }}</span>
+                <span class="text-gray-900 dark:text-gray-100">{{ personLocation || '—' }}</span>
               </div>
               <div class="flex items-center gap-2.5">
                 <svg class="h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

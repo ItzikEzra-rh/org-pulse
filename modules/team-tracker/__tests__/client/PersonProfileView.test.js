@@ -9,6 +9,7 @@ const rosterDataValue = ref(null)
 const rosterLoadingValue = ref(false)
 const isAdminValue = ref(false)
 const auxiliaryManagersValue = ref({})
+const fieldDefinitionsValue = ref({ personFields: [] })
 const mockLoadGitlabStats = vi.fn()
 
 // useProjectContributions calls useProjectId() at import time, so this ref must be
@@ -56,7 +57,7 @@ vi.mock('@shared/client/composables/useImpersonation.js', () => ({
 
 vi.mock('@shared/client/composables/useFieldDefinitions.js', () => ({
   useFieldDefinitions: () => ({
-    definitions: ref({ personFields: [] }),
+    definitions: fieldDefinitionsValue,
     fetchDefinitions: vi.fn().mockResolvedValue({})
   })
 }))
@@ -142,6 +143,7 @@ describe('PersonProfileView', () => {
     rosterLoadingValue.value = false
     isAdminValue.value = false
     auxiliaryManagersValue.value = {}
+    fieldDefinitionsValue.value = { personFields: [] }
     getProjectPersonMetrics.mockResolvedValue(UNAVAILABLE_JIRA_METRICS)
   })
 
@@ -232,6 +234,33 @@ describe('PersonProfileView', () => {
     expect(wrapper.text()).not.toContain('Impersonate')
     expect(wrapper.text()).not.toContain('Reactivate')
     expect(wrapper.text()).not.toContain('Purge')
+  })
+
+  it('never renders the in-app custom field editor for a project-qualified person, even if legacy in-app mode is set', async () => {
+    // Guards person.uid (a verified LDAP uid) from reaching legacy per-uid custom-field/canEdit checks.
+    fieldDefinitionsValue.value = { personFields: [{ id: 'f1', visible: true, deleted: false }] }
+    rosterPeople.value = [
+      {
+        key: 'flightctl::acc-3',
+        projectId: 'flightctl',
+        accountId: 'acc-3',
+        displayName: 'Project Person',
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        manager: null,
+        geo: null,
+        identities: {},
+        ldapUid: 'proj-person'
+      }
+    ]
+    rosterDataValue.value = { projectId: 'flightctl', teamDataSource: 'in-app', teams: [], people: rosterPeople.value }
+
+    const wrapper = mountView({ accountId: 'acc-3' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-tour="person-field-editor"]').exists()).toBe(false)
   })
 
   it('re-resolves instead of showing a stale person when the roster changes underneath the view (project switch)', async () => {
@@ -546,6 +575,136 @@ describe('PersonProfileView', () => {
     expect(apiRequest).toHaveBeenCalledWith(expect.stringContaining('/registry/people/u1'))
     // OSAC profiles never call the project-qualified endpoint.
     expect(getProjectPersonMetrics).not.toHaveBeenCalled()
+  })
+
+  it('leaves the legacy OSAC identity badge unchanged: shows the registry uid, unlabeled', async () => {
+    apiRequest.mockImplementation((url) => {
+      if (url.includes('/registry/people/u1')) {
+        return Promise.resolve({
+          person: {
+            uid: 'u1',
+            name: 'Eran Cohen',
+            status: 'active',
+            email: 'ecohen@example.com',
+            city: "Ra'anana",
+            country: 'ISR',
+            geo: 'EMEA',
+            orgType: 'engineering'
+          },
+          managerChain: [],
+          directReports: [],
+          associatedTeams: []
+        })
+      }
+      return Promise.resolve({ resolved: { issues: [] }, inProgress: { issues: [] } })
+    })
+
+    const wrapper = mountView({ uid: 'u1' })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('u1')
+    expect(wrapper.text()).not.toContain('Jira ID')
+    expect(wrapper.text()).toContain("Ra'anana, ISR")
+    expect(wrapper.text()).toContain('EMEA')
+  })
+
+  describe('project-qualified physical location and identity', () => {
+    function rosterPersonFixture(accountId, overrides = {}) {
+      return {
+        key: `flightctl::${accountId}`,
+        projectId: 'flightctl',
+        accountId,
+        displayName: overrides.displayName || accountId,
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        manager: null,
+        geo: null,
+        city: null,
+        country: null,
+        location: null,
+        identities: {},
+        ...overrides
+      }
+    }
+
+    it('renders a published physical location, kept distinct from Geo/Region', async () => {
+      rosterPeople.value = [
+        rosterPersonFixture('acc-loc-1', { displayName: 'Asumi Hasan', city: 'Westford', country: 'US', geo: 'NA' })
+      ]
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+
+      const wrapper = mountView({ accountId: 'acc-loc-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Westford, US')
+      expect(wrapper.text()).toContain('NA')
+    })
+
+    it('shows an unknown physical location, not Geo/Region, when enrichment has not published city/country', async () => {
+      rosterPeople.value = [
+        rosterPersonFixture('acc-loc-2', { displayName: 'No Location', geo: 'NA' })
+      ]
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+
+      const wrapper = mountView({ accountId: 'acc-loc-2' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('NA')
+      // The location field renders '—'; Geo/Region ('NA') must not be substituted into it.
+      const dashes = wrapper.findAll('span').filter(s => s.text() === '—')
+      expect(dashes.length).toBeGreaterThan(0)
+    })
+
+    it('shows an honest missing identity badge, never a Jira accountId fallback, when enrichment has not matched', async () => {
+      rosterPeople.value = [rosterPersonFixture('acc-id-1', { displayName: 'Project Person' })]
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+
+      const wrapper = mountView({ accountId: 'acc-id-1' })
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('Jira ID')
+      expect(wrapper.text()).not.toContain('acc-id-1')
+      const dashes = wrapper.findAll('span').filter(s => s.text() === '—')
+      expect(dashes.length).toBeGreaterThan(0)
+    })
+
+    it('shows the verified LDAP uid, unlabeled, for a project person matched by enrichment', async () => {
+      rosterPeople.value = [rosterPersonFixture('acc-id-2', { displayName: 'Matched Person', ldapUid: 'mpers' })]
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+
+      const wrapper = mountView({ accountId: 'acc-id-2' })
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('Jira ID')
+      expect(wrapper.text()).toContain('mpers')
+      expect(wrapper.find('a[href="https://rover.redhat.com/people/profile/mpers"]').exists()).toBe(true)
+      expect(wrapper.find('span[title]').attributes('title')).toBe('Jira Account ID: acc-id-2')
+    })
+
+    it('does not retain the previous person\'s location or identity badge across a project/person switch', async () => {
+      rosterPeople.value = [
+        rosterPersonFixture('acc-switch-1', { displayName: 'First Person', city: 'Cork', country: 'IE', ldapUid: 'first-ldap' })
+      ]
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+
+      const wrapper = mountView({ accountId: 'acc-switch-1' })
+      await flushPromises()
+      expect(wrapper.text()).toContain('Cork, IE')
+      expect(wrapper.text()).toContain('first-ldap')
+
+      rosterPeople.value = [
+        rosterPersonFixture('acc-switch-2', { displayName: 'Second Person', ldapUid: 'second-ldap' })
+      ]
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: rosterPeople.value }
+      wrapper.navParams.value = { accountId: 'acc-switch-2' }
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('Cork, IE')
+      expect(wrapper.text()).not.toContain('first-ldap')
+      expect(wrapper.text()).toContain('second-ldap')
+    })
   })
 
   describe('project-qualified Jira metrics', () => {

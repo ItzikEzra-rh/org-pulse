@@ -202,7 +202,7 @@ describe('GET /roster project-selection dispatch', () => {
       { key: 'flightctl::team-1', projectId: 'flightctl', id: 'team-1', displayName: 'RHEM-DEV', description: null, state: null, teamType: null, memberAccountIds: ['acct-1'] }
     ])
     expect(body.people).toEqual([
-      { key: 'flightctl::acct-1', projectId: 'flightctl', accountId: 'acct-1', displayName: 'Alice', active: true, email: null, teamIds: ['team-1'], title: null, manager: null, managerRef: null, geo: null, city: null, country: null, location: null, identities: {} }
+      { key: 'flightctl::acct-1', projectId: 'flightctl', accountId: 'acct-1', displayName: 'Alice', active: true, email: null, teamIds: ['team-1'], title: null, manager: null, managerRef: null, geo: null, city: null, country: null, location: null, identities: {}, ldapUid: null }
     ])
   })
 

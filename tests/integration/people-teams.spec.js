@@ -353,6 +353,63 @@ test.describe('People & Teams Project-Qualified Roster @people-teams', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('project-qualified Person Profile shows the verified LDAP UID identity badge with a Rover link, distinct from the Jira Account ID', async ({ page }) => {
+    // Fixture: fc-acc-1's ldapUid "nosei-ipa" differs from her accountId and GitHub username.
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-1`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const card = page.locator('[data-tour="person-profile-card"]');
+    await expect(card).toBeVisible();
+
+    const identityBadge = card.locator('.font-mono.text-xs');
+    await expect(identityBadge).toHaveText('nosei-ipa');
+    await expect(identityBadge).toHaveAttribute('title', 'Jira Account ID: fc-acc-1');
+
+    const roverLink = card.locator('a[href="https://rover.redhat.com/people/profile/nosei-ipa"]');
+    await expect(roverLink).toBeVisible();
+
+    // The Jira accountId itself is never shown as the visible identity value.
+    const cardText = await card.textContent();
+    expect(cardText).not.toContain('fc-acc-1');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('project-qualified Person Profile renders physical location distinct from Geo/Region', async ({ page }) => {
+    // Fixture: fc-acc-1 has city/country "Cork, IE" and geo "EMEA" as separate published fields.
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-1`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const card = page.locator('[data-tour="person-profile-card"]');
+    const cardText = await card.textContent();
+
+    expect(cardText).toContain('Cork, IE');
+    expect(cardText).toContain('EMEA');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('project-qualified Person Profile shows no identity badge, Rover link, or accountId fallback for an unmatched person', async ({ page }) => {
+    // Fixture: fc-acc-3 (Priya Shah) is unmatched, so enrichment never populates ldapUid.
+    await page.goto(`/#/team-tracker/person-detail?projectId=${FLIGHTCTL}&accountId=fc-acc-3`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const card = page.locator('[data-tour="person-profile-card"]');
+    await expect(card).toBeVisible();
+    await expect(card.locator('.font-mono.text-xs')).toHaveCount(0);
+    await expect(card.locator('a[href*="rover.redhat.com"]')).toHaveCount(0);
+
+    const cardText = await card.textContent();
+    expect(cardText).toContain('Priya Shah');
+    expect(cardText).not.toContain('Jira ID');
+    expect(cardText).not.toContain('fc-acc-3');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
   test('OSAC legacy People Directory still resolves people by uid', async ({ page }) => {
     await page.goto('/#/team-tracker/people');
     await page.waitForLoadState('networkidle');

@@ -44,8 +44,8 @@ function makeRosterEnvelope(projectId, overrides = {}) {
   }
 }
 
-// Person records carry matchStatus, no displayName/ldapUid; auxiliaryManagers
-// is a ldapUid-keyed object, not an array.
+// Person records carry matchStatus, no displayName; auxiliaryManagers is a
+// ldapUid-keyed object, not an array.
 function makeEnrichmentEnvelope(projectId, overrides = {}) {
   return {
     schemaVersion: 1,
@@ -65,6 +65,7 @@ function makeEnrichmentEnvelope(projectId, overrides = {}) {
         {
           accountId: 'acct-1',
           matchStatus: 'matched',
+          ldapUid: 'alice',
           title: 'Senior Engineer',
           city: 'Cork',
           country: 'IE',
@@ -164,6 +165,7 @@ describe('readProjectPeopleTeams', () => {
         city: null,
         country: null,
         location: null,
+        ldapUid: null,
         identities: {}
       },
       {
@@ -181,6 +183,7 @@ describe('readProjectPeopleTeams', () => {
         city: null,
         country: null,
         location: null,
+        ldapUid: null,
         identities: {}
       }
     ]);
@@ -376,6 +379,7 @@ describe('readProjectPeopleTeams enrichment join', () => {
       city: 'Cork',
       country: 'IE',
       location: 'Cork, Ireland',
+      ldapUid: 'alice',
       identities: { github: { username: 'alice', source: 'ldap' }, gitlab: null },
       managerRef: { kind: 'external', ldapUid: 'mhicks' }
     });
@@ -384,7 +388,38 @@ describe('readProjectPeopleTeams enrichment join', () => {
   it('leaves an unmatched person fully null, distinct from a matched root', () => {
     const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
     const bob = result.model.people.find(p => p.accountId === 'acct-2');
-    expect(bob).toMatchObject({ title: null, geo: null, city: null, country: null, location: null, identities: {}, managerRef: null });
+    expect(bob).toMatchObject({ title: null, geo: null, city: null, country: null, location: null, ldapUid: null, identities: {}, managerRef: null });
+  });
+
+  it('trims surrounding whitespace from a matched ldapUid, and nulls a whitespace-only one', () => {
+    publications.flightctl[ENRICHMENT_ARTIFACT_KEY].value = makeEnrichmentEnvelope('flightctl', {
+      people: [
+        {
+          accountId: 'acct-1',
+          matchStatus: 'matched',
+          ldapUid: '  alice  ',
+          title: null, city: null, country: null, geo: null, location: null,
+          officeLocation: null, costCenter: null,
+          identities: { github: null, gitlab: null },
+          managerRef: null
+        },
+        {
+          accountId: 'acct-2',
+          matchStatus: 'matched',
+          ldapUid: '   ',
+          title: null, city: null, country: null, geo: null, location: null,
+          officeLocation: null, costCenter: null,
+          identities: { github: null, gitlab: null },
+          managerRef: null
+        }
+      ],
+      auxiliaryManagers: {}
+    });
+    const result = readProjectPeopleTeams(mockProjects(publications, profiles), 'flightctl');
+    const alice = result.model.people.find(p => p.accountId === 'acct-1');
+    const bob = result.model.people.find(p => p.accountId === 'acct-2');
+    expect(alice.ldapUid).toBe('alice');
+    expect(bob.ldapUid).toBeNull();
   });
 
   it('gives a matched root person managerRef:null while still populating other fields', () => {
@@ -498,12 +533,12 @@ describe('readProjectPeopleTeams enrichment join', () => {
       {
         key: 'flightctl::acct-1', projectId: 'flightctl', accountId: 'acct-1', displayName: 'Alice',
         active: true, email: null, teamIds: ['team-1', 'team-2'],
-        title: null, manager: null, geo: null, city: null, country: null, location: null, identities: {}, managerRef: null
+        title: null, manager: null, geo: null, city: null, country: null, location: null, ldapUid: null, identities: {}, managerRef: null
       },
       {
         key: 'flightctl::acct-2', projectId: 'flightctl', accountId: 'acct-2', displayName: 'Bob',
         active: false, email: null, teamIds: ['team-2'],
-        title: null, manager: null, geo: null, city: null, country: null, location: null, identities: {}, managerRef: null
+        title: null, manager: null, geo: null, city: null, country: null, location: null, ldapUid: null, identities: {}, managerRef: null
       }
     ]);
   });

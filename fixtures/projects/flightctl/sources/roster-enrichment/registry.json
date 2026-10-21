@@ -37,6 +37,7 @@
         "location": "Cork, Ireland",
         "officeLocation": null,
         "costCenter": null,
+        "ldapUid": "nosei-ipa",
         "identities": { "github": { "username": "nosei", "source": "ldap" }, "gitlab": null },
         "managerRef": { "kind": "roster", "accountId": "fc-acc-2" }
       },
