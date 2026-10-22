@@ -371,6 +371,75 @@ describe('PeopleDirectoryView', () => {
     expect(navigateTo).toHaveBeenCalledWith('person-detail', { uid: 'u1' })
   })
 
+  it('displays canonical Location distinct from Geo and includes it in CSV export', async () => {
+    projectId.value = 'flightctl'
+    rosterData.value = {
+      projectId: 'flightctl',
+      availability: 'available',
+      reason: null,
+      teams: [],
+      people: []
+    }
+    mockLoadRoster.mockResolvedValue(rosterData.value)
+    rosterTeams.value = []
+    rosterPeople.value = [
+      {
+        key: 'flightctl::acc-1',
+        accountId: 'acc-1',
+        displayName: 'Ada Lovelace',
+        active: true,
+        email: null,
+        teamIds: [],
+        title: null,
+        geo: 'EMEA',
+        city: null,
+        country: null,
+        location: 'Cork, Ireland',
+        identities: {}
+      }
+    ]
+    const getCsv = captureCsvExport()
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('EMEA')
+    expect(wrapper.text()).toContain('Cork, Ireland')
+
+    await wrapper.findAll('button').find(b => b.text() === 'Export CSV').trigger('click')
+    const csv = getCsv()
+    expect(csv.split('\n')[0]).toContain('Location')
+    expect(csv).toContain('Cork, Ireland')
+  })
+
+  it('enables the Geo filter for canonical projects', async () => {
+    projectId.value = 'flightctl'
+    rosterData.value = {
+      projectId: 'flightctl',
+      availability: 'available',
+      reason: null,
+      teams: [],
+      people: []
+    }
+    mockLoadRoster.mockResolvedValue(rosterData.value)
+    rosterTeams.value = []
+    rosterPeople.value = [
+      { key: 'flightctl::acc-1', accountId: 'acc-1', displayName: 'Ada Lovelace', active: true, email: null, teamIds: [], title: null, geo: 'EMEA', identities: {} },
+      { key: 'flightctl::acc-2', accountId: 'acc-2', displayName: 'Grace Hopper', active: true, email: null, teamIds: [], title: null, geo: 'AMER', identities: {} }
+    ]
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Geo')
+    const emeaCheckbox = wrapper.findAll('input[type="checkbox"]').find(c => c.element.value === 'EMEA')
+    expect(emeaCheckbox).toBeTruthy()
+
+    await emeaCheckbox.setValue(true)
+    expect(wrapper.text()).toContain('Ada Lovelace')
+    expect(wrapper.text()).not.toContain('Grace Hopper')
+  })
+
   it('clears stale people when the project changes', async () => {
     projectId.value = 'flightctl'
     rosterTeams.value = []

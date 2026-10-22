@@ -410,6 +410,51 @@ test.describe('People & Teams Project-Qualified Roster @people-teams', () => {
     expect(page.errors).toHaveLength(0);
   });
 
+  test('Flight Control People Directory shows physical Location distinct from Geo and filters by Geo', async ({ page }) => {
+    await page.goto(`/#/team-tracker/people?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(bodyText).toContain('Cork, IE');
+    expect(bodyText).toContain('Raleigh, US');
+    expect(bodyText).toContain('EMEA');
+    expect(bodyText).toContain('AMER');
+
+    await page.getByRole('checkbox', { name: 'EMEA', exact: true }).check();
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    const filteredText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+    expect(filteredText).toContain('Nadia Osei');
+    expect(filteredText).not.toContain('Marco Liu');
+
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Flight Control Org Dashboard shows canonical headcount/team totals and hides legacy-only sections', async ({ page }) => {
+    await page.goto(`/#/team-tracker/org-dashboard?projectId=${FLIGHTCTL}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(await mainContentIsVisible(page)).toBe(true);
+    const bodyText = await page.locator('main, [role="main"], .min-h-screen').first().textContent();
+
+    // Fixture: 2 published teams, 2 active people (fc-acc-1, fc-acc-2); fc-acc-3 is inactive.
+    expect(bodyText).toContain('Flight Control Core');
+    expect(bodyText).toContain('Flight Control UI');
+    expect(bodyText).not.toContain('Components');
+    expect(bodyText).not.toContain('Open PRDs');
+
+    await page.locator('tr', { hasText: 'Flight Control Core' }).first().click();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(DEFAULT_PAGE_WAIT_TIME);
+
+    expect(page.url()).toMatch(/team-detail/);
+    expect(page.url()).toContain(`teamKey=${FLIGHTCTL}`);
+
+    expect(page.errors).toHaveLength(0);
+  });
+
   test('OSAC legacy People Directory still resolves people by uid', async ({ page }) => {
     await page.goto('/#/team-tracker/people');
     await page.waitForLoadState('networkidle');

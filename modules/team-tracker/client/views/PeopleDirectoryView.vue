@@ -5,6 +5,7 @@ import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { useRoster } from '@shared/client/composables/useRoster.js'
 import { useFieldDefinitions } from '@shared/client/composables/useFieldDefinitions'
 import { useFieldFilters } from '../composables/useFieldFilters'
+import { resolveMemberLocation } from '../utils/member-resolution'
 import FieldFilterPanel from '../components/FieldFilterPanel.vue'
 
 const nav = inject('moduleNav')
@@ -135,6 +136,7 @@ async function loadData() {
         email: person.email,
         title: person.title,
         geo: person.geo,
+        location: resolveMemberLocation(person),
         orgDisplayName: requestedProjectId,
         teams: person.teamIds.map(id => teamNameById.get(id)).filter(Boolean),
         github: person.identities?.github ?? null,
@@ -304,13 +306,13 @@ function exportCsv() {
   // unavailable, rather than exporting blanks that would read as "no identity".
   const includeIdentityColumns = !isProjectRoster.value || enrichmentAvailable.value
   const rows = isProjectRoster.value
-    ? [['Project', 'Name', 'Title', 'Geo', 'Team(s)', ...(includeIdentityColumns ? ['GitHub', 'GitLab'] : [])]]
+    ? [['Project', 'Name', 'Title', 'Geo', 'Location', 'Team(s)', ...(includeIdentityColumns ? ['GitHub', 'GitLab'] : [])]]
     : [['Org', 'Name', 'UID', 'Email', 'Title', 'Geo', 'Location', 'Team(s)', 'GitHub', 'GitLab', 'Type', ...fieldLabels]]
   for (const p of filtered.value) {
     const fieldValues = personFieldDefs.value.map(fd => personFieldValue(p, fd.id))
     if (isProjectRoster.value) {
       rows.push([
-        p.orgDisplayName || '', p.name, p.title || '', p.geo || '', personTeamDisplay(p),
+        p.orgDisplayName || '', p.name, p.title || '', p.geo || '', p.location || '', personTeamDisplay(p),
         ...(includeIdentityColumns ? [p.github ? p.github.username : '', p.gitlab ? p.gitlab.username : ''] : [])
       ])
     } else {
@@ -434,7 +436,7 @@ watch(projectId, () => {
         </div>
 
         <!-- Geos -->
-        <div v-if="!isProjectRoster && geos.length > 0">
+        <div v-if="geos.length > 0">
           <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">Geo</label>
           <div class="space-y-1 max-h-48 overflow-y-auto">
             <label
@@ -476,7 +478,7 @@ watch(projectId, () => {
                 <th @click="toggleSort('name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200">Name{{ sortIcon('name') }}</th>
                 <th @click="toggleSort('title')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 hidden md:table-cell">Title{{ sortIcon('title') }}</th>
                 <th @click="toggleSort('geo')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 hidden lg:table-cell">Geo{{ sortIcon('geo') }}</th>
-                <th v-if="!isProjectRoster" @click="toggleSort('location')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 hidden lg:table-cell">Location{{ sortIcon('location') }}</th>
+                <th @click="toggleSort('location')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 hidden lg:table-cell">Location{{ sortIcon('location') }}</th>
                 <th @click="toggleSort('teams')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" :class="isProjectRoster ? '' : 'hidden md:table-cell'">Team(s){{ sortIcon('teams') }}</th>
                 <th
                   v-for="fd in personFieldDefs"
@@ -499,7 +501,7 @@ watch(projectId, () => {
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden md:table-cell">{{ p.title || '—' }}</td>
                 <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">{{ p.geo || '—' }}</td>
-                <td v-if="!isProjectRoster" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">{{ p.location }}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">{{ p.location }}</td>
                 <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400" :class="isProjectRoster ? '' : 'hidden md:table-cell'">{{ personTeamDisplay(p) || '\u2014' }}</td>
                 <td
                   v-for="fd in personFieldDefs"
