@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { getManagerChain, getDirectReports, getHierarchyAvailability } from '../composables/useManagerHierarchy.js'
+import {
+  getManagerChain,
+  getManagerChainFromExternal,
+  getDirectReports,
+  getDirectReportsOfExternal,
+  getHierarchyAvailability,
+  getAuxiliaryManager
+} from '../composables/useManagerHierarchy.js'
 
 function rosterPerson(accountId, { displayName, title = null, managerRef = null, active = true } = {}) {
   return { accountId, displayName: displayName || accountId, title, managerRef, active }
@@ -41,8 +48,8 @@ describe('getManagerChain', () => {
     const chain = getManagerChain('ic', { people, auxiliaryManagers })
 
     expect(chain).toEqual([
-      { kind: 'external', ldapUid: 'director1', name: 'Director One', title: 'Director', navigable: false },
-      { kind: 'external', ldapUid: 'vp1', name: 'VP One', title: 'VP', navigable: false },
+      { kind: 'external', ldapUid: 'director1', name: 'Director One', title: 'Director', navigable: true },
+      { kind: 'external', ldapUid: 'vp1', name: 'VP One', title: 'VP', navigable: true },
       { kind: 'end' }
     ])
   })
@@ -60,7 +67,7 @@ describe('getManagerChain', () => {
       auxiliaryManagers
     })
 
-    expect(chainA[0]).toEqual({ kind: 'external', ldapUid: 'shared', name: 'Shared Director', title: null, navigable: false })
+    expect(chainA[0]).toEqual({ kind: 'external', ldapUid: 'shared', name: 'Shared Director', title: null, navigable: true })
     expect(chainB[0]).toEqual(chainA[0])
   })
 
@@ -133,6 +140,13 @@ describe('getManagerChain', () => {
     ])
   })
 
+  it('reports a dangling external ref, not Object.prototype, for a published managerRef pointing at a poisoned ldapUid', () => {
+    const people = [rosterPerson('ic', { managerRef: { kind: 'external', ldapUid: 'constructor' } })]
+    expect(getManagerChain('ic', { people, auxiliaryManagers: {} })).toEqual([
+      { kind: 'unresolved', reason: 'dangling-external-ref' }
+    ])
+  })
+
   it('returns an empty chain for an unknown accountId instead of fabricating one', () => {
     expect(getManagerChain('nobody', { people: [], auxiliaryManagers: {} })).toEqual([])
   })
@@ -150,6 +164,96 @@ describe('getManagerChain', () => {
 
     expect(projectAChain[0].name).toBe('Project A Manager')
     expect(projectBChain[0].name).toBe('Project B Manager')
+  })
+})
+
+describe('getManagerChainFromExternal', () => {
+  it('walks upward from an external manager\'s own record', () => {
+    const auxiliaryManagers = {
+      director1: { ldapUid: 'director1', displayName: 'Director One', managerRef: { kind: 'external', ldapUid: 'vp1' } },
+      vp1: { ldapUid: 'vp1', displayName: 'VP One', managerRef: null }
+    }
+    const chain = getManagerChainFromExternal('director1', { people: [], auxiliaryManagers })
+    expect(chain).toEqual([
+      { kind: 'external', ldapUid: 'vp1', name: 'VP One', title: null, navigable: true },
+      { kind: 'end' }
+    ])
+  })
+
+  it('can rejoin the roster chain above an external manager', () => {
+    const people = [rosterPerson('vp-acc', { displayName: 'Roster VP', managerRef: null })]
+    const auxiliaryManagers = {
+      director1: { ldapUid: 'director1', displayName: 'Director One', managerRef: { kind: 'roster', accountId: 'vp-acc' } }
+    }
+    const chain = getManagerChainFromExternal('director1', { people, auxiliaryManagers })
+    expect(chain).toEqual([
+      { kind: 'roster', accountId: 'vp-acc', name: 'Roster VP', title: null, navigable: true },
+      { kind: 'end' }
+    ])
+  })
+
+  it('returns an empty chain for an unknown ldapUid instead of fabricating one', () => {
+    expect(getManagerChainFromExternal('nobody', { people: [], auxiliaryManagers: {} })).toEqual([])
+  })
+
+  it('guards against an external-to-external cycle starting from the external node itself', () => {
+    const auxiliaryManagers = {
+      x: { ldapUid: 'x', displayName: 'X', managerRef: { kind: 'external', ldapUid: 'y' } },
+      y: { ldapUid: 'y', displayName: 'Y', managerRef: { kind: 'external', ldapUid: 'x' } }
+    }
+    const chain = getManagerChainFromExternal('x', { people: [], auxiliaryManagers })
+    expect(chain[chain.length - 1]).toEqual({ kind: 'unresolved', reason: 'cycle' })
+  })
+
+  it('does not resolve an inherited Object.prototype member for a poisoned ldapUid', () => {
+    for (const poisonedUid of ['constructor', 'toString', '__proto__']) {
+      expect(getManagerChainFromExternal(poisonedUid, { people: [], auxiliaryManagers: {} })).toEqual([])
+    }
+  })
+
+  it('reports a dangling ref, not Object.prototype, when a published managerRef points at a poisoned ldapUid', () => {
+    const auxiliaryManagers = {
+      director1: { ldapUid: 'director1', displayName: 'Director One', managerRef: { kind: 'external', ldapUid: 'constructor' } }
+    }
+    const chain = getManagerChainFromExternal('director1', { people: [], auxiliaryManagers })
+    expect(chain).toEqual([{ kind: 'unresolved', reason: 'dangling-external-ref' }])
+  })
+})
+
+describe('getAuxiliaryManager', () => {
+  it('returns the own-keyed record', () => {
+    const auxiliaryManagers = { director1: { ldapUid: 'director1', displayName: 'Director One' } }
+    expect(getAuxiliaryManager(auxiliaryManagers, 'director1')).toEqual(auxiliaryManagers.director1)
+  })
+
+  it('returns undefined instead of an inherited Object.prototype member', () => {
+    expect(getAuxiliaryManager({}, 'constructor')).toBeUndefined()
+    expect(getAuxiliaryManager({}, 'toString')).toBeUndefined()
+    expect(getAuxiliaryManager({}, '__proto__')).toBeUndefined()
+  })
+
+  it('returns undefined for a nullish dictionary instead of throwing', () => {
+    expect(getAuxiliaryManager(null, 'director1')).toBeUndefined()
+    expect(getAuxiliaryManager(undefined, 'director1')).toBeUndefined()
+  })
+})
+
+describe('getDirectReportsOfExternal', () => {
+  it('returns only active people whose managerRef points at the given external ldapUid', () => {
+    const people = [
+      rosterPerson('r1', { displayName: 'Report One', title: 'Engineer', managerRef: { kind: 'external', ldapUid: 'director1' } }),
+      rosterPerson('r2', { displayName: 'Inactive Report', managerRef: { kind: 'external', ldapUid: 'director1' }, active: false }),
+      rosterPerson('other', { managerRef: { kind: 'external', ldapUid: 'someone-else' } })
+    ]
+
+    expect(getDirectReportsOfExternal('director1', { people })).toEqual([
+      { accountId: 'r1', name: 'Report One', title: 'Engineer', navigable: true }
+    ])
+  })
+
+  it('ignores roster managerRef — only external edges count as reports here', () => {
+    const people = [rosterPerson('r1', { managerRef: { kind: 'roster', accountId: 'mgr' } })]
+    expect(getDirectReportsOfExternal('mgr', { people })).toEqual([])
   })
 })
 

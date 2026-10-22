@@ -10,7 +10,14 @@ import { useProjectContributions } from '@shared/client/composables/useProjectCo
 import { usePermissions } from '@shared/client/composables/usePermissions.js'
 import { useImpersonation } from '@shared/client/composables/useImpersonation.js'
 import { useFieldDefinitions } from '@shared/client/composables/useFieldDefinitions.js'
-import { getManagerChain, getDirectReports, getHierarchyAvailability } from '@shared/client/composables/useManagerHierarchy.js'
+import {
+  getManagerChain,
+  getManagerChainFromExternal,
+  getDirectReports,
+  getDirectReportsOfExternal,
+  getHierarchyAvailability,
+  getAuxiliaryManager
+} from '@shared/client/composables/useManagerHierarchy.js'
 import { resolveMemberLocation } from '../utils/member-resolution.js'
 import PersonFieldEditor from '../components/PersonFieldEditor.vue'
 import { useManagerTutorial } from '../composables/useManagerTutorial'
@@ -32,7 +39,7 @@ const { startImpersonating } = useImpersonation()
 const { definitions, fetchDefinitions } = useFieldDefinitions()
 const { resumeTourIfActive, destroyTour } = useManagerTutorial()
 
-const isInAppMode = computed(() => !isProjectPerson.value && rosterData.value?.teamDataSource === 'in-app')
+const isInAppMode = computed(() => isLegacyPerson.value && rosterData.value?.teamDataSource === 'in-app')
 const visiblePersonFields = computed(() =>
   (definitions.value.personFields || []).filter(f => f.visible && !f.deleted)
 )
@@ -46,6 +53,8 @@ const {
 } = useProjectContributions()
 
 const githubContribs = computed(() => {
+  // No accountId to join by; must not fall through to the legacy global cache.
+  if (isExternalManager.value) return null
   // Project people read the canonical artifact by accountId; OSAC's legacy
   // view keeps its username-keyed global cache unchanged.
   if (isProjectPerson.value) {
@@ -56,6 +65,7 @@ const githubContribs = computed(() => {
 })
 
 const gitlabContribs = computed(() => {
+  if (isExternalManager.value) return null
   // Project people: same canonical join as githubContribs. GitLab is unpublished
   // by this collector, so this always resolves to null for project people.
   if (isProjectPerson.value) {
@@ -76,12 +86,14 @@ const githubContribsNote = computed(() => {
 })
 
 const personTeams = computed(() => {
-  if (!person.value) return []
+  // An external manager's ldapUid shares the legacy registry's uid namespace;
+  // never resolve its display name against the legacy OSAC team roster.
+  if (!person.value || isExternalManager.value) return []
   return getTeamsForPerson(person.value.accountId || person.value.name)
 })
 
 const rosterMember = computed(() => {
-  if (!person.value) return null
+  if (!person.value || isExternalManager.value) return null
   for (const t of allTeams.value) {
     const m = t.members.find(m => m.uid === person.value.uid)
     if (m) return m
@@ -214,13 +226,18 @@ const editSaving = ref(false)
 const uid = computed(() => nav.params.value?.uid)
 const personName = computed(() => nav.params.value?.person)
 const accountId = computed(() => nav.params.value?.accountId)
+const ldapUidParam = computed(() => nav.params.value?.ldapUid)
 const fromTeamKey = computed(() => nav.params.value?.teamKey)
 const isProjectPerson = computed(() => Boolean(accountId.value))
+// accountId always wins if somehow both are set.
+const isExternalManager = computed(() => Boolean(ldapUidParam.value) && !isProjectPerson.value)
+const isLegacyPerson = computed(() => !isProjectPerson.value && !isExternalManager.value)
+// The legacy registry path always returns an already-resolved chain; the two
+// canonical reference types both depend on this project's enrichment join.
+const isEnrichmentScopedPerson = computed(() => isProjectPerson.value || isExternalManager.value)
 
-// OSAC's registry endpoint always returns a resolved chain; only the
-// project path depends on whether enrichment actually joined.
 const hierarchyAvailability = computed(() => {
-  if (!isProjectPerson.value) return { available: true, indicator: null }
+  if (!isEnrichmentScopedPerson.value) return { available: true, indicator: null }
   return getHierarchyAvailability(rosterData.value?.enrichment)
 })
 const hierarchyAvailable = computed(() => hierarchyAvailability.value.available)
@@ -318,6 +335,58 @@ function loadProjectPerson() {
   loading.value = false
 }
 
+// No accountId exists for this reference type, so metrics, contributions,
+// and team memberships are never fetched for it.
+function loadExternalManagerPerson() {
+  const expectedProjectId = projectId.value
+  const expectedLdapUid = ldapUidParam.value
+  loading.value = true
+  error.value = null
+  person.value = null
+  managerChain.value = []
+  directReports.value = []
+  associatedTeams.value = []
+  jiraMetrics.value = null
+  projectJiraMeta.value = null
+
+  // Stay loading until the roster matches this project, to avoid flashing "not found".
+  if (rosterData.value?.projectId !== expectedProjectId || rosterLoading.value) {
+    return
+  }
+
+  const record = getAuxiliaryManager(auxiliaryManagers.value, expectedLdapUid)
+  if (!record) {
+    error.value = 'Person not found'
+    loading.value = false
+    return
+  }
+  person.value = {
+    accountId: null,
+    uid: record.ldapUid,
+    name: record.displayName,
+    status: null,
+    email: null,
+    title: record.title,
+    geo: record.geo,
+    city: record.city,
+    country: record.country,
+    location: record.location,
+    github: record.identities?.github ?? null,
+    gitlab: record.identities?.gitlab ?? null,
+    orgType: 'external',
+    _appFields: {},
+    firstSeenAt: null,
+    lastSeenAt: null,
+    inactiveSince: null
+  }
+  managerChain.value = getManagerChainFromExternal(expectedLdapUid, {
+    people: rosterPeople.value,
+    auxiliaryManagers: auxiliaryManagers.value
+  })
+  directReports.value = getDirectReportsOfExternal(expectedLdapUid, { people: rosterPeople.value })
+  loading.value = false
+}
+
 let jiraMetricsRequestSeq = 0
 
 // Fire-and-forget, guarded by sequence + current nav params: a slow response
@@ -353,8 +422,17 @@ async function loadPerson() {
   const requestId = ++personRequestSeq
   const stillCurrent = () => requestId === personRequestSeq
 
+  // A stale legacy edit-in-progress must not survive a navigation to a
+  // different profile, where its Save action would target the wrong person.
+  editField.value = null
+  editValue.value = ''
+
   if (isProjectPerson.value) {
     loadProjectPerson()
+    return
+  }
+  if (isExternalManager.value) {
+    loadExternalManagerPerson()
     return
   }
 
@@ -407,13 +485,15 @@ function goBack() {
   }
 }
 
-// Legacy OSAC nodes carry `uid`; project nodes carry `accountId` and are only
-// clickable when `navigable` (external auxiliary managers never are).
+// Legacy OSAC nodes carry `uid`; project nodes carry `accountId` or `ldapUid`
+// and are only clickable when `navigable`.
 function openHierarchyNode(node) {
   if (node.uid) {
     nav.navigateTo('person-detail', { uid: node.uid })
   } else if (node.navigable && node.accountId) {
     nav.navigateTo('person-detail', { accountId: node.accountId })
+  } else if (node.navigable && node.ldapUid) {
+    nav.navigateTo('person-detail', { ldapUid: node.ldapUid })
   }
 }
 
@@ -427,6 +507,9 @@ function startEdit(field) {
 }
 
 async function saveEdit() {
+  // Defense in depth: the registry mutation endpoint is legacy-only, even if
+  // a stale editField somehow survives a navigation to a non-legacy profile.
+  if (!isLegacyPerson.value) return
   if (!editValue.value.trim() || !editField.value) return
   editSaving.value = true
   try {
@@ -485,18 +568,18 @@ function handleImpersonate() {
   }
 }
 
-watch([uid, personName, accountId, projectId], loadPerson)
+watch([uid, personName, accountId, ldapUidParam, projectId], loadPerson)
 watch(isAuxiliary, (val) => {
-  if (!val) loadGitlabStats()
+  if (!val && isLegacyPerson.value) loadGitlabStats()
 })
 // Re-resolve on every roster change: handles the deep-link case where the
 // roster is still loading, and avoids a stale person after a project switch.
 watch([rosterData, rosterLoading], () => {
-  if (isProjectPerson.value) loadPerson()
+  if (isEnrichmentScopedPerson.value) loadPerson()
 })
 onMounted(() => {
   loadPerson()
-  if (!isProjectPerson.value) loadGitlabStats()
+  if (isLegacyPerson.value) loadGitlabStats()
   fetchDefinitions()
   resumeTourIfActive('person-detail')
 })
@@ -543,7 +626,7 @@ onBeforeUnmount(() => {
                 </div>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{{ person.title || '—' }}</p>
               </div>
-              <div v-if="isAdmin && !isProjectPerson" class="flex gap-2 flex-shrink-0">
+              <div v-if="isAdmin && isLegacyPerson" class="flex gap-2 flex-shrink-0">
                 <button
                   v-if="person.status === 'active' && person.uid"
                   @click="handleImpersonate"
@@ -629,7 +712,7 @@ onBeforeUnmount(() => {
                     </template>
                   </div>
                 </div>
-                <div v-if="isAdmin && !isProjectPerson && editField !== platform" class="flex gap-2">
+                <div v-if="isAdmin && isLegacyPerson && editField !== platform" class="flex gap-2">
                   <button @click="startEdit(platform)" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" :title="person[platform] && person[platform].username ? 'Edit' : 'Set'">
                     <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -845,7 +928,7 @@ onBeforeUnmount(() => {
               Manager Chain
               <span v-if="hierarchyIndicator" class="font-normal normal-case tracking-normal text-gray-400"> · {{ hierarchyIndicator }}</span>
             </h3>
-            <div v-if="isProjectPerson && !hierarchyAvailable" class="text-sm text-gray-400 dark:text-gray-500">Manager hierarchy unavailable</div>
+            <div v-if="isEnrichmentScopedPerson && !hierarchyAvailable" class="text-sm text-gray-400 dark:text-gray-500">Manager hierarchy unavailable</div>
             <div v-else-if="managerChainDisplay.length === 0 && !managerChainIncomplete" class="text-sm text-gray-400 dark:text-gray-500">No manager on record</div>
             <div v-else class="space-y-1">
               <div v-for="(mgr, i) in managerChainReversed" :key="mgr.uid || mgr.accountId || mgr.ldapUid" class="flex items-center gap-2">
@@ -867,11 +950,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-if="directReports.length > 0 || (isProjectPerson && !hierarchyAvailable)" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <div v-if="directReports.length > 0 || (isEnrichmentScopedPerson && !hierarchyAvailable)" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-wider">
               Direct Reports <span v-if="directReports.length > 0" class="font-normal text-gray-400">({{ directReports.length }})</span>
             </h3>
-            <div v-if="isProjectPerson && !hierarchyAvailable" class="text-sm text-gray-400 dark:text-gray-500">Direct reports unavailable</div>
+            <div v-if="isEnrichmentScopedPerson && !hierarchyAvailable" class="text-sm text-gray-400 dark:text-gray-500">Direct reports unavailable</div>
             <div v-else class="space-y-2">
               <button
                 v-for="dr in directReports"

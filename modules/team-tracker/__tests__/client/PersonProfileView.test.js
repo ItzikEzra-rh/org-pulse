@@ -1005,7 +1005,7 @@ describe('PersonProfileView', () => {
       expect(navigateTo).toHaveBeenCalledWith('person-detail', { accountId: 'report-1' })
     })
 
-    it('renders an external auxiliary manager as non-navigable text', async () => {
+    it('renders an external auxiliary manager as a navigable link to their own profile', async () => {
       rosterPeople.value = [
         person('ic-1', { displayName: 'IC One', managerRef: { kind: 'external', ldapUid: 'director1' } })
       ]
@@ -1019,11 +1019,13 @@ describe('PersonProfileView', () => {
         enrichment: { state: 'fresh', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
       }
 
-      const wrapper = mountView({ accountId: 'ic-1' })
+      const { wrapper, navigateTo } = mountViewWithNav({ accountId: 'ic-1' })
       await flushPromises()
 
-      expect(wrapper.text()).toContain('Director One')
-      expect(wrapper.findAll('button').find(b => b.text() === 'Director One')).toBeUndefined()
+      const button = wrapper.findAll('button').find(b => b.text() === 'Director One')
+      expect(button).not.toBeUndefined()
+      await button.trigger('click')
+      expect(navigateTo).toHaveBeenCalledWith('person-detail', { ldapUid: 'director1' })
     })
 
     it('reports the hierarchy as unavailable, not as an empty org, when enrichment never joined', async () => {
@@ -1146,6 +1148,195 @@ describe('PersonProfileView', () => {
       await flushPromises()
 
       expect(wrapper.text()).not.toContain('Manager One')
+    })
+  })
+
+  describe('external manager profile (projectId, ldapUid)', () => {
+    function mountViewWithNav(params) {
+      const navigateTo = vi.fn()
+      const wrapper = mount(PersonProfileView, {
+        global: {
+          provide: {
+            moduleNav: { params: ref(params), goBack: vi.fn(), navigateTo, updateParams: vi.fn() }
+          }
+        }
+      })
+      mountedWrappers.push(wrapper)
+      return { wrapper, navigateTo }
+    }
+
+    it('resolves strictly from auxiliaryManagers, without calling the legacy registry or Jira metrics endpoints', async () => {
+      auxiliaryManagersValue.value = {
+        director1: {
+          ldapUid: 'director1',
+          displayName: 'Director One',
+          title: 'Director',
+          city: 'Cork',
+          country: 'IE',
+          geo: 'EMEA',
+          identities: { github: null, gitlab: null },
+          managerRef: null
+        }
+      }
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: [] }
+
+      const wrapper = mountView({ ldapUid: 'director1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Director One')
+      expect(wrapper.text()).toContain('Director')
+      expect(wrapper.text()).toContain('Cork, IE')
+      expect(apiRequest).not.toHaveBeenCalled()
+      expect(getProjectPersonMetrics).not.toHaveBeenCalled()
+    })
+
+    it('shows an error instead of fabricating a profile for an unpublished ldapUid', async () => {
+      auxiliaryManagersValue.value = {}
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: [] }
+
+      const wrapper = mountView({ ldapUid: 'ghost' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Person not found')
+    })
+
+    it('never shows metrics, team memberships, or admin/edit controls for an external manager', async () => {
+      isAdminValue.value = true
+      fieldDefinitionsValue.value = { personFields: [{ id: 'f1', visible: true, deleted: false }] }
+      auxiliaryManagersValue.value = {
+        director1: { ldapUid: 'director1', displayName: 'Director One', managerRef: null }
+      }
+      rosterDataValue.value = { projectId: 'flightctl', teamDataSource: 'in-app', teams: [], people: [] }
+
+      const wrapper = mountView({ ldapUid: 'director1' })
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('Metrics')
+      expect(wrapper.text()).not.toContain('Teams')
+      expect(wrapper.text()).not.toContain('Impersonate')
+      expect(wrapper.text()).not.toContain('Reactivate')
+      expect(wrapper.text()).not.toContain('Purge')
+      expect(wrapper.findAll('button').some(b => /set|edit/i.test(b.attributes('title') || ''))).toBe(false)
+    })
+
+    it('shows the direct reports and upward manager chain genuinely published for an external manager', async () => {
+      rosterPeople.value = [
+        { accountId: 'r1', displayName: 'Report One', active: true, title: 'Engineer', managerRef: { kind: 'external', ldapUid: 'director1' } }
+      ]
+      auxiliaryManagersValue.value = {
+        director1: { ldapUid: 'director1', displayName: 'Director One', managerRef: { kind: 'external', ldapUid: 'vp1' } },
+        vp1: { ldapUid: 'vp1', displayName: 'VP One', managerRef: null }
+      }
+      rosterDataValue.value = {
+        projectId: 'flightctl',
+        teams: [],
+        people: rosterPeople.value,
+        enrichment: { state: 'fresh', partial: false, generatedAt: '2026-01-01T00:00:00Z' }
+      }
+
+      const { wrapper, navigateTo } = mountViewWithNav({ ldapUid: 'director1' })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('VP One')
+      expect(wrapper.text()).toContain('Report One')
+
+      await wrapper.findAll('button').find(b => b.text().includes('Report One')).trigger('click')
+      expect(navigateTo).toHaveBeenCalledWith('person-detail', { accountId: 'r1' })
+    })
+
+    it('isolates external-manager data per project: the same ldapUid in two projects does not leak records', async () => {
+      auxiliaryManagersValue.value = {
+        shared: { ldapUid: 'shared', displayName: 'FlightCtl Director', managerRef: null }
+      }
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: [] }
+
+      const wrapper = mountView({ ldapUid: 'shared' })
+      await flushPromises()
+      expect(wrapper.text()).toContain('FlightCtl Director')
+
+      projectIdValue.value = 'other-project'
+      auxiliaryManagersValue.value = {}
+      rosterDataValue.value = { projectId: 'other-project', teams: [], people: [] }
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Person not found')
+      expect(wrapper.text()).not.toContain('FlightCtl Director')
+    })
+
+    it('does not refetch legacy GitLab stats when navigating from a legacy auxiliary profile to an external-manager profile', async () => {
+      apiRequest.mockImplementation((url) => {
+        if (url.includes('/registry/people/aux1')) {
+          return Promise.resolve({
+            person: { uid: 'aux1', name: 'Aux Person', status: 'active', orgType: 'auxiliary' },
+            managerChain: [],
+            directReports: [],
+            associatedTeams: []
+          })
+        }
+        return Promise.resolve({})
+      })
+      auxiliaryManagersValue.value = {
+        director1: { ldapUid: 'director1', displayName: 'Director One', managerRef: null }
+      }
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: [] }
+
+      const wrapper = mountView({ uid: 'aux1' })
+      await flushPromises()
+      expect(wrapper.text()).toContain('Aux Person')
+      mockLoadGitlabStats.mockClear()
+
+      wrapper.navParams.value = { ldapUid: 'director1' }
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Director One')
+      expect(mockLoadGitlabStats).not.toHaveBeenCalled()
+    })
+
+    it('clears a stale legacy identity edit when navigating to an external-manager profile, so Save cannot hit the legacy endpoint', async () => {
+      isAdminValue.value = true
+      apiRequest.mockImplementation((url) => {
+        if (url.includes('/registry/people/legacy1')) {
+          return Promise.resolve({
+            person: { uid: 'legacy1', name: 'Legacy Person', status: 'active', orgType: 'engineering', github: null, gitlab: null },
+            managerChain: [],
+            directReports: [],
+            associatedTeams: []
+          })
+        }
+        return Promise.resolve({ resolved: { issues: [] }, inProgress: { issues: [] } })
+      })
+      auxiliaryManagersValue.value = {
+        director1: { ldapUid: 'director1', displayName: 'Director One', managerRef: null }
+      }
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: [] }
+
+      const wrapper = mountView({ uid: 'legacy1' })
+      await flushPromises()
+
+      await wrapper.findAll('button').find(b => b.attributes('title') === 'Set').trigger('click')
+      expect(wrapper.find('input[placeholder="username"]').exists()).toBe(true)
+
+      apiRequest.mockClear()
+      wrapper.navParams.value = { ldapUid: 'director1' }
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Director One')
+      expect(wrapper.find('input[placeholder="username"]').exists()).toBe(false)
+      expect(wrapper.findAll('button').find(b => b.text() === 'Save')).toBeUndefined()
+      for (const call of apiRequest.mock.calls) {
+        expect(call[0]).not.toContain('/registry/people/')
+      }
+    })
+
+    it('resolves to "Person not found" instead of an inherited Object.prototype member for a poisoned ldapUid deep link', async () => {
+      auxiliaryManagersValue.value = {}
+      rosterDataValue.value = { projectId: 'flightctl', teams: [], people: [] }
+
+      for (const poisonedUid of ['constructor', 'toString', '__proto__']) {
+        const wrapper = mountView({ ldapUid: poisonedUid })
+        await flushPromises()
+        expect(wrapper.text()).toContain('Person not found')
+      }
     })
   })
 })
