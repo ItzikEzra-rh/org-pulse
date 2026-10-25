@@ -1,0 +1,29 @@
+{
+  "name": "Test Coverage",
+  "slug": "test-coverage",
+  "description": "Where OSAC test coverage stands by working group and capability area",
+  "icon": "clipboard-list",
+  "order": 17,
+  "defaultEnabled": true,
+  "client": {
+    "entry": "./client/index.js",
+    "navItems": [
+      { "id": "coverage", "label": "OSAC", "icon": "ClipboardList", "default": true }
+    ],
+    "sotuWidgets": [
+      {
+        "id": "coverage",
+        "name": "Test Coverage",
+        "description": "Coverage verdicts by area across OSAC working groups",
+        "component": "./client/widgets/CoverageWidget.vue",
+        "defaultSize": "half",
+        "icon": "ClipboardList",
+        "category": "metrics"
+      }
+    ]
+  },
+  "server": {
+    "entry": "./server/index.js"
+  },
+  "requires": []
+}

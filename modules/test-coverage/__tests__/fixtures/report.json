@@ -1,0 +1,23 @@
+{
+  "commit": "83d51fead52c9ca07d4480b0a4f2a8ce0b9c7af6",
+  "overview": [
+    {
+      "area": "Identity & Access Management", "key": "iam", "group": "core", "verdict": "insufficient evidence", "verdict_reason": "4 critical and 8 high gaps",
+      "unit": { "state": "value", "display": "65.9% (2820/4278)" },
+      "integration": { "state": "blocked", "display": "blocked" },
+      "e2e": { "state": "blocked", "display": "blocked" },
+      "gaps": { "critical": 4, "high": 8, "total": 20 }
+    },
+    {
+      "area": "Tenancy", "key": "tenancy", "group": "core", "verdict": "insufficient evidence",
+      "unit": { "state": "value", "display": "47.2% (1239/2623)" },
+      "integration": { "state": "na", "display": "na" },
+      "e2e": { "state": "zero", "display": "0.0% (0/8)" },
+      "gaps": { "critical": 0, "high": 0, "total": 8 }
+    }
+  ],
+  "features": [
+    { "feature": { "key": "iam" }, "metrics": { "unit": { "detail": "measured Go statements" }, "integration": { "detail": "12 tier-unassigned behavior(s)" }, "e2e": { "detail": "12 tier-unassigned behavior(s)" } } },
+    { "feature": { "key": "tenancy" }, "behaviors": [{ "id": "flow-tenant-creation", "tier": "e2e" }], "inferred": [{ "behavior": "flow-tenant-creation", "test": "tests/e2e/regression/test_tenant_onboarding.py" }], "metrics": { "e2e": { "detail": "no automated behavior has a declared existing test" } } }
+  ]
+}
