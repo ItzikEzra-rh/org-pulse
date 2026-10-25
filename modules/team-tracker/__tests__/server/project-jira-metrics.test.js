@@ -453,8 +453,72 @@ describe('readProjectTeamMetrics', () => {
       available: true,
       memberCount: 3,
       aggregate: { resolvedCount: 5, resolvedPoints: 13, inProgressCount: 2, avgCycleTimeDays: 2.5 },
+      members: [{
+        accountId: 'acct-1',
+        metrics: { lookbackDays: null, resolvedCount: 0, resolvedPoints: 0, inProgressCount: 0, avgCycleTimeDays: null }
+      }],
+      resolvedIssues: [],
+      inProgressIssues: [],
       partial: true
     })
+  })
+
+  it('builds per-member metrics and flattens issue details with accountId attribution, scoped to the requested team', () => {
+    const resolvedIssue = { key: 'FLPATH-1', summary: 'Fix thing', issueType: 'Bug', status: 'Closed', storyPoints: 5, resolutionDate: '2026-09-15T00:00:00Z', cycleTimeDays: 3 }
+    const inProgressIssue = { key: 'FLPATH-2', summary: 'Build thing', issueType: 'Story', status: 'In Progress', storyPoints: 2, resolutionDate: null }
+    const envelope = makeEnvelope('flightctl', {
+      data: {
+        projectId: 'flightctl',
+        personCount: 2,
+        people: [
+          makePerson({
+            accountId: 'acct-1',
+            teamIds: ['team-1'],
+            lookbackDays: 365,
+            resolved: { count: 1, storyPoints: 5, issues: [resolvedIssue] },
+            inProgress: { count: 1, storyPoints: 2, issues: [inProgressIssue] },
+            cycleTime: { avgDays: 3, medianDays: 3 }
+          }),
+          // Different team: must not leak into team-1's members or issues.
+          makePerson({ accountId: 'acct-2', teamIds: ['team-2'] })
+        ],
+        teams: [makeTeam(), makeTeam({ id: 'team-2', name: 'RHEM-QE' })],
+        diagnostics: { missingPeople: [], staleCarryForward: [], freshSuccessCount: 2 }
+      }
+    })
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelope } } }, { flightctl: makeProfile('flightctl') })
+
+    const { model } = readProjectTeamMetrics(projects, 'flightctl', 'team-1')
+
+    expect(model.members).toEqual([{
+      accountId: 'acct-1',
+      metrics: { lookbackDays: 365, resolvedCount: 1, resolvedPoints: 5, inProgressCount: 1, avgCycleTimeDays: 3 }
+    }])
+    expect(model.resolvedIssues).toEqual([{ ...resolvedIssue, accountId: 'acct-1' }])
+    expect(model.inProgressIssues).toEqual([{ ...inProgressIssue, accountId: 'acct-1' }])
+  })
+
+  it('omits a roster member with no published record from members, rather than fabricating a zero', () => {
+    // Only acct-1 published; a roster member like acct-missing simply never
+    // appears here -- the client treats absence as unavailable, not zero.
+    const envelope = makeEnvelope('flightctl', {
+      data: {
+        projectId: 'flightctl',
+        personCount: 1,
+        people: [makePerson({ accountId: 'acct-1' })],
+        teams: [makeTeam({ memberCount: 2 })],
+        diagnostics: { missingPeople: ['acct-missing'], staleCarryForward: [], freshSuccessCount: 1 }
+      }
+    })
+    const projects = mockProjects({ flightctl: { [ARTIFACT_KEY]: { value: envelope } } }, { flightctl: makeProfile('flightctl') })
+
+    const { model } = readProjectTeamMetrics(projects, 'flightctl', 'team-1')
+
+    expect(model.members).toEqual([{
+      accountId: 'acct-1',
+      metrics: { lookbackDays: null, resolvedCount: 0, resolvedPoints: 0, inProgressCount: 0, avgCycleTimeDays: null }
+    }])
+    expect(model.members.some(m => m.accountId === 'acct-missing')).toBe(false)
   })
 
   it('marks the team result partial when the status sidecar confirms the current profile\'s latest collection failed', () => {

@@ -524,13 +524,35 @@ const teamMetrics = ref(null)
 const isRefreshing = ref(false)
 const showRefreshModal = ref(false)
 
+// Only the most recently started request may write to `teamMetrics`, so a
+// stale response from a prior team/project selection can't overwrite it.
+let teamMetricsRequestId = 0
+let teamMetricsRequestIdentityKey = null
+
+function teamMetricsIdentityKey() {
+  if (!team.value) return null
+  // Use the roster's own resolved project, not the shell's hash state (which may be mid-switch).
+  const projectId = isNormalizedModel.value ? rosterData.value?.projectId : undefined
+  return `${projectId ?? ''}::${team.value.key}`
+}
+
 async function fetchTeamMetrics() {
-  // No project-qualified source exists yet for delivery metrics; the
-  // Delivery tab renders its shared unavailable state when this stays null.
-  if (rosterLoading.value || !team.value || isNormalizedModel.value) return
+  if (rosterLoading.value || !team.value) return
+  const projectId = isNormalizedModel.value ? rosterData.value?.projectId : undefined
+  const teamKey = team.value.key
+  const identityKey = `${projectId ?? ''}::${teamKey}`
+  const requestId = ++teamMetricsRequestId
+  if (identityKey !== teamMetricsRequestIdentityKey) {
+    teamMetrics.value = null
+  }
+  teamMetricsRequestIdentityKey = identityKey
   try {
-    teamMetrics.value = await getTeamMetrics(team.value.key)
+    const result = await getTeamMetrics(teamKey, projectId)
+    if (requestId !== teamMetricsRequestId) return // superseded by a newer request
+    teamMetrics.value = result
   } catch (error) {
+    if (requestId !== teamMetricsRequestId) return // superseded; a stale failure must not clobber newer state
+    teamMetricsRequestIdentityKey = null // allow a later trigger for this identity to retry
     console.error('Failed to fetch team metrics:', error)
   }
 }
@@ -760,7 +782,7 @@ watch([team, rosterLoading], ([newTeam, isLoading], [oldTeam, wasLoading]) => {
   const teamJustResolved = newTeam && !oldTeam
   const rosterJustFinishedLoading = wasLoading && !isLoading
   if (!teamJustResolved && !rosterJustFinishedLoading) return
-  if (!teamMetrics.value) fetchTeamMetrics()
+  if (teamMetricsIdentityKey() !== teamMetricsRequestIdentityKey) fetchTeamMetrics()
   if (!teamDetail.value) fetchTeamDetail()
   if (rosterJustFinishedLoading) fetchRfeConfig()
 })

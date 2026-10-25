@@ -17,7 +17,7 @@
       <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
         <tr
           v-for="member in sortedMembers"
-          :key="member.jiraDisplayName"
+          :key="member.accountId || member.jiraDisplayName"
           class="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
           @click="$emit('select', member)"
         >
@@ -47,11 +47,12 @@
           </td>
           <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
             <template v-if="getGithubContribCount(member) != null">{{ getGithubContribCount(member) }}</template>
-            <span v-else-if="member.githubUsername" class="text-gray-300 dark:text-gray-600">—</span>
-            <span v-else class="text-gray-300 dark:text-gray-600 italic text-xs" title="GitHub username not configured">no GitHub</span>
+            <span v-else-if="hasGithubData(member)" class="text-gray-300 dark:text-gray-600">—</span>
+            <span v-else class="text-gray-300 dark:text-gray-600 italic text-xs" title="GitHub data not available">no GitHub</span>
           </td>
           <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-            <template v-if="getGitlabContribCount(member) != null">
+            <span v-if="!gitlabSupported" class="text-gray-400 dark:text-gray-500 italic text-xs" title="GitLab is not yet supported for canonical projects">Unsupported</span>
+            <template v-else-if="getGitlabContribCount(member) != null">
               <span :title="getGitlabInstanceTooltip(member) || undefined">{{ getGitlabContribCount(member) }}</span>
             </template>
             <span v-else-if="member.gitlabUsername" class="text-gray-300 dark:text-gray-600">—</span>
@@ -66,7 +67,7 @@
             </span>
             <span v-else class="text-gray-400 dark:text-gray-500">1</span>
           </td>
-          <td class="px-4 py-3 text-sm whitespace-nowrap">
+          <td v-if="showHistory" class="px-4 py-3 text-sm whitespace-nowrap">
             <button
               @click.stop="$emit('view-history', member)"
               class="text-xs text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 font-medium"
@@ -100,7 +101,12 @@ const props = defineProps({
   multiTeamMembers: { type: Set, default: () => new Set() },
   getTeamsForPerson: { type: Function, default: () => () => [] },
   memberMetrics: { type: Map, default: () => new Map() },
-  teamKey: { type: String, default: null }
+  teamKey: { type: String, default: null },
+  // Canonical (project-qualified) accountId -> contribution record lookup;
+  // null means "use the legacy username-keyed composable" (see getGithubContribCount).
+  getGithubContribution: { type: Function, default: null },
+  gitlabSupported: { type: Boolean, default: true },
+  showHistory: { type: Boolean, default: true }
 })
 defineEmits(['select', 'view-history'])
 
@@ -111,6 +117,26 @@ function personLink(member) {
   return linkTo('team-tracker', 'person-detail', { ...params, person: member.name })
 }
 
+// The lookback window shared by every displayed member, or null when
+// unknown/mixed -- never assert a window the data can't back up.
+const commonLookbackDays = computed(() => {
+  const values = []
+  for (const metrics of props.memberMetrics.values()) {
+    if (!metrics) continue
+    if (typeof metrics.lookbackDays !== 'number') return null
+    values.push(metrics.lookbackDays)
+  }
+  if (values.length === 0) return null
+  return values.every(v => v === values[0]) ? values[0] : null
+})
+
+const resolvedColumnLabel = computed(() =>
+  commonLookbackDays.value != null ? `Resolved (${commonLookbackDays.value}d)` : 'Resolved'
+)
+const pointsColumnLabel = computed(() =>
+  commonLookbackDays.value != null ? `Points (${commonLookbackDays.value}d)` : 'Points'
+)
+
 const columns = computed(() => {
   const cols = [{ key: 'name', label: 'Name' }]
   if (primaryDisplayField.value) {
@@ -118,14 +144,14 @@ const columns = computed(() => {
     cols.push({ key: primaryDisplayField.value, label: pf?.label || primaryDisplayField.value })
   }
   cols.push(
-    { key: 'resolved', label: 'Resolved (90d)' },
-    { key: 'points', label: 'Points (90d)' },
+    { key: 'resolved', label: resolvedColumnLabel.value },
+    { key: 'points', label: pointsColumnLabel.value },
     { key: 'cycleTime', label: 'Cycle Time' },
     { key: 'github', label: 'GitHub (1yr)' },
     { key: 'gitlab', label: 'GitLab (1yr)' },
-    { key: 'teams', label: 'Teams' },
-    { key: 'history', label: 'History' }
+    { key: 'teams', label: 'Teams' }
   )
+  if (props.showHistory) cols.push({ key: 'history', label: 'History' })
   return cols
 })
 
@@ -146,13 +172,23 @@ function getTeamCount(member) {
 }
 
 function getMemberMetric(member, field) {
-  const m = props.memberMetrics.get(member.jiraDisplayName)
+  const m = props.memberMetrics.get(member.accountId || member.jiraDisplayName)
   return m?.[field] ?? null
 }
 
 function getGithubContribCount(member) {
+  if (props.getGithubContribution) {
+    return props.getGithubContribution(member.accountId)?.github?.totalContributions ?? null
+  }
   if (!member.githubUsername) return null
   return getContributions(member.githubUsername)?.totalContributions ?? null
+}
+
+// Distinguishes "known identity, no number published yet" (shown as —) from
+// "no identity at all" (shown as "no GitHub") in the template.
+function hasGithubData(member) {
+  if (props.getGithubContribution) return props.getGithubContribution(member.accountId) != null
+  return !!member.githubUsername
 }
 
 function getGitlabContribCount(member) {

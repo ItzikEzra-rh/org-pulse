@@ -220,7 +220,29 @@ function readProjectTrends(projects, projectId, readFromStorage) {
   return { status: 200, model: _buildTrendsModel(projectId, loaded) };
 }
 
-function _buildTeamMetricsModel(projectId, team, publicationPartial) {
+// A roster member with no record in `people[]` is simply absent from
+// `members` -- the client reports that as unavailable, never a fabricated zero.
+function _buildTeamMetricsModel(projectId, people, team, publicationPartial) {
+  const teamPeople = people.filter(person => person.teamIds.includes(team.id));
+
+  const members = teamPeople.map(person => ({
+    accountId: person.accountId,
+    metrics: {
+      lookbackDays: typeof person.lookbackDays === 'number' ? person.lookbackDays : null,
+      resolvedCount: person.resolved?.count ?? 0,
+      resolvedPoints: person.resolved?.storyPoints ?? 0,
+      inProgressCount: person.inProgress?.count ?? 0,
+      avgCycleTimeDays: person.cycleTime?.avgDays ?? null
+    }
+  }));
+
+  const resolvedIssues = [];
+  const inProgressIssues = [];
+  for (const person of teamPeople) {
+    for (const issue of person.resolved?.issues || []) resolvedIssues.push({ ...issue, accountId: person.accountId });
+    for (const issue of person.inProgress?.issues || []) inProgressIssues.push({ ...issue, accountId: person.accountId });
+  }
+
   return {
     teamKey: `${projectId}::${team.id}`,
     available: true,
@@ -231,6 +253,9 @@ function _buildTeamMetricsModel(projectId, team, publicationPartial) {
       inProgressCount: team.inProgress?.count ?? 0,
       avgCycleTimeDays: team.cycleTime?.avgDays ?? null
     },
+    members,
+    resolvedIssues,
+    inProgressIssues,
     partial: team.partial === true || publicationPartial === true
   };
 }
@@ -253,7 +278,7 @@ function readProjectTeamMetrics(projects, projectId, teamId, readFromStorage) {
 
   const team = loaded.teams.find(t => t.id === teamId);
   if (!team) return { status: 404, error: `Team "${teamId}" not found in project Jira metrics publication` };
-  return { status: 200, model: _buildTeamMetricsModel(projectId, team, loaded.partial) };
+  return { status: 200, model: _buildTeamMetricsModel(projectId, loaded.people, team, loaded.partial) };
 }
 
 function _buildPersonMetricsModel(projectId, accountId, loaded) {

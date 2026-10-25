@@ -296,11 +296,26 @@ instead of the legacy global computation (`buildJiraTrends()` /
   "available": true,
   "memberCount": 3,
   "aggregate": { "resolvedCount": 5, "resolvedPoints": 13, "inProgressCount": 2, "avgCycleTimeDays": 2.5 },
+  "members": [
+    {
+      "accountId": "fc-acc-1",
+      "metrics": { "lookbackDays": 365, "resolvedCount": 2, "resolvedPoints": 8, "inProgressCount": 1, "avgCycleTimeDays": 2.0 }
+    }
+  ],
+  "resolvedIssues": [
+    { "key": "FLPATH-101", "summary": "Fix agent reconnect loop", "issueType": "Bug", "status": "Closed", "resolution": "Done", "storyPoints": 5, "resolutionDate": "2026-09-15T00:00:00.000+0000", "cycleTimeDays": 3.0, "accountId": "fc-acc-1" }
+  ],
+  "inProgressIssues": [
+    { "key": "FLPATH-110", "summary": "Add device health probe", "issueType": "Story", "status": "In Progress", "storyPoints": 2, "resolutionDate": null, "accountId": "fc-acc-1" }
+  ],
   "partial": true
 }
 ```
 
 **Invariants:**
+- `members`/`resolvedIssues`/`inProgressIssues` are built from the publication's own `people[]` filtered to this team's `teamIds` membership — identity is always `accountId`, never a display name (the publication doesn't carry one). The client joins `accountId` against the roster response's `people[]` to resolve a display name for issue-assignee rendering.
+- A roster member with no record in `people[]` (not yet collected, or collection failed with nothing to carry forward) simply has no entry in `members` — the client treats that absence as unavailable, the same convention `readProjectPersonMetrics` uses for a single person, never a fabricated zero.
+- `resolvedIssues`/`inProgressIssues` are a flat concatenation across the team's members' own `resolved.issues`/`inProgress.issues`, each carrying that issue's own fields plus `accountId`; a multi-team member's issues appear once per team response (scoped per request), matching how `byTeam` in `ProjectTrendsResponse` attributes a shared person to each of their teams.
 - `jira` buckets are keyed by `YYYY-MM` (the issue's `resolutionDate` month) and built entirely from the publication's `people[].resolved.issues`; `byTeam` keys are project-qualified team keys, matching `team.key` in the roster response.
 - `github`/`gitlab` are always `null` on `ProjectTrendsResponse`/`ProjectTeamMetricsResponse`: these two endpoints do not join the project-qualified contributions publication described below (see [Project-qualified GitHub Contributions](#project-qualified-github-contributions-get-apimodulesteam-trackerproject-contributions)). The client keeps the GitHub/GitLab panels and metric options visible (disabled, with an inline reason) rather than removing them.
 - `availability`/`available` is `false`/`unavailable` whenever the publication's `state` is not `supported`/`empty`, or its `freshness` is not `fresh`/`stale` — never a fabricated zero. `reason` carries the publication `state` (e.g. `inapplicable`, `disabled`, `unavailable`, `error`) or `missing-publication` / `publication-not-fresh` / `no-published-people`.

@@ -602,6 +602,118 @@ test.describe('People & Teams Project-Qualified Jira Person Metrics @people-team
   });
 });
 
+/**
+ * Project-Qualified Team Delivery (OSAC-6322)
+ * Verifies Team Detail > Delivery reads the canonical project-scoped team metrics
+ * and never falls back to legacy OSAC metrics.
+ */
+test.describe('People & Teams Project-Qualified Team Delivery @people-teams', () => {
+  const FLIGHTCTL = 'flightctl';
+  // Fixture: fixtures/projects/flightctl/sources/jira-person-metrics/registry.json
+  const CORE_TEAM_KEY = 'flightctl::366df4de-dc38-4f71-9f0d-9916d450c20c';
+
+  test.beforeEach(async ({ page }) => {
+    setupErrorTracking(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    logCapturedErrors(page, testInfo);
+  });
+
+  const TEAM_METRICS_URL = /\/api\/(?:modules\/team-tracker\/)?team\/([^/?]+)\/metrics/;
+  const LEGACY_METRICS_URL = /\/api\/(?:modules\/team-tracker\/)?(?:people\/metrics|person\/[^/?]+\/metrics)/;
+
+  const card = (page, label) =>
+    page.getByText(label, { exact: true }).locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]');
+
+  // The Overview tab stays mounted (hidden) alongside Delivery, so only match visible rows.
+  const row = (page, text) => page.locator('tbody tr:visible', { hasText: text });
+
+  async function openCoreDelivery(page) {
+    await page.goto(`/#/team-tracker/home?projectId=${FLIGHTCTL}`);
+    const teamCard = page.locator('.cursor-pointer', { hasText: 'Flight Control Core' }).first();
+    await expect(teamCard).toBeVisible();
+    await teamCard.click();
+    await page.getByRole('button', { name: 'Delivery' }).click();
+  }
+
+  test('Team Directory to Delivery fetches project-scoped metrics and renders the published members and issues', async ({ page }) => {
+    const metricsRequests = [];
+    const legacyRequests = [];
+    page.on('request', request => {
+      const url = request.url();
+      if (TEAM_METRICS_URL.test(url)) metricsRequests.push(url);
+      if (LEGACY_METRICS_URL.test(url)) legacyRequests.push(url);
+    });
+    const metricsResponse = page.waitForResponse(response => TEAM_METRICS_URL.test(response.url()));
+
+    await openCoreDelivery(page);
+
+    const response = await metricsResponse;
+    expect(response.ok()).toBeTruthy();
+    const requestUrl = new URL(response.url());
+    expect(requestUrl.searchParams.get('projectId')).toBe(FLIGHTCTL);
+    expect(decodeURIComponent(requestUrl.pathname.match(TEAM_METRICS_URL)[1])).toBe(CORE_TEAM_KEY);
+
+    const metrics = await response.json();
+    expect(metrics.teamKey).toBe(CORE_TEAM_KEY);
+    expect(metrics.available).toBe(true);
+    expect(metrics.aggregate).toMatchObject({ resolvedCount: 3, resolvedPoints: 10, inProgressCount: 1 });
+    expect(metrics.members.map(m => m.accountId).sort()).toEqual(['fc-acc-1', 'fc-acc-2']);
+    expect(metrics.members.find(m => m.accountId === 'fc-acc-1').metrics).toMatchObject({ lookbackDays: 365, resolvedCount: 2, resolvedPoints: 8, inProgressCount: 1 });
+    expect(metrics.members.find(m => m.accountId === 'fc-acc-2').metrics).toMatchObject({ lookbackDays: 365, resolvedCount: 1, resolvedPoints: 2 });
+    const attribution = Object.fromEntries(metrics.resolvedIssues.map(i => [i.key, i.accountId]));
+    expect(attribution).toEqual({ 'FLPATH-101': 'fc-acc-1', 'FLPATH-102': 'fc-acc-1', 'FLPATH-103': 'fc-acc-2' });
+    expect(metrics.inProgressIssues.map(i => [i.key, i.accountId])).toEqual([['FLPATH-110', 'fc-acc-1']]);
+
+    // Aggregate cards render the published values with the consistent published window.
+    await expect(card(page, 'Issues Resolved')).toContainText('3');
+    await expect(card(page, 'Issues Resolved')).toContainText('Last year');
+    await expect(card(page, 'Story Points')).toContainText('10');
+
+    // Member table joins by accountId; Priya Shah belongs to a different team.
+    await expect(row(page, 'Nadia Osei')).toBeVisible();
+    await expect(row(page, 'Marco Liu')).toBeVisible();
+    await expect(row(page, 'Priya Shah')).toHaveCount(0);
+
+    // Issue details resolve the assignee name from accountId.
+    await card(page, 'Issues Resolved').click();
+    await expect(page.getByRole('heading', { name: /Resolved Issues \(3\)/ })).toBeVisible();
+    await expect(row(page, 'FLPATH-101')).toContainText('Nadia Osei');
+    await expect(row(page, 'FLPATH-103')).toContainText('Marco Liu');
+    await page.locator('div.fixed.inset-0 button').first().click();
+    await expect(page.getByRole('heading', { name: /Resolved Issues/ })).toHaveCount(0);
+
+    await card(page, 'In Progress').click();
+    await expect(page.getByRole('heading', { name: /In-Progress Issues \(1\)/ })).toBeVisible();
+    await expect(row(page, 'FLPATH-110')).toContainText('Nadia Osei');
+
+    // Never the legacy OSAC endpoints, and every team-metrics call is project-scoped.
+    expect(legacyRequests).toHaveLength(0);
+    expect(metricsRequests.length).toBeGreaterThan(0);
+    for (const url of metricsRequests) {
+      expect(new URL(url).searchParams.get('projectId')).toBe(FLIGHTCTL);
+    }
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('omits the window subtitle when the published members report mixed lookback windows', async ({ page }) => {
+    await page.route(TEAM_METRICS_URL, async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.members[0].metrics.lookbackDays = 90;
+      await route.fulfill({ response, json: body });
+    });
+
+    await openCoreDelivery(page);
+
+    await expect(card(page, 'Issues Resolved')).toContainText('3');
+    await expect(card(page, 'Issues Resolved')).not.toContainText('Last year');
+    await expect(card(page, 'Issues Resolved')).not.toContainText('90');
+    expect(page.errors).toHaveLength(0);
+  });
+});
+
 test.describe('People & Teams Project-Qualified Contributions @people-teams', () => {
   const FLIGHTCTL = 'flightctl';
 

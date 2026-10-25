@@ -364,6 +364,46 @@ function createOpenApiSpec() {
                   inProgressCount: { type: 'integer' },
                   avgCycleTimeDays: { type: 'number', nullable: true }
                 }
+              },
+              members: {
+                type: 'array',
+                description: 'Published members of the team, keyed by accountId. A roster member with no record is absent, not zero. Omitted when available is false.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    accountId: { type: 'string' },
+                    metrics: {
+                      type: 'object',
+                      properties: {
+                        lookbackDays: { type: 'integer', nullable: true, description: 'Null when the publication does not state the window' },
+                        resolvedCount: { type: 'integer' },
+                        resolvedPoints: { type: 'integer' },
+                        inProgressCount: { type: 'integer' },
+                        avgCycleTimeDays: { type: 'number', nullable: true }
+                      }
+                    }
+                  }
+                }
+              },
+              resolvedIssues: {
+                type: 'array',
+                description: 'Resolved issues across the team\'s published members, attributed by accountId. Omitted when available is false.',
+                items: {
+                  allOf: [
+                    { $ref: '#/components/schemas/JiraIssue' },
+                    { type: 'object', properties: { accountId: { type: 'string', description: 'Assignee, as published' } } }
+                  ]
+                }
+              },
+              inProgressIssues: {
+                type: 'array',
+                description: 'In-progress issues across the team\'s published members, attributed by accountId. Omitted when available is false.',
+                items: {
+                  allOf: [
+                    { $ref: '#/components/schemas/JiraIssue' },
+                    { type: 'object', properties: { accountId: { type: 'string', description: 'Assignee, as published' } } }
+                  ]
+                }
               }
             }
           },
