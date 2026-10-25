@@ -141,7 +141,8 @@ function createOpenApiSpec() {
                   resolvedCount: { type: 'integer' },
                   resolvedPoints: { type: 'integer' },
                   inProgressCount: { type: 'integer' },
-                  avgCycleTimeDays: { type: 'number', nullable: true }
+                  avgCycleTimeDays: { type: 'number', nullable: true },
+                  lookbackDays: { type: 'integer', nullable: true, description: 'Common resolved-issue lookback window across members; null when mixed or unknown.' }
                 }
               },
               members: { type: 'array', items: { type: 'object' } },
@@ -308,7 +309,7 @@ function createOpenApiSpec() {
           },
           ProjectTrendsResponse: {
             type: 'object',
-            description: 'Project-qualified Jira trend data, sourced from the jira-person-metrics publication. GitHub/GitLab are always null: no project-qualified contribution publication exists yet.',
+            description: 'Project-qualified Jira trend data, sourced from the jira-person-metrics publication, with GitHub merged in from the project contributions publication when available. GitLab is always null: no project-qualified GitLab publication exists.',
             properties: {
               projectId: { type: 'string' },
               availability: { type: 'string', enum: ['available', 'empty', 'unavailable'] },
@@ -341,13 +342,23 @@ function createOpenApiSpec() {
                   }
                 }
               },
-              github: { type: 'object', nullable: true, description: 'Always null: no project-qualified publication exists yet' },
-              gitlab: { type: 'object', nullable: true, description: 'Always null: no project-qualified publication exists yet' }
+              github: {
+                type: 'object',
+                nullable: true,
+                description: 'Null when the project contributions publication is unavailable; otherwise monthly totals from that publication.',
+                properties: {
+                  availability: { type: 'string', enum: ['available', 'empty'] },
+                  partial: { type: 'boolean' },
+                  overall: { type: 'object', description: 'Monthly contribution counts keyed by YYYY-MM. Empty when no monthly measurements were published; absence is not zero.' },
+                  byTeam: { type: 'object', description: 'Monthly contribution counts keyed by projectId::teamId, then YYYY-MM. A team with no published measurement has no key; absence is not zero.' }
+                }
+              },
+              gitlab: { type: 'object', nullable: true, description: 'Always null: no project-qualified GitLab publication exists' }
             }
           },
           ProjectTeamMetricsResponse: {
             type: 'object',
-            description: 'Project-qualified Jira team metrics, sourced from the jira-person-metrics publication.',
+            description: 'Project-qualified Jira team metrics, sourced from the jira-person-metrics publication, with a GitHub aggregate merged in from the project contributions publication when available.',
             properties: {
               teamKey: { type: 'string', description: 'projectId::teamId' },
               available: { type: 'boolean' },
@@ -362,7 +373,18 @@ function createOpenApiSpec() {
                   resolvedCount: { type: 'integer' },
                   resolvedPoints: { type: 'integer' },
                   inProgressCount: { type: 'integer' },
-                  avgCycleTimeDays: { type: 'number', nullable: true }
+                  avgCycleTimeDays: { type: 'number', nullable: true },
+                  lookbackDays: { type: 'integer', nullable: true, description: 'Common resolved-issue lookback window across team members; null when mixed or unknown.' },
+                  github: {
+                    type: 'object',
+                    nullable: true,
+                    description: 'Null when the project contributions publication is unavailable for this team.',
+                    properties: {
+                      total: { type: 'integer' },
+                      memberCount: { type: 'integer', description: 'Members in the contributions publication for this team (its own membership, not the Jira roster’s)' },
+                      contributorCount: { type: 'integer', description: 'Members with a resolved GitHub identity and contribution data. Below memberCount means partial coverage; total covers measured members only.' }
+                    }
+                  }
                 }
               },
               members: {

@@ -5,6 +5,9 @@
  * `gitlab` is always null (unpublished by this collector). A known project that
  * has never published contributions is `unavailable`, not a 404: the same
  * convention the Jira Hygiene reader uses for "not yet collected" data.
+ *
+ * `readProjectContributionsTrends`/`readProjectTeamContributions` reshape the
+ * same people for Trends/Team Comparison, keyed by accountId/teamIds only.
  */
 
 const ARTIFACT_KEY = 'sources/contributions/registry.json'
@@ -220,4 +223,73 @@ function _unavailableReadModel(projectId, reason, publicationState, generatedAt)
   }
 }
 
-module.exports = { ARTIFACT_KEY, PUBLICATION_STATUS_KEY, readProjectContributions }
+// Monthly GitHub series for Trends, bucketed overall and per team. A person
+// with no `github.months` contributes nothing, never a fabricated zero.
+function readProjectContributionsTrends(projects, projectId) {
+  const result = readProjectContributions(projects, projectId)
+  if (result.status !== 200) return result
+
+  const model = result.model
+  if (model.availability === 'unavailable') {
+    return {
+      status: 200,
+      model: { availability: 'unavailable', reason: model.reason, generatedAt: model.generatedAt, overall: null, byTeam: null }
+    }
+  }
+
+  const overall = {}
+  const byTeam = {}
+  for (const person of model.people) {
+    if (!person.github?.months) continue
+    for (const [month, count] of Object.entries(person.github.months)) {
+      overall[month] = (overall[month] || 0) + count
+      for (const teamId of person.teamIds) {
+        const teamKey = `${projectId}::${teamId}`
+        if (!byTeam[teamKey]) byTeam[teamKey] = {}
+        byTeam[teamKey][month] = (byTeam[teamKey][month] || 0) + count
+      }
+    }
+  }
+
+  return {
+    status: 200,
+    model: { availability: model.availability, partial: model.partial, generatedAt: model.generatedAt, overall, byTeam }
+  }
+}
+
+// Per-team GitHub aggregate for Team Comparison. `memberCount` is this
+// publication's own team membership, not the (possibly differing) Jira roster's.
+function readProjectTeamContributions(projects, projectId, teamId) {
+  const result = readProjectContributions(projects, projectId)
+  if (result.status !== 200) return result
+
+  const model = result.model
+  if (model.availability === 'unavailable') return { status: 200, model: null }
+
+  const members = model.people.filter(person => person.teamIds.includes(teamId))
+  let total = 0
+  let contributorCount = 0
+  for (const person of members) {
+    if (person.github?.totalContributions != null) {
+      total += person.github.totalContributions
+      contributorCount++
+    }
+  }
+
+  // No resolved contributors -- unavailable, never a fabricated zero.
+  // `contributorCount < memberCount` still signals partial coverage.
+  if (contributorCount === 0) return { status: 200, model: null }
+
+  return {
+    status: 200,
+    model: { total, memberCount: members.length, contributorCount, partial: model.partial, generatedAt: model.generatedAt }
+  }
+}
+
+module.exports = {
+  ARTIFACT_KEY,
+  PUBLICATION_STATUS_KEY,
+  readProjectContributions,
+  readProjectContributionsTrends,
+  readProjectTeamContributions
+}

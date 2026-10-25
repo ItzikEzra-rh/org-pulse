@@ -1,9 +1,9 @@
 /**
  * Project-qualified Jira person/team metrics reads, for Trends and Team
  * Comparison. Canonical identity is (projectId, accountId) /
- * (projectId, teamId), matching project-roster.js. GitHub/GitLab
- * contributions have no project-qualified publication yet, so trends always
- * report them as absent (`null`), never a fabricated zero.
+ * (projectId, teamId), matching project-roster.js. This reader only knows
+ * about Jira; the route handler merges in GitHub from `project-contributions.js`.
+ * GitLab has no project-qualified publication, so it's always `null`.
  *
  * This is a source-specific reader, not the converged aggregation layer:
  * the legacy OSAC team-metrics path (index.js) dedupes members by
@@ -194,7 +194,7 @@ function _buildTrendsModel(projectId, loaded) {
     partial: loaded.partial,
     generatedAt: loaded.generatedAt,
     jira,
-    // No project-qualified GitHub/GitLab contribution publication exists yet.
+    // Route handler merges in GitHub from project-contributions.js when available.
     github: null,
     gitlab: null
   };
@@ -218,6 +218,17 @@ function readProjectTrends(projects, projectId, readFromStorage) {
   if (loaded.kind === 'error') return { status: loaded.status, error: loaded.error };
   if (loaded.kind === 'unavailable') return { status: 200, model: _unavailableTrendsModel(projectId, loaded) };
   return { status: 200, model: _buildTrendsModel(projectId, loaded) };
+}
+
+// A single common lookbackDays across the team's people, or null when mixed,
+// absent, or any person's window is unknown.
+function _resolveLookbackDays(people) {
+  const values = new Set();
+  for (const person of people) {
+    if (typeof person.lookbackDays !== 'number') return null;
+    values.add(person.lookbackDays);
+  }
+  return values.size === 1 ? [...values][0] : null;
 }
 
 // A roster member with no record in `people[]` is simply absent from
@@ -251,7 +262,8 @@ function _buildTeamMetricsModel(projectId, people, team, publicationPartial) {
       resolvedCount: team.resolved?.count ?? 0,
       resolvedPoints: team.resolved?.storyPoints ?? 0,
       inProgressCount: team.inProgress?.count ?? 0,
-      avgCycleTimeDays: team.cycleTime?.avgDays ?? null
+      avgCycleTimeDays: team.cycleTime?.avgDays ?? null,
+      lookbackDays: _resolveLookbackDays(teamPeople)
     },
     members,
     resolvedIssues,

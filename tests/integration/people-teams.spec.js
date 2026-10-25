@@ -788,3 +788,141 @@ test.describe('People & Teams Project-Qualified Contributions @people-teams', ()
     expect(page.errors).toHaveLength(0);
   });
 });
+
+/**
+ * Project-Qualified Trends and Team Comparison (OSAC-6322)
+ * Verifies the report journeys read project-scoped GitHub/Jira data, present
+ * unavailable and partial coverage accurately, and leave legacy OSAC unchanged.
+ */
+test.describe('People & Teams Project-Qualified Reports @people-teams', () => {
+  const FLIGHTCTL = 'flightctl';
+  // Fixture: fixtures/projects/flightctl/sources/contributions/registry.json
+  const CORE_KEY = 'flightctl::366df4de-dc38-4f71-9f0d-9916d450c20c';
+  const UI_KEY = 'flightctl::73ce1d26-43fc-4432-92eb-ce48c5e5e200';
+  const TRENDS_URL = /\/api\/(?:modules\/team-tracker\/)?trends(?:\?|$)/;
+  const TEAM_METRICS_URL = /\/api\/(?:modules\/team-tracker\/)?team\/([^/?]+)\/metrics/;
+
+  test.beforeEach(async ({ page }) => {
+    setupErrorTracking(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    logCapturedErrors(page, testInfo);
+  });
+
+  async function openReport(page, title, projectId) {
+    await page.goto(projectId ? `/#/team-tracker/reports?projectId=${projectId}` : '/#/team-tracker/reports');
+    await page.locator('.cursor-pointer', { hasText: title }).first().click();
+  }
+
+  test('Trends reads the project-scoped GitHub series and charts it alongside Jira', async ({ page }) => {
+    const trendsUrls = [];
+    page.on('request', request => {
+      if (TRENDS_URL.test(request.url())) trendsUrls.push(request.url());
+    });
+    const trendsResponse = page.waitForResponse(response => TRENDS_URL.test(response.url()));
+
+    await openReport(page, 'Productivity Trends', FLIGHTCTL);
+
+    const response = await trendsResponse;
+    expect(new URL(response.url()).searchParams.get('projectId')).toBe(FLIGHTCTL);
+    const trends = await response.json();
+    expect(trends.github.overall).toEqual({ '2026-08': 110, '2026-09': 119, '2026-10': 82 });
+    expect(trends.github.byTeam[CORE_KEY]).toEqual({ '2026-08': 110, '2026-09': 119, '2026-10': 82 });
+    expect(trends.github.byTeam[UI_KEY]).toEqual({ '2026-08': 40, '2026-09': 31, '2026-10': 26 });
+
+    // Issues Resolved, GitHub, and Avg Cycle Time render; GitLab is explicitly unsupported.
+    await expect(page.locator('canvas')).toHaveCount(3);
+    await expect(page.getByText('GitLab Contributions: Unsupported for this project.')).toBeVisible();
+    await expect(page.getByText('GitHub Contributions: not published for this project.')).toHaveCount(0);
+
+    // Selecting a team re-slices the loaded series without leaving project scope.
+    await page.getByRole('group', { name: 'Team filter' }).getByText('Flight Control UI').click();
+    await expect(page.locator('canvas')).toHaveCount(3);
+
+    expect(trendsUrls.length).toBeGreaterThan(0);
+    for (const url of trendsUrls) {
+      expect(new URL(url).searchParams.get('projectId')).toBe(FLIGHTCTL);
+    }
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Trends reports GitHub as not published, not a zero series, when no monthly measurements exist', async ({ page }) => {
+    await page.route(TRENDS_URL, async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.github = { availability: 'available', partial: false, generatedAt: body.github.generatedAt, overall: {}, byTeam: {} };
+      await route.fulfill({ response, json: body });
+    });
+
+    await openReport(page, 'Productivity Trends', FLIGHTCTL);
+
+    await expect(page.getByText('GitHub Contributions: not published for this project.')).toBeVisible();
+    // Only Issues Resolved and Avg Cycle Time are charted.
+    await expect(page.locator('canvas')).toHaveCount(2);
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('Team Comparison scopes metrics to the project and labels partial GitHub coverage', async ({ page }) => {
+    const metricsUrls = [];
+    page.on('request', request => {
+      if (TEAM_METRICS_URL.test(request.url())) metricsUrls.push(request.url());
+    });
+
+    await openReport(page, 'Team Comparison', FLIGHTCTL);
+
+    const teamFilter = page.getByRole('group', { name: 'Team filter' });
+    await teamFilter.getByText('Flight Control Core').click();
+    await teamFilter.getByText('Flight Control UI').click();
+    await page.getByLabel('GitHub Contributions (1yr)').check();
+    await page.getByLabel('Avg GitHub Contributions per Member (1yr)').check();
+    await expect(page.getByLabel('GitLab Contributions (1yr)')).toBeDisabled();
+
+    const responses = Promise.all([CORE_KEY, UI_KEY].map(key =>
+      page.waitForResponse(response => {
+        const match = response.url().match(TEAM_METRICS_URL);
+        return match && decodeURIComponent(match[1]) === key;
+      })
+    ));
+    await page.getByRole('button', { name: 'Run' }).click();
+
+    const [coreResponse, uiResponse] = await responses;
+    const core = await coreResponse.json();
+    const ui = await uiResponse.json();
+    expect(new URL(coreResponse.url()).searchParams.get('projectId')).toBe(FLIGHTCTL);
+    expect(new URL(uiResponse.url()).searchParams.get('projectId')).toBe(FLIGHTCTL);
+    expect(core.aggregate.github).toMatchObject({ total: 311, memberCount: 2, contributorCount: 2 });
+    expect(ui.aggregate.github).toMatchObject({ total: 97, memberCount: 2, contributorCount: 1 });
+
+    // Only the team with an unmeasured member is flagged; the complete team is not.
+    await expect(page.locator('canvas')).toHaveCount(2);
+    await expect(page.getByText('Partial coverage, totals cover measured members only: Flight Control UI (1 of 2 members)')).toBeVisible();
+    await expect(page.getByText('Partial coverage, averaged over measured members only: Flight Control UI (1 of 2 members)')).toBeVisible();
+    await expect(page.getByText(/Partial coverage.*Flight Control Core/)).toHaveCount(0);
+
+    for (const url of metricsUrls) {
+      expect(new URL(url).searchParams.get('projectId')).toBe(FLIGHTCTL);
+    }
+    expect(page.errors).toHaveLength(0);
+  });
+
+  test('legacy OSAC Trends and Team Comparison keep the username-keyed shape and enabled GitLab metrics', async ({ page }) => {
+    const trendsResponse = page.waitForResponse(response => TRENDS_URL.test(response.url()));
+    await openReport(page, 'Productivity Trends');
+
+    const response = await trendsResponse;
+    expect(new URL(response.url()).searchParams.get('projectId')).toBe('osac');
+    const trends = await response.json();
+    expect(trends.github).toHaveProperty('users');
+    expect(trends.github).not.toHaveProperty('overall');
+    await expect(page.locator('canvas').first()).toBeVisible();
+    await expect(page.getByText('Unsupported for this project')).toHaveCount(0);
+
+    await openReport(page, 'Team Comparison');
+    await expect(page.getByLabel('GitLab Contributions (1yr)')).toBeEnabled();
+    await expect(page.getByText('Unsupported for this project')).toHaveCount(0);
+    await expect(page.getByText(/Partial coverage/)).toHaveCount(0);
+
+    expect(page.errors).toHaveLength(0);
+  });
+});

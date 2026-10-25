@@ -26,6 +26,7 @@ const http = require('http')
 const registerRoutes = require('../../server/index')
 const rosterSyncConfig = require('../../../../shared/server/roster-sync/config')
 const { ARTIFACT_KEY: JIRA_METRICS_ARTIFACT_KEY } = require('../../server/project-jira-metrics')
+const { ARTIFACT_KEY: CONTRIBUTIONS_ARTIFACT_KEY } = require('../../server/project-contributions')
 
 function makeStorage(data) {
   return {
@@ -86,13 +87,48 @@ function makeJiraMetricsEnvelope(projectId, overrides = {}) {
   }
 }
 
-function makeProjectsReader({ knownProjectIds = [], jiraMetricsProjectIds = [] } = {}) {
+function makeContributionsEnvelope(projectId, overrides = {}) {
+  return {
+    schemaVersion: 1,
+    projectId,
+    profileRevision: 'rev',
+    artifactKey: CONTRIBUTIONS_ARTIFACT_KEY,
+    source: { id: `${projectId}-contributions`, kind: 'github-contributions' },
+    generatedAt: '2026-10-14T00:00:00Z',
+    fetchedAt: '2026-10-14T00:00:00Z',
+    state: 'supported',
+    freshness: 'fresh',
+    partial: false,
+    error: null,
+    data: {
+      projectId,
+      personCount: 1,
+      resolvedCount: 1,
+      metric: { name: 'githubContributionCalendar', scope: 'github-wide', unit: 'contributionCount', buckets: 'month' },
+      people: [{
+        accountId: `${projectId}-acct-1`,
+        displayName: 'Team Member',
+        active: true,
+        teamIds: ['team-1'],
+        github: { username: 'member-gh', totalContributions: 42, months: { '2026-09': 42 }, fetchedAt: '2026-10-14T00:00:00Z' },
+        gitlab: null
+      }],
+      diagnostics: { unresolvedIdentities: [], identityConflicts: [], carriedForward: [], failedFetch: [], gitlab: { state: 'unavailable' } }
+    },
+    ...overrides
+  }
+}
+
+function makeProjectsReader({ knownProjectIds = [], jiraMetricsProjectIds = [], contributionsProjectIds = [] } = {}) {
   const profiles = {}
   for (const id of knownProjectIds) profiles[id] = makeProjectProfile(id)
 
   const publications = {}
   for (const id of jiraMetricsProjectIds) {
-    publications[id] = { [JIRA_METRICS_ARTIFACT_KEY]: { value: makeJiraMetricsEnvelope(id) } }
+    publications[id] = { ...publications[id], [JIRA_METRICS_ARTIFACT_KEY]: { value: makeJiraMetricsEnvelope(id) } }
+  }
+  for (const id of contributionsProjectIds) {
+    publications[id] = { ...publications[id], [CONTRIBUTIONS_ARTIFACT_KEY]: { value: makeContributionsEnvelope(id) } }
   }
 
   return {
@@ -206,6 +242,22 @@ describe('GET /trends project-selection dispatch', () => {
     expect(JSON.stringify(body)).not.toContain('osac-acct')
   })
 
+  it('merges in GitHub from the project contributions publication when available', async () => {
+    const projects = makeProjectsReader({
+      knownProjectIds: ['osac', 'flightctl'],
+      jiraMetricsProjectIds: ['flightctl'],
+      contributionsProjectIds: ['flightctl']
+    })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/trends?projectId=flightctl')
+
+    expect(status).toBe(200)
+    expect(body.github.overall).toEqual({ '2026-09': 42 })
+    expect(body.github.byTeam).toEqual({ 'flightctl::team-1': { '2026-09': 42 } })
+    expect(body.gitlab).toBeNull()
+  })
+
   it('never leaks OSAC data into a project response, even when OSAC also has a jira-person-metrics publication', async () => {
     const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['osac', 'flightctl'] })
     const app = createTestServer(makeRegistryStorageData(), projects)
@@ -243,6 +295,29 @@ describe('GET /team/:teamKey/metrics project-selection dispatch', () => {
     expect(body.teamKey).toBe('flightctl::team-1')
     expect(body.available).toBe(true)
     expect(body.aggregate.resolvedCount).toBe(1)
+  })
+
+  it('merges in a GitHub aggregate from the project contributions publication when available', async () => {
+    const projects = makeProjectsReader({
+      knownProjectIds: ['osac', 'flightctl'],
+      jiraMetricsProjectIds: ['flightctl'],
+      contributionsProjectIds: ['flightctl']
+    })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { status, body } = await requestGet(app, '/team/flightctl%3A%3Ateam-1/metrics?projectId=flightctl')
+
+    expect(status).toBe(200)
+    expect(body.aggregate.github).toMatchObject({ total: 42, memberCount: 1, contributorCount: 1 })
+  })
+
+  it('reports aggregate.github as null, not a fabricated zero, when no contributions publication exists', async () => {
+    const projects = makeProjectsReader({ knownProjectIds: ['osac', 'flightctl'], jiraMetricsProjectIds: ['flightctl'] })
+    const app = createTestServer(makeRegistryStorageData(), projects)
+
+    const { body } = await requestGet(app, '/team/flightctl%3A%3Ateam-1/metrics?projectId=flightctl')
+
+    expect(body.aggregate.github).toBeNull()
   })
 
   it('returns 404 for a team absent from the project publication, without falling back to OSAC team metrics', async () => {

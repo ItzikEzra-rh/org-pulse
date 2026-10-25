@@ -431,3 +431,80 @@ describe('deriveRoster jiraAccountId provider gate', () => {
     expect(person.jiraAccountId).toBeNull()
   })
 })
+
+describe('legacy team metrics lookbackDays agreement', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    rosterSyncConfig.clearDisplayNamesCache()
+  })
+
+  function makeTeamRegistryData(people) {
+    return {
+      'team-data/registry.json': {
+        meta: {
+          generatedAt: '2026-01-15T00:00:00.000Z',
+          provider: 'test',
+          orgRoots: ['org1'],
+          vp: { name: 'VP', uid: 'vp1' }
+        },
+        people
+      },
+      'team-data/config.json': {
+        orgRoots: [{ uid: 'org1', displayName: 'Org' }]
+      }
+    }
+  }
+
+  function makeTeamPerson(uid, name) {
+    return {
+      uid, name, status: 'active', orgRoot: 'org1',
+      email: `${uid}@example.com`, title: 'Engineer',
+      miroTeam: 'TeamX', managerUid: null
+    }
+  }
+
+  it('reports the common lookbackDays when every member\'s cached metrics agree', async () => {
+    const data = makeTeamRegistryData({
+      alice: makeTeamPerson('alice', 'Alice'),
+      bob: makeTeamPerson('bob', 'Bob')
+    })
+    data['people/alice.json'] = { resolved: { count: 1, storyPoints: 1 }, inProgress: { count: 0 }, cycleTime: { avgDays: null }, lookbackDays: 365 }
+    data['people/bob.json'] = { resolved: { count: 2, storyPoints: 2 }, inProgress: { count: 0 }, cycleTime: { avgDays: null }, lookbackDays: 365 }
+    const app = createTestServer(data)
+
+    const { status, body } = await requestGet(app, '/team/' + encodeURIComponent('org1::TeamX') + '/metrics')
+
+    expect(status).toBe(200)
+    expect(body.aggregate.lookbackDays).toBe(365)
+  })
+
+  it('reports null lookbackDays when a member has no cached metrics, even though the rest agree', async () => {
+    const data = makeTeamRegistryData({
+      alice: makeTeamPerson('alice', 'Alice'),
+      bob: makeTeamPerson('bob', 'Bob')
+    })
+    data['people/alice.json'] = { resolved: { count: 1, storyPoints: 1 }, inProgress: { count: 0 }, cycleTime: { avgDays: null }, lookbackDays: 365 }
+    // Bob has no cached metrics at all -- his window is unknown, not absent-and-ignorable.
+    const app = createTestServer(data)
+
+    const { status, body } = await requestGet(app, '/team/' + encodeURIComponent('org1::TeamX') + '/metrics')
+
+    expect(status).toBe(200)
+    expect(body.aggregate.lookbackDays).toBeNull()
+  })
+
+  it('reports null lookbackDays when a member\'s cached metrics omit lookbackDays, even though the rest agree', async () => {
+    const data = makeTeamRegistryData({
+      alice: makeTeamPerson('alice', 'Alice'),
+      bob: makeTeamPerson('bob', 'Bob')
+    })
+    data['people/alice.json'] = { resolved: { count: 1, storyPoints: 1 }, inProgress: { count: 0 }, cycleTime: { avgDays: null }, lookbackDays: 365 }
+    data['people/bob.json'] = { resolved: { count: 2, storyPoints: 2 }, inProgress: { count: 0 }, cycleTime: { avgDays: null } }
+    const app = createTestServer(data)
+
+    const { status, body } = await requestGet(app, '/team/' + encodeURIComponent('org1::TeamX') + '/metrics')
+
+    expect(status).toBe(200)
+    expect(body.aggregate.lookbackDays).toBeNull()
+  })
+})

@@ -11,7 +11,7 @@
             :key="metric.key"
             class="flex items-center gap-2 px-2 py-1.5 rounded"
             :class="isMetricDisabled(metric) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50'"
-            :title="isMetricDisabled(metric) ? 'Not published for this project' : undefined"
+            :title="isMetricDisabled(metric) ? 'Unsupported for this project' : undefined"
           >
             <input
               type="checkbox"
@@ -21,7 +21,7 @@
               class="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
             />
             <span class="text-sm text-gray-700 dark:text-gray-300">{{ metric.label }}</span>
-            <span v-if="isMetricDisabled(metric)" class="text-xs text-gray-400 dark:text-gray-500">(not published for this project)</span>
+            <span v-if="isMetricDisabled(metric)" class="text-xs text-gray-400 dark:text-gray-500">(Unsupported for this project)</span>
           </label>
         </div>
       </div>
@@ -80,13 +80,24 @@
         :key="chart.metricKey + '-' + idx"
         class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4"
       >
-        <ReportChart
-          :type="chartType"
-          :labels="chart.labels"
-          :data="chart.data"
-          :title="chart.title"
-          :unit="chart.unit"
-        />
+        <div v-if="chart.data.length === 0 && chart.unavailableTeams?.length" class="text-sm text-gray-400 dark:text-gray-500">
+          {{ chart.title }}: not published for the selected team(s).
+        </div>
+        <template v-else>
+          <p v-if="chart.unavailableTeams?.length" class="text-xs text-gray-400 dark:text-gray-500 mb-2">
+            Not published for: {{ chart.unavailableTeams.join(', ') }}
+          </p>
+          <p v-if="chart.coverageNote" class="text-xs text-amber-600 dark:text-amber-400 mb-2">
+            {{ chart.coverageNote }}
+          </p>
+          <ReportChart
+            :type="chartType"
+            :labels="chart.labels"
+            :data="chart.data"
+            :title="chart.title"
+            :unit="chart.unit"
+          />
+        </template>
       </div>
     </div>
   </div>
@@ -127,12 +138,12 @@ const PROJECT_UNAVAILABLE_MESSAGES = {
 
 const METRICS_LIST = [
   { key: 'teamSize', label: 'Team Size' },
-  { key: 'resolvedCount', label: 'Issues Resolved (90d)' },
+  { key: 'resolvedCount', label: 'Issues Resolved' },
   { key: 'avgCycleTime', label: 'Avg Cycle Time' },
-  { key: 'resolvedPerMember', label: 'Issues Resolved per Member (90d)' },
-  // osacOnly: no project-qualified contribution publication exists yet (see isMetricDisabled).
-  { key: 'githubContributions', label: 'GitHub Contributions (1yr)', osacOnly: true },
-  { key: 'githubPerMember', label: 'Avg GitHub Contributions per Member (1yr)', osacOnly: true },
+  { key: 'resolvedPerMember', label: 'Issues Resolved per Member' },
+  { key: 'githubContributions', label: 'GitHub Contributions (1yr)' },
+  { key: 'githubPerMember', label: 'Avg GitHub Contributions per Member (1yr)' },
+  // osacOnly: GitLab has no project-qualified publication; Unsupported in project mode (see isMetricDisabled).
   { key: 'gitlabContributions', label: 'GitLab Contributions (1yr)', osacOnly: true },
   { key: 'gitlabPerMember', label: 'Avg GitLab Contributions per Member (1yr)', osacOnly: true },
 ]
@@ -148,6 +159,39 @@ const CHART_TYPES = [
   { value: 'doughnut', label: 'Doughnut' },
 ]
 
+// Appends the real lookback window, only when every active team has a known,
+// agreeing lookbackDays -- an unknown window is disagreement, not absence.
+function lookbackSuffix(keys) {
+  const values = new Set()
+  for (const k of keys) {
+    const lookbackDays = metricsData.value[k]?.aggregate?.lookbackDays
+    if (typeof lookbackDays !== 'number') return ''
+    values.add(lookbackDays)
+  }
+  return values.size === 1 ? ` (${[...values][0]}d)` : ''
+}
+
+// `aggregate.github === null` means unavailable for that team -- omit it rather than charting a fabricated zero.
+function partitionByGithubAvailability(keys) {
+  const available = []
+  const unavailable = []
+  for (const k of keys) {
+    if (metricsData.value[k]?.aggregate?.github) available.push(k)
+    else unavailable.push(k)
+  }
+  return [available, unavailable]
+}
+
+// Members without a published GitHub measurement are unknown, not zero, so a
+// team with `contributorCount < memberCount` is reported as partial coverage.
+function githubCoverageNote(keys, teamLookup, scope) {
+  const partial = keys
+    .map(k => ({ name: teamLookup[k]?.displayName ?? k, github: metricsData.value[k].aggregate.github }))
+    .filter(({ github }) => github.contributorCount < github.memberCount)
+    .map(({ name, github }) => `${name} (${github.contributorCount} of ${github.memberCount} members)`)
+  return partial.length ? `Partial coverage, ${scope} measured members only: ${partial.join(', ')}` : ''
+}
+
 const METRIC_DEFS = {
   teamSize: {
     label: 'Team Size',
@@ -155,7 +199,7 @@ const METRIC_DEFS = {
     extract: (d) => d.memberCount ?? 0
   },
   resolvedCount: {
-    label: 'Issues Resolved (90d)',
+    label: 'Issues Resolved',
     unit: '',
     extract: (d) => d.aggregate?.resolvedCount ?? 0
   },
@@ -165,7 +209,7 @@ const METRIC_DEFS = {
     extract: (d) => d.aggregate?.avgCycleTimeDays ?? 0
   },
   resolvedPerMember: {
-    label: 'Issues Resolved per Member (90d)',
+    label: 'Issues Resolved per Member',
     unit: '',
     extract: (d) => {
       const count = d.aggregate?.resolvedCount ?? 0
@@ -240,36 +284,65 @@ async function run() {
       const def = METRIC_DEFS[metricKey]
 
       if (metricKey === 'githubPerMember') {
-        newCharts.push({
-          metricKey,
-          title: def.label,
-          unit: '',
-          labels: activeKeys.map(k => teamLookup[k]?.displayName ?? k),
-          data: activeKeys.map(k => {
-            const team = teamLookup[k]
-            if (!team?.members?.length) return 0
-            const total = team.members.reduce((sum, m) => {
-              const c = m.githubUsername ? getContributions(m.githubUsername) : null
-              return sum + (c?.totalContributions ?? 0)
-            }, 0)
-            return Math.round((total / team.members.length) * 10) / 10
+        if (isProjectMode.value) {
+          const [availableKeys, unavailableKeys] = partitionByGithubAvailability(activeKeys)
+          newCharts.push({
+            metricKey,
+            title: def.label,
+            unit: '',
+            labels: availableKeys.map(k => teamLookup[k]?.displayName ?? k),
+            data: availableKeys.map(k => {
+              const github = metricsData.value[k].aggregate.github
+              return Math.round((github.total / github.contributorCount) * 10) / 10
+            }),
+            unavailableTeams: unavailableKeys.map(k => teamLookup[k]?.displayName ?? k),
+            coverageNote: githubCoverageNote(availableKeys, teamLookup, 'averaged over')
           })
-        })
+        } else {
+          newCharts.push({
+            metricKey,
+            title: def.label,
+            unit: '',
+            labels: activeKeys.map(k => teamLookup[k]?.displayName ?? k),
+            data: activeKeys.map(k => {
+              const team = teamLookup[k]
+              if (!team?.members?.length) return 0
+              const total = team.members.reduce((sum, m) => {
+                const c = m.githubUsername ? getContributions(m.githubUsername) : null
+                return sum + (c?.totalContributions ?? 0)
+              }, 0)
+              return Math.round((total / team.members.length) * 10) / 10
+            })
+          })
+        }
       } else if (metricKey === 'githubContributions') {
-        newCharts.push({
-          metricKey,
-          title: def.label,
-          unit: def.unit,
-          labels: activeKeys.map(k => teamLookup[k]?.displayName ?? k),
-          data: activeKeys.map(k => {
-            const team = teamLookup[k]
-            if (!team?.members) return 0
-            return team.members.reduce((sum, m) => {
-              const c = m.githubUsername ? getContributions(m.githubUsername) : null
-              return sum + (c?.totalContributions ?? 0)
-            }, 0)
+        if (isProjectMode.value) {
+          const [availableKeys, unavailableKeys] = partitionByGithubAvailability(activeKeys)
+          newCharts.push({
+            metricKey,
+            title: def.label,
+            unit: def.unit,
+            labels: availableKeys.map(k => teamLookup[k]?.displayName ?? k),
+            data: availableKeys.map(k => metricsData.value[k].aggregate.github.total),
+            unavailableTeams: unavailableKeys.map(k => teamLookup[k]?.displayName ?? k),
+            coverageNote: githubCoverageNote(availableKeys, teamLookup, 'totals cover')
           })
-        })
+        } else {
+          newCharts.push({
+            metricKey,
+            title: def.label,
+            unit: def.unit,
+            labels: activeKeys.map(k => teamLookup[k]?.displayName ?? k),
+            data: activeKeys.map(k => {
+              const team = teamLookup[k]
+              if (!team?.members) return 0
+              return team.members.reduce((sum, m) => {
+                const c = m.githubUsername ? getContributions(m.githubUsername) : null
+                return sum + (c?.totalContributions ?? 0)
+              }, 0)
+            })
+          })
+        }
       } else if (metricKey === 'gitlabPerMember') {
         newCharts.push({
           metricKey,
@@ -304,9 +377,12 @@ async function run() {
           })
         })
       } else {
+        const suffix = (metricKey === 'resolvedCount' || metricKey === 'resolvedPerMember')
+          ? lookbackSuffix(activeKeys)
+          : ''
         newCharts.push({
           metricKey,
-          title: def.label,
+          title: def.label + suffix,
           unit: def.unit,
           labels: activeKeys.map(k => teamLookup[k]?.displayName ?? k),
           data: activeKeys.map(k => def.extract(metricsData.value[k]))

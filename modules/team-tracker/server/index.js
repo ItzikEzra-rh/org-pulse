@@ -2,7 +2,7 @@ module.exports = function registerRoutes(router, context) {
   const { storage, requireAdmin, requireTeamAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage, listStorageFiles, deleteStorageDirectory } = storage;
   const { readProjectPeopleTeams } = require('./project-roster');
-  const { readProjectContributions } = require('./project-contributions');
+  const { readProjectContributions, readProjectContributionsTrends, readProjectTeamContributions } = require('./project-contributions');
   const { readProjectTrends, readProjectTeamMetrics, readProjectPersonMetrics } = require('./project-jira-metrics');
   const { resolveProjectSelection } = require('../../../shared/server/project-profile');
 
@@ -3164,6 +3164,10 @@ module.exports = function registerRoutes(router, context) {
         const teamId = sepIdx !== -1 ? teamKey.substring(sepIdx + 2) : teamKey;
         const result = readProjectTeamMetrics(context.projects, selection.projectId, teamId, readFromStorage);
         if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+        if (result.model.available) {
+          const contrib = readProjectTeamContributions(context.projects, selection.projectId, teamId);
+          result.model.aggregate.github = (contrib.status === 200 && contrib.model) ? contrib.model : null;
+        }
         return res.json(result.model);
       }
 
@@ -3209,6 +3213,8 @@ module.exports = function registerRoutes(router, context) {
       const members = [];
       const resolvedIssues = [];
       const inProgressIssues = [];
+      const lookbackDaysSeen = new Set();
+      let lookbackUnknown = false;
 
       for (const member of uniqueMembers) {
         const key = sanitizeFilename(member.jiraDisplayName);
@@ -3245,6 +3251,13 @@ module.exports = function registerRoutes(router, context) {
             cycleTimesSum += cached.cycleTime.avgDays;
             cycleTimesCount++;
           }
+          if (typeof cached.lookbackDays === 'number') {
+            lookbackDaysSeen.add(cached.lookbackDays);
+          } else {
+            lookbackUnknown = true;
+          }
+        } else {
+          lookbackUnknown = true;
         }
 
         members.push(memberData);
@@ -3258,7 +3271,10 @@ module.exports = function registerRoutes(router, context) {
           resolvedCount,
           resolvedPoints,
           inProgressCount,
-          avgCycleTimeDays: cycleTimesCount > 0 ? +(cycleTimesSum / cycleTimesCount).toFixed(1) : null
+          avgCycleTimeDays: cycleTimesCount > 0 ? +(cycleTimesSum / cycleTimesCount).toFixed(1) : null,
+          // null when mixed, absent, or any member's window is unknown --
+          // never assert a window some of the team's members can't back up.
+          lookbackDays: !lookbackUnknown && lookbackDaysSeen.size === 1 ? [...lookbackDaysSeen][0] : null
         },
         members,
         resolvedIssues,
@@ -3411,7 +3427,7 @@ module.exports = function registerRoutes(router, context) {
    *         name: projectId
    *         required: false
    *         schema: { type: string }
-   *         description: OSAC and an unset projectId return the legacy global trends; any other project returns its project-qualified Jira trends. GitHub/GitLab are always null for project mode (no project-qualified publication exists yet).
+   *         description: OSAC and an unset projectId return the legacy global trends; any other project returns its project-qualified Jira trends, with GitHub merged in from the project's contributions publication when available. GitLab is always null for project mode (no project-qualified publication exists).
    *     responses:
    *       200:
    *         description: Combined trend data from all sources
@@ -3429,6 +3445,10 @@ module.exports = function registerRoutes(router, context) {
       if (selection.provided && selection.projectId !== 'osac') {
         const result = readProjectTrends(context.projects, selection.projectId, readFromStorage);
         if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+        const contributions = readProjectContributionsTrends(context.projects, selection.projectId);
+        if (contributions.status === 200 && contributions.model.availability !== 'unavailable') {
+          result.model.github = contributions.model;
+        }
         return res.json(result.model);
       }
       const jira = buildJiraTrends();

@@ -261,6 +261,11 @@ instead of the legacy global computation (`buildJiraTrends()` /
 `deriveRoster()`-backed team metrics); an unset `projectId`, or
 `projectId=osac`, keeps returning the legacy response unchanged. As with
 `/roster`, there is no fallback to OSAC data for a known non-OSAC project.
+Both routes additionally merge in the project's GitHub contributions
+publication (see
+[Project-qualified GitHub Contributions](#project-qualified-github-contributions-get-apimodulesteam-trackerproject-contributions))
+when it is available; GitLab has no project-qualified publication and is
+always `null`.
 
 `GET /trends?projectId=<id>` (`ProjectTrendsResponse`):
 
@@ -282,7 +287,12 @@ instead of the legacy global computation (`buildJiraTrends()` /
       }
     }
   },
-  "github": null,
+  "github": {
+    "availability": "available",
+    "partial": false,
+    "overall": { "2026-09": 88 },
+    "byTeam": { "flightctl::team-1": { "2026-09": 70 } }
+  },
   "gitlab": null
 }
 ```
@@ -295,7 +305,14 @@ instead of the legacy global computation (`buildJiraTrends()` /
   "teamKey": "flightctl::team-1",
   "available": true,
   "memberCount": 3,
-  "aggregate": { "resolvedCount": 5, "resolvedPoints": 13, "inProgressCount": 2, "avgCycleTimeDays": 2.5 },
+  "aggregate": {
+    "resolvedCount": 5,
+    "resolvedPoints": 13,
+    "inProgressCount": 2,
+    "avgCycleTimeDays": 2.5,
+    "lookbackDays": 365,
+    "github": { "total": 88, "memberCount": 2, "contributorCount": 2 }
+  },
   "members": [
     {
       "accountId": "fc-acc-1",
@@ -317,7 +334,11 @@ instead of the legacy global computation (`buildJiraTrends()` /
 - A roster member with no record in `people[]` (not yet collected, or collection failed with nothing to carry forward) simply has no entry in `members` — the client treats that absence as unavailable, the same convention `readProjectPersonMetrics` uses for a single person, never a fabricated zero.
 - `resolvedIssues`/`inProgressIssues` are a flat concatenation across the team's members' own `resolved.issues`/`inProgress.issues`, each carrying that issue's own fields plus `accountId`; a multi-team member's issues appear once per team response (scoped per request), matching how `byTeam` in `ProjectTrendsResponse` attributes a shared person to each of their teams.
 - `jira` buckets are keyed by `YYYY-MM` (the issue's `resolutionDate` month) and built entirely from the publication's `people[].resolved.issues`; `byTeam` keys are project-qualified team keys, matching `team.key` in the roster response.
-- `github`/`gitlab` are always `null` on `ProjectTrendsResponse`/`ProjectTeamMetricsResponse`: these two endpoints do not join the project-qualified contributions publication described below (see [Project-qualified GitHub Contributions](#project-qualified-github-contributions-get-apimodulesteam-trackerproject-contributions)). The client keeps the GitHub/GitLab panels and metric options visible (disabled, with an inline reason) rather than removing them.
+- `github` is `null` on `ProjectTrendsResponse`/`ProjectTeamMetricsResponse` whenever the project contributions publication (see [Project-qualified GitHub Contributions](#project-qualified-github-contributions-get-apimodulesteam-trackerproject-contributions)) is `unavailable`, or (for `ProjectTeamMetricsResponse`) the team has no members with a resolved GitHub identity in that publication — never a fabricated zero. Otherwise it is built from that publication's `people[].github`, never from the legacy username-keyed caches. `gitlab` is always `null`: no project-qualified GitLab publication exists. The client keeps GitLab's panel/metric options visible but disabled as Unsupported for project mode.
+- `ProjectTrendsResponse.github.overall`/`byTeam` are keyed the same way as `jira` (`YYYY-MM`, then project-qualified team key for `byTeam`); a member of multiple teams contributes to each team's bucket once (not deduped across teams) and to `overall` once, mirroring `jira`'s cross-team semantics.
+- Only published measurements appear in `github.overall`/`byTeam`: `overall: {}` means no monthly measurements were published, and a team with none has no `byTeam` key. Consumers must treat absence as unavailable, never as zero; a month with a published count of `0` is a genuine zero.
+- `ProjectTeamMetricsResponse.aggregate.github.memberCount`/`contributorCount` are scoped to the contributions publication's own team membership, not the Jira roster's `memberCount` — the two publications are not guaranteed to agree on exactly who is on a team. `contributorCount < memberCount` means partial coverage: `total` covers only the measured members, and missing records are not zeroes.
+- `aggregate.lookbackDays` (both responses) is the common `lookbackDays` across the team's/org's people; `null` when it's mixed, or any relevant person's window is unknown, so the UI never asserts a specific window some of the team's members can't back up.
 - `availability`/`available` is `false`/`unavailable` whenever the publication's `state` is not `supported`/`empty`, or its `freshness` is not `fresh`/`stale` — never a fabricated zero. `reason` carries the publication `state` (e.g. `inapplicable`, `disabled`, `unavailable`, `error`) or `missing-publication` / `publication-not-fresh` / `no-published-people`.
 - A publication whose top-level `projectId`, `artifactKey`, `schemaVersion`, or nested `data.projectId` does not match the request is rejected outright (never partially joined), so project isolation holds the same way it does for roster/enrichment.
 - `partial` on `ProjectTrendsResponse` mirrors the publication's own `partial` flag (some people's metrics are stale carry-forward or missing); `partial` on `ProjectTeamMetricsResponse` is per-team (`team.partial`), set when any of that team's members are missing or stale. Both are additionally forced `true` when the `_publication/<key>.status.json` sidecar confirms the current profile's latest collection failed (see below), even though the preserved artifact itself still reports `freshness:"fresh"`.

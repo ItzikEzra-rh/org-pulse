@@ -44,7 +44,7 @@
     </div>
 
     <!-- No data -->
-    <div v-else-if="!trendsData?.jira" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-400 dark:text-gray-500" role="status" aria-live="polite">
+    <div v-else-if="noDataAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-400 dark:text-gray-500" role="status" aria-live="polite">
       <p class="text-lg mb-2">No trend data available</p>
       <p v-if="isProjectMode" class="text-sm">{{ projectUnavailableMessage }}</p>
       <p v-else class="text-sm">Click "Refresh Data (365d)" to fetch historical data from Jira, GitHub, and GitLab.</p>
@@ -52,15 +52,18 @@
 
     <!-- Charts -->
     <div v-else class="space-y-6">
-      <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div v-if="jiraAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <TrendChart
           :labels="displayLabels"
           :datasets="resolvedDatasets"
           title="Issues Resolved"
         />
       </div>
+      <div v-else-if="isProjectMode" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-400 dark:text-gray-500">
+        Issues Resolved: {{ projectUnavailableMessage }}
+      </div>
 
-      <div v-if="githubAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div v-if="githubChartVisible" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <TrendChart
           :labels="displayLabels"
           :datasets="githubDatasets"
@@ -68,7 +71,7 @@
         />
       </div>
       <div v-else-if="isProjectMode" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-400 dark:text-gray-500">
-        GitHub Contributions: not published for this project.
+        GitHub Contributions: {{ githubAvailable ? 'not published for the selected team(s).' : 'not published for this project.' }}
       </div>
 
       <div v-if="gitlabAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -79,10 +82,10 @@
         />
       </div>
       <div v-else-if="isProjectMode" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-400 dark:text-gray-500">
-        GitLab Contributions: not published for this project.
+        GitLab Contributions: Unsupported for this project.
       </div>
 
-      <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div v-if="jiraAvailable" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <TrendChart
           :labels="displayLabels"
           :datasets="cycleTimeDatasets"
@@ -112,8 +115,17 @@ const error = ref(null)
 const compareMode = ref('compare')
 
 const isProjectMode = computed(() => !!projectId.value && projectId.value !== 'osac')
-const githubAvailable = computed(() => trendsData.value?.github != null)
+const jiraAvailable = computed(() => trendsData.value?.jira != null)
+const githubAvailable = computed(() => {
+  const github = trendsData.value?.github
+  if (github == null) return false
+  return isProjectMode.value ? hasProjectMonthlyGithub(github) : true
+})
+// In project mode every selected series can be omitted for lack of a published
+// measurement; an empty chart is shown as unavailable instead.
+const githubChartVisible = computed(() => githubAvailable.value && (!isProjectMode.value || githubDatasets.value.length > 0))
 const gitlabAvailable = computed(() => trendsData.value?.gitlab != null)
+const noDataAvailable = computed(() => !jiraAvailable.value && !githubAvailable.value && !gitlabAvailable.value)
 
 const PROJECT_UNAVAILABLE_MESSAGES = {
   'missing-publication': 'Jira metrics have not been published for this project yet.',
@@ -146,8 +158,10 @@ const seriesConfig = computed(() => {
     })
   }
 
-  // Orgs selected
-  if (selectedOrgKeys.value.length > 0) {
+  // Orgs selected (legacy-OSAC concept only -- a stale selection must not
+  // leak into project mode, which has no org concept and would otherwise
+  // produce a fabricated-zero series for it).
+  if (!isProjectMode.value && selectedOrgKeys.value.length > 0) {
     if (compareMode.value === 'aggregate' && selectedOrgKeys.value.length > 1) {
       return [{ key: selectedOrgKeys.value, label: 'Selected Orgs', type: 'orgs-aggregate' }]
     }
@@ -187,13 +201,16 @@ const teamDisplayNames = computed(() => {
   return lookup
 })
 
-// Generate sorted month labels for the last 12 months
+// Generate sorted month labels for the last 12 months. Jira/GitHub/GitLab
+// availability is independent, so any source with data can chart.
 const monthLabels = computed(() => {
-  if (!trendsData.value?.jira) return []
+  if (noDataAvailable.value) return []
   const allMonths = new Set()
 
-  for (const month of Object.keys(trendsData.value.jira)) {
-    allMonths.add(month)
+  if (trendsData.value.jira) {
+    for (const month of Object.keys(trendsData.value.jira)) {
+      allMonths.add(month)
+    }
   }
 
   if (trendsData.value.github?.users) {
@@ -203,6 +220,13 @@ const monthLabels = computed(() => {
           allMonths.add(month)
         }
       }
+    }
+  }
+  // Project mode: github is already bucketed server-side (byTeam/overall), not
+  // username-keyed -- see getGithubValue().
+  if (trendsData.value.github?.overall) {
+    for (const month of Object.keys(trendsData.value.github.overall)) {
+      allMonths.add(month)
     }
   }
 
@@ -273,9 +297,42 @@ const githubUserLookup = computed(() => {
   return lookup
 })
 
+// Project mode's github is pre-bucketed server-side by (projectId, accountId)
+// team membership -- no roster username join, and no org concept (teams only).
+// A team absent from `byTeam` has no published measurement; a present team
+// with all-zero months is a real zero, not an absence. A "Selected Teams"
+// aggregate requires every selected team to have a measurement -- summing
+// only the subset that does would silently relabel a partial total as the
+// full selection.
+// `{}` means no monthly measurements were published; a month with count 0 is a real zero.
+function hasProjectMonthlyGithub(github) {
+  return Object.keys(github.overall || {}).length > 0
+}
+
+function hasProjectGithubData(series, github) {
+  if (series.type === 'overall') return hasProjectMonthlyGithub(github)
+  if (series.type === 'team') return Object.hasOwn(github.byTeam || {}, series.key)
+  if (series.type === 'teams-aggregate') return series.key.every(k => Object.hasOwn(github.byTeam || {}, k))
+  return true
+}
+
+function getProjectGithubValue(monthKey, series, github) {
+  if (series.type === 'overall') return github.overall?.[monthKey] || 0
+  if (series.type === 'team') return github.byTeam?.[series.key]?.[monthKey] || 0
+  if (series.type === 'teams-aggregate') {
+    let total = 0
+    for (const teamKey of series.key) total += github.byTeam?.[teamKey]?.[monthKey] || 0
+    return total
+  }
+  return 0
+}
+
 function getGithubValue(monthKey, series) {
   const github = trendsData.value?.github
-  if (!github?.users) return 0
+  if (!github) return 0
+  if (isProjectMode.value) return getProjectGithubValue(monthKey, series, github)
+
+  if (!github.users) return 0
   const lookup = githubUserLookup.value
 
   let total = 0
@@ -353,9 +410,15 @@ const resolvedDatasets = computed(() => {
 const githubDatasets = computed(() => {
   const labels = monthLabels.value
   if (labels.length === 0) return []
-  return seriesConfig.value.map(series => ({
-    label: series.label,
-    data: labels.map(m => getGithubValue(m.key, series))
+  const github = trendsData.value?.github
+  // Project mode: a series for a team with no published GitHub measurement is
+  // omitted rather than charted as a fabricated zero line.
+  const series = (isProjectMode.value && github)
+    ? seriesConfig.value.filter(s => hasProjectGithubData(s, github))
+    : seriesConfig.value
+  return series.map(s => ({
+    label: s.label,
+    data: labels.map(m => getGithubValue(m.key, s))
   }))
 })
 
