@@ -7,8 +7,10 @@
   "defaultEnabled": true,
   "client": {
     "entry": "./client/index.js",
+    "projectIds": ["osac"],
+    "singlePage": true,
     "navItems": [
-      { "id": "coverage", "label": "OSAC", "icon": "ClipboardList", "default": true }
+      { "id": "coverage", "label": "Coverage", "icon": "ClipboardList", "default": true }
     ],
     "sotuWidgets": [
       {

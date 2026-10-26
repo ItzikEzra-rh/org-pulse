@@ -39,11 +39,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { apiRequest } from '@shared/client/services/api.js'
 import { useModuleLink } from '@shared/client/composables/useModuleLink.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 import { formatRelativeTime } from '@shared/client/utils/format.js'
 
 defineProps({ size: { type: String, default: 'half' } })
 
 const { navigateTo } = useModuleLink()
+const projectId = useProjectId()
 const latest = ref(null)
 const loading = ref(true)
 const error = ref(null)
@@ -52,7 +54,7 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    latest.value = await apiRequest('/modules/test-coverage/latest')
+    latest.value = await apiRequest(`/modules/test-coverage/latest${projectQuery(projectId.value)}`)
   } catch (err) {
     error.value = err.message || 'Failed to load coverage'
   } finally {

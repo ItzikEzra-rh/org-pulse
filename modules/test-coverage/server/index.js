@@ -132,10 +132,32 @@ function readLatest(storage) {
 
 module.exports = function registerRoutes(router, context) {
   const { storage, requireScope } = context;
+  const { resolveProjectSelection } = require('../../../shared/server/project-profile');
 
   context.registerScopes([
     { key: 'test-coverage:read', label: 'Test Coverage (Read)', description: 'Read OSAC coverage reports', category: 'Test Coverage' }
   ]);
+
+  // The coverage reporter is an OSAC-only data source: a non-OSAC project never
+  // receives OSAC coverage data.
+  function osacOnlyDataGuard(req, res) {
+    const selection = resolveProjectSelection(context.projects, req.query);
+    if (!selection.provided) return false;
+    if (selection.status) {
+      res.status(selection.status).json({ error: selection.error });
+      return true;
+    }
+    if (selection.projectId !== 'osac') {
+      res.status(200).json({
+        projectId: selection.projectId,
+        state: 'unavailable',
+        reason: 'osac-only-data-source',
+        data: null
+      });
+      return true;
+    }
+    return false;
+  }
 
   /**
    * @openapi
@@ -143,11 +165,19 @@ module.exports = function registerRoutes(router, context) {
    *   get:
    *     tags: [Test Coverage]
    *     summary: Latest coverage report with per-area verdicts
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: false
+   *         schema: { type: string }
    *     responses:
    *       200:
    *         description: Latest report, or available=false when none exists
    */
-  router.get('/latest', requireScope('test-coverage:read'), (req, res) => res.json(readLatest(storage)));
+  router.get('/latest', requireScope('test-coverage:read'), (req, res) => {
+    if (osacOnlyDataGuard(req, res)) return;
+    return res.json(readLatest(storage));
+  });
 
   /**
    * @openapi
@@ -155,8 +185,16 @@ module.exports = function registerRoutes(router, context) {
    *   get:
    *     tags: [Test Coverage]
    *     summary: Recent nightly coverage snapshots, newest first
+   *     parameters:
+   *       - in: query
+   *         name: projectId
+   *         required: false
+   *         schema: { type: string }
    *     responses:
    *       200: { description: Up to 8 snapshots sorted by date descending }
    */
-  router.get('/history', requireScope('test-coverage:read'), (req, res) => res.json({ snapshots: readHistory(storage) }));
+  router.get('/history', requireScope('test-coverage:read'), (req, res) => {
+    if (osacOnlyDataGuard(req, res)) return;
+    return res.json({ snapshots: readHistory(storage) });
+  });
 };

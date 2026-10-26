@@ -245,6 +245,7 @@ import {
 } from 'lucide-vue-next'
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { resolveIcon } from '../utils/icon-map'
+import { filterModulesForProject } from '../utils/project-scope'
 
 const props = defineProps({
   collapsed: Boolean,
@@ -323,8 +324,58 @@ const navSections = computed(() => {
   ]
 
   // Built-in modules from manifests
-  for (const manifest of props.builtInManifests) {
+  for (const manifest of filterModulesForProject(props.builtInManifests, props.projectId)) {
     const navItems = manifest.client?.navItems || []
+    const items = navItems
+      .filter(item => {
+        // Project rosters have no teamDataSource; a selected non-OSAC project satisfies this gate instead.
+        const inProjectContext = Boolean(props.projectId) && props.projectId !== 'osac'
+        if (item.requireCondition === 'in-app-mode' && props.teamDataSource !== 'in-app' && !inProjectContext) return false
+        if (!item.requireRole) return true
+        if (props.isAdmin) return true
+        if (props.roles.includes(item.requireRole)) return true
+        // Fallback: team-admin sees manager items too
+        if (item.requireRole === 'manager' && (props.isTeamAdmin || props.isManager)) return true
+        // Unknown hierarchy (not a verified non-manager): surface the read-only
+        // explanation instead of hiding the nav; isManager itself stays fail-closed.
+        if (item.requireRole === 'manager' && inProjectContext && !props.hierarchyAvailable) return true
+        if (item.requireRole === 'team-admin' && props.isTeamAdmin) return true
+        return false
+      })
+      .map(item => {
+        const selectedProjectId = props.projectId || props.routeParams.projectId
+        const isProjectBuildsItem = manifest.slug === 'product-builds'
+          && item.id === 'osac'
+          && selectedProjectId
+          && selectedProjectId !== 'osac'
+        return {
+          id: `${manifest.slug}::${item.id}`,
+          label: isProjectBuildsItem ? 'Build Registry' : item.label,
+          icon: resolveIcon(item.icon),
+          disabled: item.disabled || false,
+          separatorBefore: item.separatorBefore || false
+        }
+      })
+
+    // A single-page module renders as one entry named after the module, with no
+    // nested child repeating the module (or its project) name.
+    if (manifest.client?.singlePage === true && items.length <= 1) {
+      if (items.length === 0) continue
+      sections.push({
+        id: manifest.slug,
+        label: '',
+        collapsible: false,
+        disabled: manifest.disabled || false,
+        items: [{
+          id: manifest.slug,
+          label: manifest.name,
+          icon: resolveIcon(manifest.icon),
+          disabled: manifest.disabled || false
+        }]
+      })
+      continue
+    }
+
     sections.push({
       id: manifest.slug,
       label: '',
@@ -333,36 +384,7 @@ const navSections = computed(() => {
       disabled: manifest.disabled || false,
       headerLabel: manifest.name,
       headerIcon: resolveIcon(manifest.icon),
-      items: navItems
-        .filter(item => {
-          // Project rosters have no teamDataSource; a selected non-OSAC project satisfies this gate instead.
-          const inProjectContext = Boolean(props.projectId) && props.projectId !== 'osac'
-          if (item.requireCondition === 'in-app-mode' && props.teamDataSource !== 'in-app' && !inProjectContext) return false
-          if (!item.requireRole) return true
-          if (props.isAdmin) return true
-          if (props.roles.includes(item.requireRole)) return true
-          // Fallback: team-admin sees manager items too
-          if (item.requireRole === 'manager' && (props.isTeamAdmin || props.isManager)) return true
-          // Unknown hierarchy (not a verified non-manager): surface the read-only
-          // explanation instead of hiding the nav; isManager itself stays fail-closed.
-          if (item.requireRole === 'manager' && inProjectContext && !props.hierarchyAvailable) return true
-          if (item.requireRole === 'team-admin' && props.isTeamAdmin) return true
-          return false
-        })
-        .map(item => {
-          const selectedProjectId = props.projectId || props.routeParams.projectId
-          const isProjectBuildsItem = manifest.slug === 'product-builds'
-            && item.id === 'osac'
-            && selectedProjectId
-            && selectedProjectId !== 'osac'
-          return {
-            id: `${manifest.slug}::${item.id}`,
-            label: isProjectBuildsItem ? 'Build Registry' : item.label,
-            icon: resolveIcon(item.icon),
-            disabled: item.disabled || false,
-            separatorBefore: item.separatorBefore || false
-          }
-        })
+      items
     })
   }
 
