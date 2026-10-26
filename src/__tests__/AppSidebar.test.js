@@ -130,6 +130,15 @@ describe('AppSidebar project-scoped modules', () => {
     expect(wrapper.find('button[aria-label="Test Coverage"]').exists()).toBe(true)
   })
 
+  it('disables the single entry when its only nav item is disabled', () => {
+    const manifest = coverageManifest()
+    manifest.client.navItems[0].disabled = true
+    const wrapper = mountCoverage({ projectId: 'osac', builtInManifests: [manifest] })
+    const entry = wrapper.find('button[aria-label="Test Coverage"]')
+    expect(entry.exists()).toBe(true)
+    expect(entry.attributes('disabled')).toBeDefined()
+  })
+
   it('hides a module scoped to another project', () => {
     const wrapper = mountCoverage({ projectId: 'flightctl' })
     expect(wrapper.find('button[aria-label="Test Coverage"]').exists()).toBe(false)
