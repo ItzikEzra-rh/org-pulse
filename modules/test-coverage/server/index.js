@@ -144,7 +144,8 @@ module.exports = function registerRoutes(router, context) {
    *     tags: [Test Coverage]
    *     summary: Latest coverage report with per-area verdicts
    *     responses:
-   *       200: { description: Latest report, or available=false when none exists }
+   *       200:
+   *         description: Latest report, or available=false when none exists
    */
   router.get('/latest', requireScope('test-coverage:read'), (req, res) => res.json(readLatest(storage)));
 
