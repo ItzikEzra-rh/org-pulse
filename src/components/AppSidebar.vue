@@ -361,16 +361,19 @@ const navSections = computed(() => {
     // nested child repeating the module (or its project) name.
     if (manifest.client?.singlePage === true && items.length <= 1) {
       if (items.length === 0) continue
+      // The single entry stands in for its only nav item, so it inherits that
+      // item's disabled state as well as the module's.
+      const entryDisabled = manifest.disabled || items[0].disabled || false
       sections.push({
         id: manifest.slug,
         label: '',
         collapsible: false,
-        disabled: manifest.disabled || false,
+        disabled: entryDisabled,
         items: [{
           id: manifest.slug,
           label: manifest.name,
           icon: resolveIcon(manifest.icon),
-          disabled: manifest.disabled || false
+          disabled: entryDisabled
         }]
       })
       continue

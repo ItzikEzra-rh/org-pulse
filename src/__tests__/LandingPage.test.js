@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, ref } from 'vue'
 import LandingPage from '../components/LandingPage.vue'
+import SotuWidget from '../components/SotuWidget.vue'
 import { _resetForTesting } from '../composables/useSotuLayout.js'
 
 const mockIsManager = { value: false }
@@ -36,8 +37,15 @@ vi.mock('../module-loader', () => ({
   loadModuleWidget: () => ({ template: '<div>widget stub</div>' })
 }))
 
+const sortableMock = vi.hoisted(() => ({ options: null }))
+
 vi.mock('sortablejs', () => ({
-  default: { create: () => ({ destroy: () => {} }) }
+  default: {
+    create: (el, options) => {
+      sortableMock.options = options
+      return { destroy: () => {} }
+    }
+  }
 }))
 
 const AI_IMPACT_MANIFEST = {
@@ -396,6 +404,91 @@ describe('LandingPage', () => {
       expect(JSON.parse(localStorage.getItem('orgpulse_sotu_layout'))).toEqual([
         { widgetId: 'test-coverage:coverage', size: 'half' }
       ])
+    })
+  })
+
+  describe('Sortable reorder with hidden layout entries', () => {
+    const BOARD_MANIFEST = {
+      slug: 'team-tracker',
+      name: 'People & Teams',
+      client: {
+        sotuWidgets: [
+          { id: 'alpha', name: 'Alpha', component: 'Alpha.vue', defaultSize: 'half' },
+          { id: 'beta', name: 'Beta', component: 'Beta.vue', defaultSize: 'half' }
+        ]
+      }
+    }
+
+    const SCOPED_MANIFEST = {
+      slug: 'test-coverage',
+      name: 'Test Coverage',
+      client: {
+        projectIds: ['osac'],
+        sotuWidgets: [
+          { id: 'coverage', name: 'Test Coverage', component: 'CoverageWidget.vue', defaultSize: 'half' }
+        ]
+      }
+    }
+
+    function savedLayout(widgetIds) {
+      return widgetIds.map(widgetId => ({ widgetId, size: 'half' }))
+    }
+
+    function renderedWidgetIds(wrapper) {
+      return wrapper.findAllComponents(SotuWidget).map(widget => widget.props('widgetId'))
+    }
+
+    it('moves the dragged widget to the target position in the saved layout while a hidden entry stays put', async () => {
+      localStorage.setItem('orgpulse_sotu_layout', JSON.stringify(savedLayout([
+        'team-tracker:alpha',
+        'test-coverage:coverage',
+        'team-tracker:beta'
+      ])))
+      mockProjectId.value = 'flightctl'
+      const wrapper = await mountLandingPage({
+        builtInManifests: [BOARD_MANIFEST, SCOPED_MANIFEST],
+        isAdmin: false
+      })
+      await flushPromises()
+      await nextTick()
+
+      // The OSAC-only coverage widget is hidden here, so the rendered grid is
+      // [alpha, beta] — rendered indices differ from saved-layout indices.
+      expect(renderedWidgetIds(wrapper)).toEqual(['team-tracker:alpha', 'team-tracker:beta'])
+
+      // Drag alpha onto beta's rendered slot.
+      sortableMock.options.onEnd({ oldIndex: 0, newIndex: 1 })
+      await nextTick()
+
+      expect(renderedWidgetIds(wrapper)).toEqual(['team-tracker:beta', 'team-tracker:alpha'])
+      // The hidden coverage entry is not moved or dropped.
+      expect(JSON.parse(localStorage.getItem('orgpulse_sotu_layout'))).toEqual(savedLayout([
+        'test-coverage:coverage',
+        'team-tracker:beta',
+        'team-tracker:alpha'
+      ]))
+    })
+
+    it('moves widgets exactly as before when no saved entry is hidden', async () => {
+      localStorage.setItem('orgpulse_sotu_layout', JSON.stringify(savedLayout([
+        'team-tracker:alpha',
+        'team-tracker:beta'
+      ])))
+      mockProjectId.value = 'flightctl'
+      const wrapper = await mountLandingPage({ builtInManifests: [BOARD_MANIFEST], isAdmin: false })
+      await flushPromises()
+      await nextTick()
+
+      expect(renderedWidgetIds(wrapper)).toEqual(['team-tracker:alpha', 'team-tracker:beta'])
+
+      sortableMock.options.onEnd({ oldIndex: 1, newIndex: 0 })
+      await nextTick()
+
+      expect(renderedWidgetIds(wrapper)).toEqual(['team-tracker:beta', 'team-tracker:alpha'])
+      expect(JSON.parse(localStorage.getItem('orgpulse_sotu_layout'))).toEqual(savedLayout([
+        'team-tracker:beta',
+        'team-tracker:alpha'
+      ]))
     })
   })
 })
