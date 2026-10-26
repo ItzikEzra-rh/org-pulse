@@ -52,7 +52,7 @@
     "vue-chartjs": "^5.3.4"
   },
   "devDependencies": {
-    "@apidevtools/swagger-parser": "^12.1.0",
+    "@apidevtools/swagger-parser": "^13.1.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "1.60.0",
     "@tailwindcss/typography": "^0.5.20",
