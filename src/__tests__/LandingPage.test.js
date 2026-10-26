@@ -73,9 +73,14 @@ const TEAM_TRACKER_MANIFEST = {
 }
 
 // useSotuLayout's layout ref is a module-level singleton; reset it from localStorage before each mount.
+// Unmount the previous wrapper so a leaked watcher from an earlier test cannot
+// prune the shared layout while the next test runs.
+let mountedWrapper = null
 function mountLandingPage(props) {
+  mountedWrapper?.unmount()
   _resetForTesting()
-  return mount(LandingPage, { props })
+  mountedWrapper = mount(LandingPage, { props })
+  return mountedWrapper
 }
 
 describe('LandingPage', () => {
@@ -344,6 +349,52 @@ describe('LandingPage', () => {
 
       expect(JSON.parse(localStorage.getItem('orgpulse_sotu_layout'))).toEqual([
         { widgetId: 'team-tracker:managed-teams', size: 'full' }
+      ])
+    })
+  })
+
+  describe('project-scoped widget visibility', () => {
+    const COVERAGE_MANIFEST = {
+      slug: 'test-coverage',
+      name: 'Test Coverage',
+      client: {
+        projectIds: ['osac'],
+        sotuWidgets: [{
+          id: 'coverage',
+          name: 'Test Coverage',
+          description: 'Coverage verdicts by area',
+          component: 'CoverageWidget.vue',
+          defaultSize: 'half',
+          default: true
+        }]
+      }
+    }
+
+    it('offers and seeds the widget for the project it is scoped to', async () => {
+      mockProjectId.value = 'osac'
+      const wrapper = await mountLandingPage({ builtInManifests: [COVERAGE_MANIFEST], isAdmin: false })
+      await flushPromises()
+      expect(wrapper.findAll('.sotu-widget')).toHaveLength(1)
+    })
+
+    it('keeps the widget available when no project is selected (legacy single-project mode)', async () => {
+      mockProjectId.value = ''
+      const wrapper = await mountLandingPage({ builtInManifests: [COVERAGE_MANIFEST], isAdmin: false })
+      await flushPromises()
+      expect(wrapper.findAll('.sotu-widget')).toHaveLength(1)
+    })
+
+    it('does not offer or render the widget for another project', async () => {
+      localStorage.setItem('orgpulse_sotu_layout', JSON.stringify([{ widgetId: 'test-coverage:coverage', size: 'half' }]))
+      mockProjectId.value = 'flightctl'
+      const wrapper = await mountLandingPage({ builtInManifests: [COVERAGE_MANIFEST], isAdmin: false })
+      await flushPromises()
+
+      expect(wrapper.findAll('.sotu-widget')).toHaveLength(0)
+      expect(wrapper.text()).not.toContain('YOUR OVERVIEW')
+      // Scoped out is not stale: the saved layout keeps the widget for OSAC.
+      expect(JSON.parse(localStorage.getItem('orgpulse_sotu_layout'))).toEqual([
+        { widgetId: 'test-coverage:coverage', size: 'half' }
       ])
     })
   })

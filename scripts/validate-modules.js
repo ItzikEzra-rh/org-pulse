@@ -277,6 +277,26 @@ function validate() {
         if (!item.icon) warn(`NavItem "${item.id}" missing "icon"`)
       }
     }
+
+    // Project scoping and single-page rendering
+    if (manifest.client?.projectIds !== undefined) {
+      if (!Array.isArray(manifest.client.projectIds) || manifest.client.projectIds.length === 0) {
+        error('client.projectIds must be a non-empty array of project ID strings')
+      } else {
+        for (const projectId of manifest.client.projectIds) {
+          if (typeof projectId !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(projectId)) {
+            error(`client.projectIds entry "${projectId}" must be a lowercase kebab-case project ID`)
+          }
+        }
+      }
+    }
+    if (manifest.client?.singlePage !== undefined) {
+      if (typeof manifest.client.singlePage !== 'boolean') {
+        error('client.singlePage must be a boolean')
+      } else if (manifest.client.singlePage && (manifest.client.navItems || []).length !== 1) {
+        warn('client.singlePage expects exactly one client.navItems entry; rendering falls back to a section')
+      }
+    }
   }
 
   // ─── Export hook validation ───

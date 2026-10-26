@@ -142,6 +142,7 @@
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { AlertTriangle as AlertTriangleIcon, ClipboardList as ClipboardListIcon } from 'lucide-vue-next'
 import { apiRequest } from '@shared/client/services/api.js'
+import { useProjectId, projectQuery } from '@shared/client/composables/useProjectId.js'
 import { formatRelativeTime, parseDateValue } from '@shared/client/utils/format.js'
 import { filterByGroup } from '../utils/coverage.js'
 
@@ -200,6 +201,7 @@ function trendMeta(value) {
   return TREND[value] || { symbol: '·', classes: 'text-gray-300 dark:text-gray-600' }
 }
 const nav = inject('moduleNav', null)
+const projectId = useProjectId()
 const STORAGE_KEY = 'test_coverage_group'
 const latest = ref(null)
 const history = ref([])
@@ -234,9 +236,10 @@ async function load() {
   loading.value = true
   error.value = null
   try {
+    const query = projectQuery(projectId.value)
     const [latestData, historyData] = await Promise.all([
-      apiRequest('/modules/test-coverage/latest'),
-      apiRequest('/modules/test-coverage/history')
+      apiRequest(`/modules/test-coverage/latest${query}`),
+      apiRequest(`/modules/test-coverage/history${query}`)
     ])
     latest.value = latestData
     history.value = (historyData && historyData.snapshots) || []

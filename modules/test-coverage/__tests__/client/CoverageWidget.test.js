@@ -3,14 +3,19 @@ import { mount, flushPromises } from '@vue/test-utils'
 import CoverageWidget from '../../client/widgets/CoverageWidget.vue'
 import report from '../fixtures/report.json'
 
-const { apiRequest } = vi.hoisted(() => ({ apiRequest: vi.fn() }))
+const { apiRequest, mockProjectId } = vi.hoisted(() => ({ apiRequest: vi.fn(), mockProjectId: { value: '' } }))
 vi.mock('@shared/client/services/api.js', () => ({ apiRequest }))
 vi.mock('@shared/client/composables/useModuleLink.js', () => ({
   useModuleLink: () => ({ navigateTo: vi.fn(), linkTo: vi.fn(() => '#/test-coverage/coverage') })
 }))
+vi.mock('@shared/client/composables/useProjectId.js', () => ({
+  useProjectId: () => mockProjectId,
+  projectQuery: (projectId) => projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+}))
 
 beforeEach(() => {
   apiRequest.mockReset()
+  mockProjectId.value = ''
 })
 
 describe('CoverageWidget', () => {
@@ -32,5 +37,16 @@ describe('CoverageWidget', () => {
     expect(wrapper.find('[data-testid="count-insufficient"]').text()).toBe('0')
     expect(wrapper.find('[data-testid="updated"]').text()).toContain('2 areas')
     expect(wrapper.find('[data-testid="updated"]').text()).toContain('2 working groups')
+  })
+
+  it('qualifies its request with the selected project', async () => {
+    mockProjectId.value = 'osac'
+    apiRequest.mockResolvedValue({ available: false, overview: [], groups: [] })
+
+    const wrapper = mount(CoverageWidget, { props: { size: 'half' } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="empty-state"]').exists()).toBe(true)
+    expect(apiRequest).toHaveBeenCalledWith('/modules/test-coverage/latest?projectId=osac')
   })
 })

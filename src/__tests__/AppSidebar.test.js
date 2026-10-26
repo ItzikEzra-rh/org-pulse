@@ -90,3 +90,64 @@ describe('AppSidebar manager-dashboard nav visibility', () => {
     expect(hasMyTeamsItem(wrapper)).toBe(false)
   })
 })
+
+function coverageManifest() {
+  return {
+    slug: 'test-coverage',
+    name: 'Test Coverage',
+    icon: 'clipboard-list',
+    client: {
+      projectIds: ['osac'],
+      singlePage: true,
+      navItems: [{ id: 'coverage', label: 'Coverage', icon: 'ClipboardList', default: true }]
+    }
+  }
+}
+
+describe('AppSidebar project-scoped modules', () => {
+  function mountCoverage(props) {
+    return mountSidebar({
+      collapsed: false,
+      activeModule: 'test-coverage',
+      activeViewId: 'coverage',
+      builtInManifests: [coverageManifest()],
+      ...props
+    })
+  }
+
+  it('renders a single-page module as one entry named after the module', () => {
+    const wrapper = mountCoverage({ projectId: 'osac' })
+    const entry = wrapper.find('button[aria-label="Test Coverage"]')
+    expect(entry.exists()).toBe(true)
+    expect(entry.text()).toBe('Test Coverage')
+    // No nested child repeating the module or project name.
+    expect(wrapper.find('button[aria-label="Coverage"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="OSAC"]').exists()).toBe(false)
+  })
+
+  it('keeps the entry when no project is selected (legacy single-project mode)', () => {
+    const wrapper = mountCoverage({ projectId: '' })
+    expect(wrapper.find('button[aria-label="Test Coverage"]').exists()).toBe(true)
+  })
+
+  it('hides a module scoped to another project', () => {
+    const wrapper = mountCoverage({ projectId: 'flightctl' })
+    expect(wrapper.find('button[aria-label="Test Coverage"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Test Coverage')
+  })
+
+  it('still renders a module without singlePage as a collapsible section', () => {
+    const wrapper = mountSidebar({
+      collapsed: false,
+      projectId: 'osac',
+      builtInManifests: [{
+        slug: 'releases',
+        name: 'Releases',
+        icon: 'rocket',
+        client: { navItems: [{ id: 'execute', label: 'Execute', icon: 'GitBranch', default: true }] }
+      }]
+    })
+    expect(wrapper.find('button[aria-label="Releases"]').exists()).toBe(true)
+    expect(wrapper.find('button[aria-label="Execute"]').exists()).toBe(false) // section collapsed by default
+  })
+})

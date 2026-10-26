@@ -13,12 +13,21 @@ function storageWith({ latest = null, history = {}, invalid = [] } = {}) {
     getFileMtime: vi.fn(() => null)
   }
 }
-function invoke(storage, path) {
+function invokeRaw(storage, path, { query = {}, projects = null } = {}) {
   const handlers = {}
-  registerRoutes({ get: (route, ...args) => { handlers[route] = args[args.length - 1] } }, createTestContext({ storage }))
-  const res = { json: vi.fn() }
-  handlers[path]({ query: {} }, res)
-  return res.json.mock.calls[0][0]
+  registerRoutes({ get: (route, ...args) => { handlers[route] = args[args.length - 1] } }, createTestContext({ storage, projects }))
+  const res = { statusCode: 200, json: vi.fn() }
+  res.status = vi.fn((code) => { res.statusCode = code; return res })
+  handlers[path]({ query }, res)
+  return { status: res.statusCode, body: res.json.mock.calls[0][0] }
+}
+function invoke(storage, path, options) {
+  return invokeRaw(storage, path, options).body
+}
+function projectsWith(ids = ['osac', 'flightctl']) {
+  return {
+    get: vi.fn((projectId) => ids.includes(projectId) ? { projectId } : null)
+  }
 }
 function snapshot(date) {
   return { date, commit: 'abc123', overview: report.overview }
@@ -71,6 +80,46 @@ describe('test-coverage server', () => {
     expect(data.overview.map((row) => row.key)).toEqual(['iam', 'tenancy'])
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
+  })
+
+  it('never serves OSAC coverage data to another project', () => {
+    const storage = storageWith({
+      latest: report,
+      history: { '2026-10-25.json': snapshot('2026-10-25') }
+    })
+    const projects = projectsWith()
+    const envelope = {
+      projectId: 'flightctl',
+      state: 'unavailable',
+      reason: 'osac-only-data-source',
+      data: null
+    }
+
+    expect(invoke(storage, '/latest', { query: { projectId: 'flightctl' }, projects })).toEqual(envelope)
+    expect(invoke(storage, '/history', { query: { projectId: 'flightctl' }, projects })).toEqual(envelope)
+    expect(storage.readFromStorage).not.toHaveBeenCalled()
+  })
+
+  it('serves coverage data when the selected project is OSAC', () => {
+    const storage = storageWith({ latest: report })
+    const data = invoke(storage, '/latest', { query: { projectId: 'osac' }, projects: projectsWith() })
+    expect(data.available).toBe(true)
+    expect(data.overview).toHaveLength(2)
+  })
+
+  it('keeps legacy unqualified requests working when no project is selected', () => {
+    const storage = storageWith({ latest: report })
+    expect(invoke(storage, '/latest', { projects: projectsWith() }).available).toBe(true)
+  })
+
+  it('rejects an unknown or invalid project ID', () => {
+    const storage = storageWith({ latest: report })
+    const projects = projectsWith()
+    expect(invokeRaw(storage, '/latest', { query: { projectId: 'missing' }, projects })).toEqual({
+      status: 404,
+      body: { error: 'Unknown project' }
+    })
+    expect(invokeRaw(storage, '/latest', { query: { projectId: 'Not Valid' }, projects }).status).toBe(400)
   })
 
   it('sorts history newest first and caps it at 8', () => {

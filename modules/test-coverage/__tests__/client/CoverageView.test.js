@@ -3,8 +3,12 @@ import { mount, flushPromises } from '@vue/test-utils'
 import CoverageView from '../../client/views/CoverageView.vue'
 import report from '../fixtures/report.json'
 
-const { apiRequest } = vi.hoisted(() => ({ apiRequest: vi.fn() }))
+const { apiRequest, mockProjectId } = vi.hoisted(() => ({ apiRequest: vi.fn(), mockProjectId: { value: '' } }))
 vi.mock('@shared/client/services/api.js', () => ({ apiRequest }))
+vi.mock('@shared/client/composables/useProjectId.js', () => ({
+  useProjectId: () => mockProjectId,
+  projectQuery: (projectId) => projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+}))
 function latest(overrides = {}) {
   return {
     available: true,
@@ -48,6 +52,7 @@ function multiGroupLatest() {
 beforeEach(() => {
   apiRequest.mockReset()
   localStorage.clear()
+  mockProjectId.value = ''
   mockResponses()
 })
 
@@ -133,6 +138,14 @@ describe('CoverageView', () => {
     const banner = wrapper.find('[data-testid="stale-banner"]')
     expect(banner.exists()).toBe(true)
     expect(banner.text()).toContain('may be stale')
+  })
+
+  it('qualifies its requests with the selected project', async () => {
+    mockProjectId.value = 'osac'
+    await mountView()
+
+    expect(apiRequest).toHaveBeenCalledWith('/modules/test-coverage/latest?projectId=osac')
+    expect(apiRequest).toHaveBeenCalledWith('/modules/test-coverage/history?projectId=osac')
   })
 
   it('shows the empty state when no coverage data exists', async () => {

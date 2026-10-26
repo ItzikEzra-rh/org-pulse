@@ -54,7 +54,7 @@
       </section>
     </div>
 
-    <template v-if="allWidgets.length > 0">
+    <template v-if="availableWidgets.length > 0">
       <!-- Your Overview -->
       <div class="flex items-center justify-between gap-4 mb-6">
         <p class="px-1 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
@@ -107,7 +107,7 @@
       <!-- Widget picker -->
       <WidgetPicker
         v-if="showWidgetPicker"
-        :available-widgets="allWidgets"
+        :available-widgets="availableWidgets"
         :active-widget-ids="activeWidgetIds"
         @close="showWidgetPicker = false"
         @toggle="handleToggleWidget"
@@ -132,6 +132,7 @@ import { useAuth } from '@shared/client/composables/useAuth.js'
 import { usePermissions } from '@shared/client/composables/usePermissions.js'
 import { useProjectId } from '@shared/client/composables/useProjectId.js'
 import { loadModuleWidget } from '../module-loader'
+import { projectIdsAllow } from '../utils/project-scope'
 import { useSotuLayout } from '../composables/useSotuLayout.js'
 import SotuWidget from './SotuWidget.vue'
 import WidgetPicker from './WidgetPicker.vue'
@@ -205,7 +206,9 @@ const exploreCards = computed(() =>
   }))
 )
 
-// Build flat list of all available widgets from all modules
+// Build flat list of all declared widgets from all modules. This stays
+// unfiltered by project so a scoped-out widget is not mistaken for a stale one
+// and pruned from the saved layout.
 const allWidgets = computed(() => {
   const widgets = []
   for (const mod of props.builtInManifests) {
@@ -231,6 +234,7 @@ const allWidgets = computed(() => {
         defaultSize: w.defaultSize || 'half',
         icon: w.icon,
         category: w.category,
+        projectIds: mod.client?.projectIds,
         default: w.default === true
       })
     }
@@ -238,7 +242,13 @@ const allWidgets = computed(() => {
   return widgets
 })
 
-// Unfiltered by role — only a widget missing from every manifest is "stale".
+// Widgets the selected project may offer and render.
+const availableWidgets = computed(() =>
+  allWidgets.value.filter(w => projectIdsAllow(w.projectIds, projectId.value))
+)
+
+// Unfiltered by role and project — only a widget missing from every manifest is
+// "stale".
 const allManifestWidgetIds = computed(() => {
   const ids = []
   for (const mod of props.builtInManifests) {
@@ -252,12 +262,13 @@ const allManifestWidgetIds = computed(() => {
 })
 
 // Seed first-time layout with default widgets, then prune stale widgets when manifests change.
-// Guards on the unfiltered id list, not role-filtered `widgets` — a role that
-// currently hides every widget must not be mistaken for manifests not loaded yet.
-watch(allWidgets, (widgets) => {
+// Guards on the unfiltered id list, not the role/project-filtered widgets — a
+// role that currently hides every widget must not be mistaken for manifests not
+// loaded yet.
+watch(allWidgets, () => {
   if (allManifestWidgetIds.value.length === 0) return
   if (isFirstVisit.value) {
-    initWithDefaults(widgets.filter(w => w.default))
+    initWithDefaults(availableWidgets.value.filter(w => w.default))
   }
   pruneStaleWidgets(allManifestWidgetIds.value)
 }, { immediate: true })
@@ -277,7 +288,7 @@ function getWidgetComponent(widget) {
 const resolvedLayout = computed(() => {
   if (!layout.value) return []
   const widgetMap = {}
-  for (const w of allWidgets.value) {
+  for (const w of availableWidgets.value) {
     widgetMap[w.qualifiedId] = w
   }
   return layout.value

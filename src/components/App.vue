@@ -241,6 +241,7 @@ import { refreshMetrics, getLastRefreshed, apiRequest, getSiteConfig } from '@sh
 import { loadModuleManifests, loadModuleClient } from '../module-loader'
 import { loadPlatformAboutTabs } from '../platform-loader'
 import { resolveIcon } from '../utils/icon-map'
+import { moduleAppliesToProject } from '../utils/project-scope'
 
 export default {
   name: 'App',
@@ -525,8 +526,19 @@ export default {
       this.projectContextStatus = context?.state || 'unavailable'
       this.projectContextProjectId = context?.projectId || null
       if (this.projectContextStatus === 'ready') {
+        this.redirectIfModuleOutOfScope()
         this.startInitialDataIfReady()
       }
+    },
+
+    // A project-scoped module must not stay on screen after the selector
+    // moves to a project it does not apply to.
+    redirectIfModuleOutOfScope() {
+      const manifest = this.builtInManifests.find(m => m.slug === this.activeModule)
+      if (!manifest || moduleAppliesToProject(manifest, this.projectContextProjectId)) return
+      this.setShellView('home')
+      const projectId = this.projectContextProjectId
+      window.location.hash = projectId ? `#/?projectId=${encodeURIComponent(projectId)}` : '#/'
     },
 
     startInitialDataIfReady() {
@@ -665,6 +677,14 @@ export default {
       }
       const manifest = this.builtInManifests.find(m => m.slug === parts[0])
       if (manifest) {
+        // Direct links to a module that does not apply to the selected project
+        // fall back to the home page instead of rendering another project's data.
+        if (!moduleAppliesToProject(manifest, this.projectContextProjectId)) {
+          this.setShellView('home')
+          const projectId = this.projectContextProjectId || params.projectId
+          window.location.replace(`#/${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`)
+          return
+        }
         this.activeModuleSlugRef = manifest.slug
         this.activeModule = manifest.slug
         this.routeParams = { ...params }

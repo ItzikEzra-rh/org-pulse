@@ -70,6 +70,8 @@ modules/your-module/
 | `client.settingsComponent` | No | Vue component for the Settings page |
 | `client.sotuWidgets` | No | Array of widget declarations for the SOTU dashboard (see below) |
 | `client.resetSectionOnProjectSwitch` | No | If `true`, switching the shell project resets navigation to the current section's root view (see below) |
+| `client.projectIds` | No | Project IDs the module applies to (see below). Omit to make it available in every project |
+| `client.singlePage` | No | If `true` and the module has one navItem, render it as a single sidebar entry named after the module |
 | `server.entry` | No | Path to backend entry point |
 
 ### navItem Fields
@@ -102,6 +104,33 @@ In `client`, you can declare `hiddenRoutes` — a map of route IDs to their pare
 ### `resetSectionOnProjectSwitch`
 
 In `client`, set `resetSectionOnProjectSwitch: true` to opt a module into resetting its route to the current section's root view whenever the shell project changes. Without this flag, a project switch only updates the `projectId` param in place and leaves the rest of the route untouched — the behavior for every module before this flag existed. Only opt in if stale nested-route params (e.g. a detail view's entity id) would be invalid under the new project.
+
+### `projectIds`
+
+Set `client.projectIds` when a module only applies to specific shell projects:
+
+```json
+{
+  "client": {
+    "projectIds": ["osac"]
+  }
+}
+```
+
+While a different project is selected, the module's sidebar entry is hidden, its
+SOTU widgets are not offered or rendered (a saved layout keeps them for when the
+project is selected again), and a direct link to its routes falls back to the
+home page. No project selected (legacy single-project mode) keeps the module
+available. A module with its own OSAC-only data source must also reject a
+non-OSAC `projectId` in its server routes — see the `osacOnlyDataGuard` pattern
+in `modules/product-builds/server/index.js`.
+
+### `singlePage`
+
+A module backed by one view should set `client.singlePage: true` so the sidebar
+renders it as one entry named after the module instead of a collapsible section
+with a nested child. The module must still declare exactly one navItem, whose
+`id` is the route the entry opens.
 
 ### navItems vs routes
 
