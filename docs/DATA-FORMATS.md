@@ -2683,6 +2683,19 @@ Root-level (not module-namespaced). Served via `GET /api/modules/product-builds/
 
 ---
 
+## OSAC Test Coverage — `coverage/`
+
+`coverage/latest.json` is the reporter's `report.json` verbatim;
+`coverage/history/YYYY-MM-DD.json` is `{ date, commit, overview }`.
+
+Each `overview` row is `{ key, area, group, verdict, unit, integration, e2e, gaps }`;
+a tier is `{ state, display }` (`value`, `zero`, `unavailable`, `blocked`, `na`, `none`).
+`detail` comes from `features[].metrics[tier].detail`; `pending` counts inferred mappings.
+
+Missing/invalid files serve an empty response; non-`value`/`zero` states are never 0%.
+
+---
+
 ## Fixture Rules
 
 The `fixtures/` directory provides read-only demo data used when `DEMO_MODE=true`. These rules prevent data format drift:

@@ -39,6 +39,7 @@ Core team owns `shared/` via CODEOWNERS. Changes require core team review.
 | Export | Description |
 |--------|-------------|
 | `formatDate(iso, options?)` | Format an ISO date string for display. Options: `{ fallback: 'Never', includeTime: true }`. Returns `fallback` when `iso` is falsy; uses `toLocaleString()` when `includeTime` is true, `toLocaleDateString()` when false. |
+| `formatRelativeTime(value, now?)` | Human age for a bare `YYYY-MM-DD` (compared by calendar day) or an ISO timestamp (elapsed time). `parseDateValue(value)` returns `{ at, dateOnly }` for callers that need the parsed form. |
 
 ### Services
 
