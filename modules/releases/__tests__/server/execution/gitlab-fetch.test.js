@@ -183,6 +183,49 @@ describe('fetchArtifacts', () => {
     expect(calledUrl).toContain(encodeURIComponent('group/sub/project'))
   })
 
+  it('copies workflowLabelSources from the index entry onto the detail payload', async () => {
+    const sources = [{ epicKey: 'RHAISTRAT-2', labels: ['design-approved'], fixVersions: ['0.4'], components: [] }]
+    const zipBuf = createZipBuffer({
+      'output/index.json': {
+        fetchedAt: '2026-01-01',
+        features: [{ key: 'RHAISTRAT-1', workflowLabelSources: sources }],
+        featureCount: 1
+      },
+      'output/features/RHAISTRAT-1.json': { key: 'RHAISTRAT-1', summary: 'Test' }
+    })
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(zipBuf.buffer.slice(zipBuf.byteOffset, zipBuf.byteOffset + zipBuf.byteLength))
+    })
+
+    const storage = makeStorage()
+    await fetchArtifacts(storage, baseConfig, 'test-token')
+
+    expect(storage._written['releases/execution/features/RHAISTRAT-1.json'].workflowLabelSources).toEqual(sources)
+  })
+
+  it('leaves workflowLabelSources unset when absent from the index entry', async () => {
+    const zipBuf = createZipBuffer({
+      'output/index.json': {
+        fetchedAt: '2026-01-01',
+        features: [{ key: 'RHAISTRAT-1' }],
+        featureCount: 1
+      },
+      'output/features/RHAISTRAT-1.json': { key: 'RHAISTRAT-1', summary: 'Test' }
+    })
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(zipBuf.buffer.slice(zipBuf.byteOffset, zipBuf.byteOffset + zipBuf.byteLength))
+    })
+
+    const storage = makeStorage()
+    await fetchArtifacts(storage, baseConfig, 'test-token')
+
+    expect(storage._written['releases/execution/features/RHAISTRAT-1.json'].workflowLabelSources).toBeUndefined()
+  })
+
   it('writes last-fetch.json metadata', async () => {
     const zipBuf = createZipBuffer({
       'output/index.json': { features: [], featureCount: 0 }

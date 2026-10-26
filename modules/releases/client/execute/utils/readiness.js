@@ -12,7 +12,7 @@ const OSAC_PREPARATION_HELP = {
   unknown: 'Not enough information to confirm whether the required PRD and Design pull requests have been merged.'
 }
 
-function projectKeyOf(featureKey) {
+export function projectKeyOf(featureKey) {
   const idx = typeof featureKey === 'string' ? featureKey.indexOf('-') : -1
   return idx > 0 ? featureKey.slice(0, idx) : null
 }

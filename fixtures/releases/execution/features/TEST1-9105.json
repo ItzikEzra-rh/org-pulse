@@ -1,0 +1,149 @@
+{
+  "key": "TEST1-9105",
+  "summary": "Dashboard redesign with UI work split across releases",
+  "status": "In Progress",
+  "statusCategory": "In Progress",
+  "priority": "Normal",
+  "assignee": {
+    "displayName": "Priya Natarajan",
+    "accountId": "60011:aaaa1111-0000-4a11-8b11-000000000001"
+  },
+  "fixVersions": ["rhoai-3.4", "rhoai-3.5"],
+  "labels": [],
+  "components": ["Dashboard", "Backend"],
+  "created": "2026-02-01T09:00:00.000+0000",
+  "updated": "2026-06-01T10:00:00.000+0000",
+  "statusNotes": null,
+  "issueLinks": [],
+  "epics": [
+    {
+      "key": "TEST9-3001",
+      "parentKey": "TEST1-9105",
+      "summary": "[UI] Dashboard redesign — rhoai-3.4",
+      "status": "Done",
+      "statusCategory": "Done",
+      "priority": "Normal",
+      "assignee": "Priya Natarajan",
+      "fixVersions": ["rhoai-3.4"],
+      "components": ["Dashboard"],
+      "labels": ["ui-completed"],
+      "created": "2026-02-01T09:00:00.000+0000",
+      "updated": "2026-05-15T10:00:00.000+0000",
+      "issues": [
+        { "key": "TEST9-3001-1", "summary": "Rebuild dashboard layout", "status": "Done", "statusCategory": "Done", "isPreparation": false }
+      ],
+      "executionIssueCount": 1,
+      "doneExecutionIssueCount": 1,
+      "completedViaStatus": false
+    },
+    {
+      "key": "TEST9-3002",
+      "parentKey": "TEST1-9105",
+      "summary": "[UI] Dashboard redesign — rhoai-3.5",
+      "status": "New",
+      "statusCategory": "To Do",
+      "priority": "Normal",
+      "assignee": "Priya Natarajan",
+      "fixVersions": ["rhoai-3.5"],
+      "components": ["Dashboard"],
+      "labels": ["no-ui"],
+      "created": "2026-05-01T09:00:00.000+0000",
+      "updated": "2026-06-01T10:00:00.000+0000",
+      "issues": [
+        { "key": "TEST9-3002-1", "summary": "Port dashboard widgets to 3.5", "status": "To Do", "statusCategory": "To Do", "isPreparation": false }
+      ],
+      "executionIssueCount": 1,
+      "doneExecutionIssueCount": 0,
+      "completedViaStatus": false
+    }
+  ],
+  "uiEvidence": {
+    "status": "in-progress",
+    "conflict": false,
+    "basis": [
+      { "signal": "label:ui-completed", "epicKey": "TEST9-3001" }
+    ],
+    "sources": [
+      {
+        "epicKey": "TEST9-3001", "epicType": "ui-impl",
+        "fixVersions": ["rhoai-3.4"], "components": ["Dashboard"], "labels": ["ui-completed"],
+        "stageLabels": ["ui-completed"], "routingLabels": [],
+        "localStatus": "completed", "localConflict": false, "localBasis": ["label:ui-completed"]
+      },
+      {
+        "epicKey": "TEST9-3002", "epicType": "ui-impl",
+        "fixVersions": ["rhoai-3.5"], "components": ["Dashboard"], "labels": ["no-ui"],
+        "stageLabels": [], "routingLabels": ["no-ui"],
+        "localStatus": "not-started", "localConflict": false, "localBasis": ["status:to-do"]
+      }
+    ],
+    "scopes": [
+      { "fixVersions": ["rhoai-3.4"], "components": ["Dashboard"], "status": "completed", "conflict": false, "sourceKeys": ["TEST9-3001"] },
+      { "fixVersions": ["rhoai-3.5"], "components": ["Dashboard"], "status": "not-started", "conflict": false, "sourceKeys": ["TEST9-3002"] }
+    ]
+  },
+  "uxEvidence": {
+    "status": "in-progress",
+    "conflict": false,
+    "basis": [
+      { "signal": "label:ux-in-progress", "epicKey": "TEST9-3004" }
+    ],
+    "sources": [
+      {
+        "epicKey": "TEST9-3004", "epicType": "uix",
+        "fixVersions": ["rhoai-3.4"], "components": ["Backend"], "labels": ["ux-in-progress"],
+        "stageLabels": ["ux-in-progress"], "routingLabels": [],
+        "localStatus": "in-progress", "localConflict": false, "localBasis": ["label:ux-in-progress"]
+      }
+    ],
+    "scopes": [
+      { "fixVersions": ["rhoai-3.4"], "components": ["Backend"], "status": "in-progress", "conflict": false, "sourceKeys": ["TEST9-3004"] }
+    ]
+  },
+  "epicReleaseVersions": ["rhoai-3.4", "rhoai-3.5"],
+  "workflowLabelSources": [
+    { "epicKey": "TEST9-3000", "labels": ["design-approved"], "fixVersions": ["rhoai-3.4"], "components": ["Dashboard"] },
+    { "epicKey": "TEST9-3003", "labels": ["be-completed"], "fixVersions": ["rhoai-3.5"], "components": ["Dashboard"] }
+  ],
+  "metrics": {
+    "totalEpics": 2,
+    "totalIssues": 2,
+    "issuesByStatus": {},
+    "issuesByCategory": {
+      "Done": 1,
+      "In Progress": 0,
+      "To Do": 1
+    },
+    "totalStoryPoints": 0,
+    "storyPointsDone": 0,
+    "completionPct": 50,
+    "staleCount": 0,
+    "unassignedCount": 0,
+    "blockerCount": 0,
+    "health": "YELLOW",
+    "epicMetrics": [
+      { "key": "TEST9-3001", "summary": "[UI] Dashboard redesign — rhoai-3.4", "total": 1, "done": 1, "pct": 100 },
+      { "key": "TEST9-3002", "summary": "[UI] Dashboard redesign — rhoai-3.5", "total": 1, "done": 0, "pct": 0 }
+    ],
+    "executionIssueCount": 4,
+    "doneExecutionIssueCount": 2,
+    "executionState": "in-progress",
+    "executionCoverage": "available",
+    "preparationReadiness": "pending",
+    "executionCoverageReason": null,
+    "effectiveExecutionIssueCount": 4,
+    "effectiveDoneExecutionIssueCount": 2,
+    "effectiveExecutionState": "in-progress",
+    "effectiveExecutionCoverage": "available",
+    "effectiveExecutionCoverageReason": null
+  },
+  "topology": {
+    "repos": []
+  },
+  "_sources": {
+    "pipeline": "2026-06-01T10:00:00.000+0000",
+    "jira": "2026-06-01T10:00:00.000+0000"
+  },
+  "colorStatus": "Green",
+  "ownerStatusColor": "Green"
+}

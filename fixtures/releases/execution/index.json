@@ -1,7 +1,7 @@
 {
   "fetchedAt": "2026-04-10T06:09:29.084Z",
   "schemaVersion": "v2",
-  "featureCount": 469,
+  "featureCount": 471,
   "features": [
     {
       "key": "TEST1-15",
@@ -11759,7 +11759,7 @@
     {
       "key": "TEST1-9101",
       "summary": "Feature with zero-child completed-via-status Epic",
-      "status": "Closed",
+      "status": "In Progress",
       "statusCategory": "To Do",
       "priority": "Normal",
       "assignee": "Priya Natarajan",
@@ -11895,6 +11895,91 @@
       "effectiveExecutionState": "complete",
       "effectiveExecutionCoverage": "available",
       "effectiveExecutionCoverageReason": null
+    },
+    {
+      "key": "TEST1-9105",
+      "summary": "Dashboard redesign with UI work split across releases",
+      "status": "In Progress",
+      "statusCategory": "In Progress",
+      "priority": "Normal",
+      "assignee": "Priya Natarajan",
+      "fixVersions": ["rhoai-3.4", "rhoai-3.5"],
+      "labels": [],
+      "components": ["Dashboard", "Backend"],
+      "completionPct": 50,
+      "epicCount": 2,
+      "issueCount": 4,
+      "blockerCount": 0,
+      "health": "YELLOW",
+      "lastUpdated": "2026-06-01T10:00:00.000+0000",
+      "targetVersions": null,
+      "pm": null,
+      "architect": null,
+      "parentKey": null,
+      "colorStatus": "Green",
+      "ownerStatusColor": "Green",
+      "executionIssueCount": 4,
+      "doneExecutionIssueCount": 2,
+      "executionState": "in-progress",
+      "executionCoverage": "available",
+      "preparationReadiness": "pending",
+      "executionCoverageReason": null,
+      "epicReleaseVersions": ["rhoai-3.4", "rhoai-3.5"],
+      "workflowLabelSources": [
+        { "epicKey": "TEST9-3000", "labels": ["design-approved"], "fixVersions": ["rhoai-3.4"], "components": ["Dashboard"] },
+        { "epicKey": "TEST9-3003", "labels": ["be-completed"], "fixVersions": ["rhoai-3.5"], "components": ["Dashboard"] }
+      ],
+      "uiEvidence": {
+        "status": "in-progress",
+        "conflict": false,
+        "scopes": [
+          { "fixVersions": ["rhoai-3.4"], "components": ["Dashboard"], "status": "completed", "conflict": false, "sourceKeys": ["TEST9-3001"] },
+          { "fixVersions": ["rhoai-3.5"], "components": ["Dashboard"], "status": "not-started", "conflict": false, "sourceKeys": ["TEST9-3002"] }
+        ],
+        "sources": [
+          { "epicKey": "TEST9-3001", "epicType": "ui-impl", "fixVersions": ["rhoai-3.4"], "components": ["Dashboard"], "localStatus": "completed", "stageLabels": ["ui-completed"], "routingLabels": [] },
+          { "epicKey": "TEST9-3002", "epicType": "ui-impl", "fixVersions": ["rhoai-3.5"], "components": ["Dashboard"], "localStatus": "not-started", "stageLabels": [], "routingLabels": ["no-ui"] }
+        ]
+      },
+      "uxEvidence": {
+        "status": "in-progress",
+        "conflict": false,
+        "scopes": [
+          { "fixVersions": ["rhoai-3.4"], "components": ["Backend"], "status": "in-progress", "conflict": false, "sourceKeys": ["TEST9-3004"] }
+        ],
+        "sources": [
+          { "epicKey": "TEST9-3004", "epicType": "uix", "fixVersions": ["rhoai-3.4"], "components": ["Backend"], "localStatus": "in-progress", "stageLabels": ["ux-in-progress"], "routingLabels": [] }
+        ]
+      }
+    },
+    {
+      "key": "TEST1-9106",
+      "summary": "Closed feature whose only release signal is on a child Epic",
+      "status": "Closed",
+      "statusCategory": "Done",
+      "priority": "Normal",
+      "assignee": "Frank Jansen",
+      "fixVersions": [],
+      "labels": [],
+      "completionPct": 100,
+      "epicCount": 1,
+      "issueCount": 3,
+      "blockerCount": 0,
+      "health": "GREEN",
+      "lastUpdated": "2026-03-01T10:00:00.000+0000",
+      "targetVersions": null,
+      "pm": null,
+      "architect": null,
+      "parentKey": null,
+      "colorStatus": "Green",
+      "ownerStatusColor": "Green",
+      "executionIssueCount": 3,
+      "doneExecutionIssueCount": 3,
+      "executionState": "complete",
+      "executionCoverage": "available",
+      "preparationReadiness": "not-applicable",
+      "executionCoverageReason": null,
+      "epicReleaseVersions": ["rhoai-3.0"]
     }
   ],
   "rfes": [

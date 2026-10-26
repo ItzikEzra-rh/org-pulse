@@ -18,6 +18,15 @@ import {
   assigneeDisplayLabel
 } from '../composables/useComponentStatusFilter'
 import {
+  useUiUxFilter,
+  collectAllLabelOptions,
+  matchesLabelQuery,
+  featureCardLabels,
+  isClosedFeatureVisible
+} from '../composables/useUiUxFilter'
+import { isClosedStatus } from '../utils/closedStatus'
+import { labelCategoryConfigFor } from '../utils/labelCategories'
+import {
   isValidProgressCount,
   executionUnavailableInfo,
   JIRA_CHILD_PROGRESS_HELP_TEXT,
@@ -59,6 +68,12 @@ const {
   clearFilters: clearComponentStatusFilters,
   isFiltered: isComponentStatusFiltered
 } = useComponentStatusFilter()
+const {
+  selectedLabels,
+  toggleLabel,
+  clearFilters: clearUiUxFilters,
+  isFiltered: isUiUxFiltered
+} = useUiUxFilter()
 
 const { user } = useAuth()
 // Hidden when no reliable jiraDisplayName is resolved for the current user — never guessed client-side.
@@ -68,6 +83,10 @@ const hasJiraChildProgress = computed(() => features.value.some(
   f => f.jiraChildProgress?.source === 'jira-child-status-rollup'
 ))
 const hasNoCompatibleProducer = computed(() => features.value.some(f => f.coverage?.pipelineMetrics === 'unavailable'))
+// Hides the UI/UX filters and badges entirely for a project with no uiUxEvidence config.
+const hasUiUxData = computed(() => features.value.some(f =>
+  (f.uiEvidence?.sources?.length > 0) || (f.uxEvidence?.sources?.length > 0)
+))
 
 function selectMeAssignee() {
   if (meAssignee.value) setAssignees([meAssignee.value])
@@ -79,14 +98,26 @@ const attentionBlockersOnly = ref(false)
 const searchQuery = ref('')
 const viewMode = ref('board') // 'board' or 'list'
 const assigneeSearch = ref('')
+const labelSearch = ref('')
+// Customer/Other are long tails of unrelated Jira labels; collapsed by default so the
+// UI/UX Workflow and Readiness & Tracking groups aren't pushed below the fold.
+const collapsedLabelCategories = ref(new Set(['Customer', 'Other']))
 
-const CLOSED_DROPDOWNS = { version: false, executionState: false, component: false, jiraStatus: false, assignee: false }
+function toggleLabelCategoryCollapse(category) {
+  const next = new Set(collapsedLabelCategories.value)
+  if (next.has(category)) next.delete(category)
+  else next.add(category)
+  collapsedLabelCategories.value = next
+}
+
+const CLOSED_DROPDOWNS = { version: false, executionState: false, component: false, jiraStatus: false, assignee: false, label: false }
 const openDropdown = ref({ ...CLOSED_DROPDOWNS })
 
 function toggleDropdown(name) {
   const wasOpen = openDropdown.value[name]
   openDropdown.value = { ...CLOSED_DROPDOWNS, [name]: !wasOpen }
   if (name === 'assignee' && !wasOpen) assigneeSearch.value = ''
+  if (name === 'label' && !wasOpen) labelSearch.value = ''
 }
 
 function toggleVersion(v) {
@@ -115,6 +146,7 @@ function multiFilterLabel(selectedLabels, allLabel) {
 const componentFilterLabel = computed(() => multiFilterLabel(selectedComponents.value.map(componentDisplayLabel), 'All components'))
 const jiraStatusFilterLabel = computed(() => multiFilterLabel(selectedStatuses.value, 'All statuses'))
 const assigneeFilterLabel = computed(() => multiFilterLabel(selectedAssignees.value.map(assigneeDisplayLabel), 'All assignees'))
+const labelFilterLabel = computed(() => multiFilterLabel(selectedLabels.value, 'All labels'))
 
 const EXECUTION_STATE_FILTER_OPTIONS = [
   { value: 'no-tracked-work', label: 'No Tracked Work' },
@@ -389,6 +421,7 @@ function saveOverviewFilters(storageKey = overviewFilterStorageKey()) {
         selectedComponents: selectedComponents.value,
         selectedStatuses: selectedStatuses.value,
         selectedAssignees: selectedAssignees.value,
+        selectedLabels: selectedLabels.value,
         attentionBlockersOnly: attentionBlockersOnly.value,
         searchQuery: searchQuery.value,
         viewMode: viewMode.value
@@ -423,6 +456,11 @@ function restoreOverviewFilters(storageKey = overviewFilterStorageKey()) {
     if (Array.isArray(o.selectedAssignees)) {
       selectedAssignees.value = o.selectedAssignees.filter(v => typeof v === 'string')
     }
+    if (Array.isArray(o.selectedLabels)) {
+      selectedLabels.value = o.selectedLabels.filter(v => typeof v === 'string')
+    }
+    // o.selectedUiStatuses / selectedUxStatuses / selectedUiUxLabels are a pre-A2
+    // shape, silently ignored here rather than migrated.
     if (typeof o.attentionBlockersOnly === 'boolean') {
       attentionBlockersOnly.value = o.attentionBlockersOnly
     }
@@ -438,17 +476,46 @@ function restoreOverviewFilters(storageKey = overviewFilterStorageKey()) {
 }
 
 watch(
-  [selectedVersions, selectedExecutionStates, selectedComponents, selectedStatuses, selectedAssignees, attentionBlockersOnly, searchQuery, viewMode],
+  [selectedVersions, selectedExecutionStates, selectedComponents, selectedStatuses, selectedAssignees, selectedLabels, attentionBlockersOnly, searchQuery, viewMode],
   () => saveOverviewFilters(),
   { deep: true }
 )
 
-// Options reflect the full feature list, independent of the current filter
-// selection, so narrowing one dimension never hides options for another.
-const componentOptions = computed(() => collectComponentOptions(features.value, f => f.components))
-const jiraStatusOptions = computed(() => collectStatusOptions(features.value, f => f.statusCategory))
-const assigneeOptions = computed(() => collectAssigneeOptions(features.value, f => f.assignee))
+// Options come from Features visible under the Closed rule (Release-dependent only), not from
+// other filters; active selections stay listed so they can always be undone.
+const eligibleFeatures = computed(() =>
+  features.value.filter(f => isClosedFeatureVisible(f, selectedVersions.value))
+)
 
+function retainEligibleOptions(allOptions, eligibleOptions, selected) {
+  const keep = new Set([...eligibleOptions, ...selected])
+  return allOptions.filter(option => keep.has(option))
+}
+
+const componentOptions = computed(() => retainEligibleOptions(
+  collectComponentOptions(features.value, f => f.components),
+  collectComponentOptions(eligibleFeatures.value, f => f.components),
+  selectedComponents.value
+))
+const jiraStatusOptions = computed(() => retainEligibleOptions(
+  collectStatusOptions(features.value, f => f.statusCategory),
+  collectStatusOptions(eligibleFeatures.value, f => f.statusCategory),
+  selectedStatuses.value
+))
+const assigneeOptions = computed(() => retainEligibleOptions(
+  collectAssigneeOptions(features.value, f => f.assignee),
+  collectAssigneeOptions(eligibleFeatures.value, f => f.assignee),
+  selectedAssignees.value
+))
+const labelCategoryConfig = computed(() => labelCategoryConfigFor(features.value))
+const labelOptions = computed(() => {
+  const config = labelCategoryConfig.value
+  const keep = new Set([
+    ...collectAllLabelOptions(eligibleFeatures.value, config).map(o => o.value.toLowerCase()),
+    ...selectedLabels.value.map(l => l.toLowerCase())
+  ])
+  return collectAllLabelOptions(features.value, config).filter(o => keep.has(o.value.toLowerCase()))
+})
 // Search only narrows what's rendered; selectedAssignees is never touched by it.
 const filteredAssigneeOptions = computed(() => {
   const q = assigneeSearch.value.trim().toLowerCase()
@@ -456,12 +523,31 @@ const filteredAssigneeOptions = computed(() => {
   return assigneeOptions.value.filter(a => assigneeDisplayLabel(a).toLowerCase().includes(q))
 })
 
+// Search only narrows what's rendered; selectedLabels is never touched by it.
+// A collapsed group's options are hidden unless search is active, so search still reaches them.
+const labelSearchActive = computed(() => labelSearch.value.trim() !== '')
+const filteredLabelGroups = computed(() => {
+  const q = labelSearch.value.trim().toLowerCase()
+  const filtered = q ? labelOptions.value.filter(o => o.value.toLowerCase().includes(q)) : labelOptions.value
+  const groups = []
+  for (const opt of filtered) {
+    let group = groups[groups.length - 1]
+    if (!group || group.category !== opt.category) {
+      group = { category: opt.category, options: [], collapsed: !q && collapsedLabelCategories.value.has(opt.category) }
+      groups.push(group)
+    }
+    group.options.push(opt)
+  }
+  return groups
+})
+
 const isAnyFiltered = computed(() =>
   selectedVersions.value.length > 0 ||
   selectedExecutionStates.value.length > 0 ||
   attentionBlockersOnly.value ||
   !!searchQuery.value ||
-  isComponentStatusFiltered.value
+  isComponentStatusFiltered.value ||
+  isUiUxFiltered.value
 )
 
 function clearAllFilters() {
@@ -470,6 +556,7 @@ function clearAllFilters() {
   attentionBlockersOnly.value = false
   searchQuery.value = ''
   clearComponentStatusFilters()
+  clearUiUxFilters()
 }
 
 function resetOverviewFilters() {
@@ -479,6 +566,7 @@ function resetOverviewFilters() {
   searchQuery.value = ''
   viewMode.value = 'board'
   clearComponentStatusFilters()
+  clearUiUxFilters()
 }
 
 function isKnownCount(value) {
@@ -494,7 +582,8 @@ watch(hasUnknownBlockerCount, (unknown) => {
 })
 
 const filteredFeatures = computed(() => {
-  let list = features.value
+  // Closed-visibility applies independently of the label query's Release handling below.
+  let list = eligibleFeatures.value
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(f =>
@@ -502,15 +591,25 @@ const filteredFeatures = computed(() => {
       f.summary.toLowerCase().includes(q)
     )
   }
-  if (selectedVersions.value.length > 0) {
-    list = list.filter(f => f.fixVersions && f.fixVersions.some(v => selectedVersions.value.includes(v)))
+  // A label query matches Release/Component per-population instead.
+  if (isUiUxFiltered.value) {
+    list = list.filter(f => matchesLabelQuery(f, selectedLabels.value, {
+      selectedVersions: selectedVersions.value,
+      selectedComponents: selectedComponents.value
+    }))
+  } else if (selectedVersions.value.length > 0) {
+    // A Closed feature already passed the release check above, possibly via
+    // epicReleaseVersions only — don't re-check fixVersions alone here.
+    list = list.filter(f =>
+      isClosedStatus(f.status) || (f.fixVersions && f.fixVersions.some(v => selectedVersions.value.includes(v)))
+    )
   }
   if (selectedExecutionStates.value.length > 0) {
     list = list.filter(f => selectedExecutionStates.value.includes(laneKey(f)))
   }
   if (isComponentStatusFiltered.value) {
     list = list.filter(f =>
-      matchesComponents(f.components, selectedComponents.value) &&
+      (isUiUxFiltered.value || matchesComponents(f.components, selectedComponents.value)) &&
       matchesStatus(f.statusCategory, selectedStatuses.value) &&
       matchesAssignee(f.assignee, selectedAssignees.value)
     )
@@ -527,7 +626,8 @@ const decoratedFeatures = computed(() => filteredFeatures.value.map(f => ({
   feature: f,
   lane: laneKey(f),
   progress: executionSummary(f),
-  readiness: readinessMeta(f.preparationReadiness, f.key)
+  readiness: readinessMeta(f.preparationReadiness, f.key),
+  cardLabels: featureCardLabels(f, selectedVersions.value, selectedComponents.value)
 })))
 
 // Requires both a recognized lane and validated progress, so a known lane
@@ -678,7 +778,7 @@ onBeforeUnmount(() => {
             &middot; Data from {{ formatDate(fetchedAt) }}
           </span>
           <span v-if="features.length" class="ml-2">
-            &middot; {{ filteredFeatures.length }} feature<span v-if="filteredFeatures.length !== 1">s</span><template v-if="filteredFeatures.length !== features.length"> (filtered)</template>
+            &middot; {{ filteredFeatures.length }} feature<span v-if="filteredFeatures.length !== 1">s</span><template v-if="isAnyFiltered"> (filtered)</template>
           </span>
         </p>
       </div>
@@ -852,6 +952,69 @@ onBeforeUnmount(() => {
               />
               <span class="truncate">{{ s }}</span>
             </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Multi-select: Labels (unified Feature-level + Epic stage/routing + Epic workflow) -->
+      <div v-if="labelOptions.length > 0" class="flex flex-col gap-0.5">
+        <label class="text-xs font-medium text-gray-600 dark:text-gray-400">Labels</label>
+        <div class="relative multi-select-dropdown">
+          <button
+            @click.stop="toggleDropdown('label')"
+            class="bg-white dark:bg-gray-800 border rounded-md px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none flex items-center gap-1.5 min-w-[140px]"
+            :class="selectedLabels.length > 0
+              ? 'border-primary-500 ring-1 ring-primary-500'
+              : 'border-gray-300 dark:border-gray-600'"
+          >
+            <span class="flex-1 text-left truncate">{{ labelFilterLabel }}</span>
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform" :class="{ 'rotate-180': openDropdown.label }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div
+            v-if="openDropdown.label"
+            class="absolute z-20 mt-1 w-64 max-h-72 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1"
+          >
+            <div class="px-2 pt-1 pb-1.5 sticky top-0 bg-white dark:bg-gray-800">
+              <input
+                v-model="labelSearch"
+                @click.stop
+                type="text"
+                placeholder="Search labels..."
+                class="w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
+              />
+            </div>
+            <template v-for="group in filteredLabelGroups" :key="group.category">
+              <div
+                v-if="labelSearchActive"
+                class="w-full px-3 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500"
+              >{{ group.category }}</div>
+              <button
+                v-else
+                type="button"
+                @click.stop="toggleLabelCategoryCollapse(group.category)"
+                :aria-expanded="!group.collapsed"
+                class="w-full flex items-center justify-between gap-1 px-3 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <span>{{ group.category }}</span>
+                <svg class="w-2.5 h-2.5 flex-shrink-0 transition-transform" :class="{ '-rotate-90': group.collapsed }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <template v-if="!group.collapsed">
+                <label
+                  v-for="opt in group.options"
+                  :key="opt.value"
+                  class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-900 dark:text-gray-100"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="selectedLabels.includes(opt.value)"
+                    @change="toggleLabel(opt.value)"
+                    class="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span class="truncate">{{ opt.value }}</span>
+                </label>
+              </template>
+            </template>
+            <div v-if="filteredLabelGroups.length === 0" class="px-3 py-2 text-xs text-gray-400">No matches for "{{ labelSearch }}"</div>
           </div>
         </div>
       </div>
@@ -1197,21 +1360,21 @@ onBeforeUnmount(() => {
                   >{{ v }}</span>
 
                   <span
-                    v-for="l in (d.feature.labels || []).slice(0, 3)"
+                    v-for="l in d.cardLabels.slice(0, 3)"
                     :key="l"
                     class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-teal-100 dark:bg-teal-500/15 text-teal-700 dark:text-teal-400"
                   >{{ l }}</span>
                   <button
-                    v-if="(d.feature.labels || []).length > 3 && !expandedLabelCards.has(d.feature.key)"
+                    v-if="d.cardLabels.length > 3 && !expandedLabelCards.has(d.feature.key)"
                     type="button"
                     class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
                     :aria-expanded="false"
-                    :aria-label="'Show ' + (d.feature.labels.length - 3) + ' more labels'"
+                    :aria-label="'Show ' + (d.cardLabels.length - 3) + ' more labels'"
                     @click.stop="toggleLabelsExpand(d.feature.key)"
-                  >+{{ d.feature.labels.length - 3 }}</button>
+                  >+{{ d.cardLabels.length - 3 }}</button>
                   <template v-if="expandedLabelCards.has(d.feature.key)">
                     <span
-                      v-for="l in d.feature.labels.slice(3)"
+                      v-for="l in d.cardLabels.slice(3)"
                       :key="l"
                       class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-teal-100 dark:bg-teal-500/15 text-teal-700 dark:text-teal-400"
                     >{{ l }}</span>
@@ -1360,6 +1523,9 @@ onBeforeUnmount(() => {
       :detail="detailFeature"
       :loading="detailLoading"
       :error="detailError"
+      :has-ui-ux-data="hasUiUxData"
+      :selected-versions="selectedVersions"
+      :selected-components="selectedComponents"
       @close="closeDrawer"
       @retry="loadFeatureDetail(selectedFeatureKey)"
     />

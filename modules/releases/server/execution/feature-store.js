@@ -21,15 +21,58 @@ const JIRA_FIELDS = [
   'linkedRfeKey', 'issueLinks'
 ];
 
-// Pipeline-owned fields — pipeline always wins
+// Pipeline-owned fields — pipeline always wins. uiEvidence/uxEvidence are
+// collector-computed; org-pulse never recomputes or reclassifies them.
 const PIPELINE_FIELDS = [
-  'metrics', 'topology', 'trafficSignals', 'statusNotes'
+  'metrics', 'topology', 'trafficSignals', 'statusNotes',
+  'uiEvidence', 'uxEvidence'
 ];
 
-// Pipeline-index-only fields — written from pipeline index during ingest
+// Pipeline-index-only fields — written from pipeline index during ingest.
+// epicReleaseVersions is index-only in the collector's own output (see gitlab-fetch.js).
 const PIPELINE_INDEX_FIELDS = [
-  'architect', 'parentKey', 'targetVersions'
+  'architect', 'parentKey', 'targetVersions',
+  'epicReleaseVersions', 'workflowLabelSources'
 ];
+
+// Mirrors the collector's own default for a Feature with no UI/UX-relevant
+// Epics, so an absent field and a genuinely empty one render identically.
+const DEFAULT_UI_UX_EVIDENCE = { status: 'unknown', conflict: false, scopes: [], sources: [] };
+
+// Lean index projection (mirrors the collector's project_evidence_for_index):
+// enough per-scope/per-source data to filter without fetching the detail
+// file, which keeps the full basis[]/localBasis provenance.
+function projectUiUxEvidenceForIndex(evidence) {
+  const e = evidence || DEFAULT_UI_UX_EVIDENCE;
+  const lean = {
+    status: e.status || 'unknown',
+    conflict: !!e.conflict,
+    scopes: (e.scopes || []).map(function(sc) {
+      return {
+        fixVersions: sc.fixVersions || [],
+        components: sc.components || [],
+        status: sc.status || 'unknown',
+        conflict: !!sc.conflict,
+        sourceKeys: sc.sourceKeys || []
+      };
+    }),
+    sources: (e.sources || []).map(function(s) {
+      return {
+        epicKey: s.epicKey,
+        epicType: s.epicType || null,
+        fixVersions: s.fixVersions || [],
+        components: s.components || [],
+        localStatus: s.localStatus || 'unknown',
+        stageLabels: s.stageLabels || [],
+        routingLabels: s.routingLabels || []
+      };
+    })
+  };
+  if (Object.prototype.hasOwnProperty.call(e, 'enclaveOnly')) {
+    lean.enclaveOnly = !!e.enclaveOnly;
+  }
+  return lean;
+}
 
 // AI-review-owned fields — preserved across pipeline/Jira merges
 const AI_REVIEW_FIELDS = ['aiReview'];
@@ -416,6 +459,12 @@ async function rebuildIndex(storage) {
       ownerStatusColor: feature.colorStatus || null, // backward compat alias
       team: feature.team || null,
       components: feature.components || [],
+      // A Closed Feature's only release signal may live on a child Epic, not fixVersions above.
+      epicReleaseVersions: feature.epicReleaseVersions || [],
+      // Filter-only Epic label provenance; never a status input.
+      workflowLabelSources: feature.workflowLabelSources || [],
+      uiEvidence: projectUiUxEvidenceForIndex(feature.uiEvidence),
+      uxEvidence: projectUiUxEvidenceForIndex(feature.uxEvidence),
       // AI review summary (slim — only fields needed for list/readiness views)
       aiReview: feature.aiReview ? {
         recommendation: feature.aiReview.recommendation,
@@ -459,9 +508,11 @@ module.exports = {
   invalidateChangedEpicFlags,
   writeFeatures,
   rebuildIndex,
+  projectUiUxEvidenceForIndex,
   DATA_PREFIX,
   JIRA_FIELDS,
   PIPELINE_FIELDS,
   PIPELINE_INDEX_FIELDS,
-  AI_REVIEW_FIELDS
+  AI_REVIEW_FIELDS,
+  DEFAULT_UI_UX_EVIDENCE
 };

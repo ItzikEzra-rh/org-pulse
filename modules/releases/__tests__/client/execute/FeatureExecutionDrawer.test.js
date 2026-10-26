@@ -251,6 +251,68 @@ describe('FeatureExecutionDrawer', () => {
     expect(wrapper.emitted('close')).toBeTruthy()
   })
 
+  describe('UI/UX evidence', () => {
+    const detailWithEvidence = {
+      key: 'OSAC-100',
+      epics: [],
+      uiEvidence: {
+        status: 'in-progress', conflict: false,
+        scopes: [
+          { fixVersions: ['0.3'], components: ['Dashboard'], status: 'completed', conflict: false, sourceKeys: ['UI-1'] },
+          { fixVersions: ['0.4'], components: ['Dashboard'], status: 'not-started', conflict: true, sourceKeys: ['UI-2'] }
+        ],
+        sources: [
+          {
+            epicKey: 'UI-1', epicType: 'ui-impl', fixVersions: ['0.3'], components: ['Dashboard'],
+            localStatus: 'completed', localConflict: false, stageLabels: ['ui-completed'], routingLabels: [],
+            localBasis: ['label:ui-completed']
+          }
+        ]
+      },
+      uxEvidence: { status: 'unknown', conflict: false, scopes: [], sources: [] }
+    }
+
+    it('is hidden by default (hasUiUxData not set), preserving current Drawer behavior', () => {
+      const wrapper = mountDrawer({ featureKey: 'OSAC-100', card: makeCard(), detail: detailWithEvidence })
+      expect(wrapper.text()).not.toContain('UI/UX Evidence')
+    })
+
+    it('shows per-source Epic, labels, and basis provenance when hasUiUxData is set', () => {
+      const wrapper = mountDrawer({
+        featureKey: 'OSAC-100', card: makeCard(), detail: detailWithEvidence, hasUiUxData: true
+      })
+      expect(wrapper.text()).toContain('UI/UX Evidence')
+      expect(wrapper.text()).toContain('UI-1')
+      expect(wrapper.text()).toContain('ui-completed')
+      expect(wrapper.text()).toContain('label:ui-completed')
+    })
+
+    it('shows the feature-wide aggregate status with no Release/Component selected', () => {
+      const wrapper = mountDrawer({
+        featureKey: 'OSAC-100', card: makeCard(), detail: detailWithEvidence, hasUiUxData: true
+      })
+      expect(wrapper.text()).toContain('In Progress')
+    })
+
+    it('shows the Release-scoped status, not the aggregate, once a matching Release is selected', () => {
+      const wrapper = mountDrawer({
+        featureKey: 'OSAC-100', card: makeCard(), detail: detailWithEvidence, hasUiUxData: true,
+        selectedVersions: ['0.3']
+      })
+      expect(wrapper.text()).toContain('Completed')
+    })
+
+    it('highlights the scope matching the selected Release and flags its conflict', () => {
+      const wrapper = mountDrawer({
+        featureKey: 'OSAC-100', card: makeCard(), detail: detailWithEvidence, hasUiUxData: true,
+        selectedVersions: ['0.4']
+      })
+      const text = wrapper.text()
+      expect(text).toContain('0.4')
+      expect(text).toContain('not-started')
+    })
+  })
+
   describe('Epic status completion', () => {
     it('shows "Completed via Epic status" with the actual N/M below it, labelled as actual', () => {
       const detail = {

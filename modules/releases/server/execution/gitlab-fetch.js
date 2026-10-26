@@ -152,6 +152,9 @@ async function fetchArtifacts(storage, config, token, jira) {
         if (indexEntry.architect !== undefined) data.architect = indexEntry.architect;
         if (indexEntry.parentKey !== undefined) data.parentKey = indexEntry.parentKey;
         if (indexEntry.targetVersions !== undefined) data.targetVersions = indexEntry.targetVersions;
+        // epicReleaseVersions is index-only in the collector's output, never written to the detail file.
+        if (indexEntry.epicReleaseVersions !== undefined) data.epicReleaseVersions = indexEntry.epicReleaseVersions;
+        if (indexEntry.workflowLabelSources !== undefined) data.workflowLabelSources = indexEntry.workflowLabelSources;
       }
       pipelineFeatures.set(key, data);
     } else {

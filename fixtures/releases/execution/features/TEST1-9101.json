@@ -1,7 +1,7 @@
 {
   "key": "TEST1-9101",
   "summary": "Feature with zero-child completed-via-status Epic",
-  "status": "Closed",
+  "status": "In Progress",
   "statusCategory": "To Do",
   "priority": "Normal",
   "assignee": {

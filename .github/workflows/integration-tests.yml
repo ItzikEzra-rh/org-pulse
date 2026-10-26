@@ -65,6 +65,7 @@ jobs:
               - 'fixtures/osac-builds-data.json'
               - 'tests/integration/product-builds-osac.spec.js'
             releases:
+              - 'fixtures/releases/execution/**'
               - 'modules/releases/server/execution/**'
               - 'modules/releases/server/planning/**'
               - 'modules/releases/client/views/FeatureDetailView.vue'
@@ -72,6 +73,7 @@ jobs:
               - 'modules/releases/client/plan/**'
               - 'tests/integration/execution-data.spec.js'
               - 'tests/integration/releases.spec.js'
+              - 'tests/integration/release-execution-uiux.spec.js'
             tv-fv-delta:
               - 'modules/releases/server/tv-fv-delta/**'
               - 'modules/releases/server/index.js'
@@ -169,7 +171,7 @@ jobs:
           check_module "product-builds-osac" \
             "^(modules/product-builds/(client/index\.js|client/views/OsacBuildsView\.vue|server/(osac|index)\.js)|fixtures/osac-builds-data\.json|tests/integration/product-builds-osac\.spec\.js)"
           check_module "releases" \
-            "^(modules/releases/server/(execution|planning)/|modules/releases/client/views/FeatureDetailView\.vue|modules/releases/client/(execute|plan)/|tests/integration/(execution-data|releases)\.spec\.js)"
+            "^(fixtures/releases/execution/|modules/releases/server/(execution|planning)/|modules/releases/client/views/FeatureDetailView\.vue|modules/releases/client/(execute|plan)/|tests/integration/(execution-data|releases|release-execution-uiux)\.spec\.js)"
           check_module "tv-fv-delta" \
             "^(modules/releases/server/(tv-fv-delta/|index\.js)|modules/releases/client/views/TvFvDeltaView\.vue|modules/releases/client/composables/use.*(TvFv|ReleasePicker|ComponentBreakdown)\.js|modules/releases/client/components/(FeatureTable|ClickableCount)\.vue|tests/integration/tv-fv-delta\.spec\.js)"
           check_module "feature-pressure" \

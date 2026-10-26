@@ -1510,7 +1510,22 @@ Derived summary index of all features in the unified feature store. Rebuilt auto
       "colorStatus": "Green",
       "ownerStatusColor": "Green",
       "team": "Model Serving",
-      "components": ["API", "Dashboard"]
+      "components": ["API", "Dashboard"],
+      "epicReleaseVersions": ["3.4", "3.5"],
+      "workflowLabelSources": [
+        { "epicKey": "RHAISTRAT-125", "labels": ["design-approved"], "fixVersions": ["3.5"], "components": ["Dashboard"] }
+      ],
+      "uiEvidence": {
+        "status": "in-progress",
+        "conflict": false,
+        "scopes": [
+          { "fixVersions": ["3.4"], "components": ["Dashboard"], "status": "completed", "conflict": false, "sourceKeys": ["RHAISTRAT-124"] }
+        ],
+        "sources": [
+          { "epicKey": "RHAISTRAT-124", "epicType": "ui-impl", "fixVersions": ["3.4"], "components": ["Dashboard"], "localStatus": "completed", "stageLabels": ["ui-completed"], "routingLabels": [] }
+        ]
+      },
+      "uxEvidence": { "status": "unknown", "conflict": false, "scopes": [], "sources": [] }
     }
   ]
 }
@@ -1555,6 +1570,33 @@ Derived summary index of all features in the unified feature store. Rebuilt auto
   only when `state` is `supported`, `coverage` is `complete`, and `issueCount` is positive. It reports
   Jira child status; it must not populate `execution*` metrics or be presented as pipeline success,
   Feature completion, or release readiness. The same object is copied into the matching Feature Detail.
+- `epicReleaseVersions` is the sorted union of `fixVersions` across a Feature's child Epics,
+  pipeline-owned and copied verbatim from the collector's index output. Always present (possibly
+  `[]`), and deliberately kept separate from the Feature's own `fixVersions` — a release filter needs
+  both to reveal a Closed Feature whose only release signal lives on a child Epic (see "Bounded Closed
+  Feature coverage" below) without implying the Feature itself targets that release.
+- `workflowLabelSources` (index entry and detail file, top-level) is a **filter-only,
+  role-independent** projection of configured workflow labels (e.g. `design-approved`,
+  `be-completed`) found on **any** child Epic, regardless of Epic role classification — pipeline-owned
+  and copied verbatim from the collector's output, with no extra Jira queries. Unlike
+  `uiStageLabels`/`uxStageLabels`, these labels never feed `uiEvidence`/`uxEvidence` status or
+  scoping; `be-completed` in particular lives on backend/implementation Epics that have no UI/UX
+  role at all, so this is its only channel into the index. Each entry carries per-Epic provenance
+  (`epicKey`) and scope (`fixVersions`/`components`) for the same single-source scoping used
+  elsewhere. Always present (possibly `[]`); empty when the project has no `workflowLabels`
+  configured, or on a payload predating this contract.
+- `uiEvidence`/`uxEvidence` are a lean, filterable projection of the full detail-file evidence (see
+  "Optional — UI/UX Evidence" below): `status`, `conflict`, `scopes[]`, `sources[]` (with
+  `fixVersions`/`components`/`localStatus`/`stageLabels`/`routingLabels` per source), and `enclaveOnly`
+  on `uiEvidence` when the source evidence carries it. `basis[]` and per-source `labels`/`localConflict`/
+  `localBasis` — the full provenance trail — are detail-file only, not duplicated into the index. A
+  feature with no UI/UX-relevant Epics still gets both fields, defaulted to
+  `{status: "unknown", conflict: false, scopes: [], sources: []}` — absence of the fields entirely
+  (a payload predating this contract, or a project with no `uiUxEvidence` config) must render
+  identically to that same default, never as an error or a different Unknown variant. A consumer
+  resolving status for a selected Release/Component must read the matching `scopes[]` entry, never the
+  top-level `status` — that aggregate can hide a per-release split (e.g. one child Epic done in one
+  release while a sibling Epic is still in progress in another).
 
 ## Releases — Execution Feature Detail (`data/releases/execution/features/{KEY}.json`)
 
@@ -1820,6 +1862,92 @@ Heuristic narrative signals for the Feature detail **Traffic Signals** panel (bl
 - Each signal item has `title` (short headline), `detail` (one or two sentences), and `issueKeys` (Jira keys cited in the signal; may be empty).
 - **`source`**: `"derived"` from embedded epic/issue JSON; editors may set `"edited"` after manual refinement (your pipeline may still overwrite on the next fetch unless you preserve edits out-of-band).
 - Traffic **blockers** here are **not** the same as Jira **priority = Blocker** — they reflect backlog/integration risk and explicit **`isBlocked`** links on issues.
+
+**Optional — UI/UX Evidence (`uiEvidence`/`uxEvidence`):**
+
+Full-provenance version of the index projection described above. Produced by org-pulse-data's
+`fetch_ep_review.py` for the UI/UX workflow (UX Design / UI Design / UI Implementation) tracked
+across a Feature's child Epics. Additive: a Feature with no UI/UX-relevant Epics still gets both
+fields, with `status: "unknown"`.
+
+```jsonc
+{
+  "uiEvidence": {
+    "status": "not-applicable | unknown | not-started | design | in-progress | completed",
+    "conflict": false,
+    "enclaveOnly": false,
+    "basis": [ { "signal": "label:ui-completed | status", "epicKey": "OSAC-3595" } ],
+    "sources": [
+      { "epicKey": "OSAC-3595", "epicType": "bootstrap | ui-impl | uix",
+        "fixVersions": ["0.4"], "components": ["Dashboard"], "labels": ["ui-completed"],
+        "stageLabels": ["ui-completed"], "routingLabels": [],
+        "localStatus": "completed", "localConflict": false, "localBasis": ["label:ui-completed"] }
+    ],
+    "scopes": [
+      { "fixVersions": ["0.4"], "components": ["Dashboard"], "status": "in-progress",
+        "conflict": false, "sourceKeys": ["OSAC-3595", "OSAC-3596"] }
+    ]
+  },
+  "uxEvidence": {
+    "status": "not-applicable | unknown | not-started | in-progress | completed",
+    "conflict": false, "basis": [ "..." ], "sources": [ "..." ], "scopes": [ "..." ]
+  }
+}
+```
+
+**Notes:**
+
+- `uxEvidence.status` has no `design` value — UX work has no separately tracked design stage the
+  way `uiEvidence` does.
+- `sources[].epicType` classifies the child Epic's role: `bootstrap` (a UI/UX-labeled Epic whose own
+  non-prep children are PRD/design/misc support work, never UI-implementation evidence), `ui-impl`
+  (summary/label identifies it as UI implementation work), or `uix` (contributes to both `uiEvidence`
+  and `uxEvidence`). An Epic with none of these signals is excluded from both fields entirely.
+- `sources[].labels` are the Epic's full raw label set; `stageLabels`/`routingLabels` are the subset
+  that are UI/UX stage or routing labels respectively (e.g. the project's configured `noUiLabel`,
+  `enclaveOnlyLabel`). `localStatus`/`localConflict`/`localBasis` are that single source's own
+  evidence-tier resolution, independent of the feature-wide `status`/`conflict`/`basis`.
+- `basis[]` (feature-wide) and `sources[].localBasis` record which signal (a stage label vs. child-item
+  status) won when more than one applied — a label-reported stage can be superseded by newer
+  status-supported evidence on the same Epic; see org-pulse-data's evidence-tier rules for precedence.
+- `scopes[]` groups sources by their exact effective (`fixVersions`, `components`) — the unit a
+  release/component-scoped query or display must match. The top-level `status`/`conflict` are a
+  feature-wide aggregate across every source regardless of scope and must never be presented as if
+  they were evidence for one specific release/component; always resolve against the matching
+  `scopes[]` entry once a Release or Component is selected. A scope's own `status`/`conflict` can
+  differ from the feature-wide aggregate (e.g. one release done, a sibling release still in progress).
+- `enclaveOnly` (on `uiEvidence` only) is a routing flag set by the project's configured
+  `enclaveOnlyLabel`, not a status — it does not hide or demote the Feature by itself; a consumer may
+  use it to route the Feature differently when also filtering by Component.
+- A raw label match (e.g. filtering by `stageLabels`) is only valid when read from the same source
+  Epic as any Release/Component also being matched — matching a label on one Epic against a release
+  that only appears on a different sibling Epic is a false positive.
+
+**Optional — Workflow Label Sources (`workflowLabelSources`):**
+
+Produced by org-pulse-data's `fetch_ep_review.py` alongside `uiEvidence`/`uxEvidence`, from the same
+already-fetched child-Epic data (no extra Jira queries). A **role-independent** scan: unlike
+`uiEvidence`/`uxEvidence`, it is not limited to Epics with a `bootstrap`/`ui-impl`/`uix` role — a
+workflow label (e.g. `be-completed`) can live on an ordinary backend/implementation Epic that carries
+no UI/UX role at all, so this is its only channel into either file. Present identically in both the
+index entry and the detail file.
+
+```jsonc
+{
+  "workflowLabelSources": [
+    { "epicKey": "OSAC-3595", "labels": ["design-approved"], "fixVersions": ["0.4"], "components": ["Dashboard"] },
+    { "epicKey": "OSAC-3601", "labels": ["be-completed"], "fixVersions": ["0.4"], "components": ["Dashboard"] }
+  ]
+}
+```
+
+- Each entry's `labels` is the subset of the project's configured `workflowLabels` (`uiUxEvidence.workflowLabels`
+  in `feature-list-config.json`) found on that one Epic — never the Epic's full raw label set.
+- **Filter-only:** these labels never feed `uiEvidence`/`uxEvidence` status, `conflict`, or `scopes[]` —
+  presence of `design-approved`/`be-completed` must not change either field's derived value.
+- Same single-source-Epic rule as `stageLabels`/`routingLabels`: a label and a Release/Component match
+  must come from the same entry's `fixVersions`/`components`, never a different sibling Epic.
+- Always present (possibly `[]`); empty when the project has no `workflowLabels` configured.
 
 ## Releases — Execution Config (`data/releases/execution/config.json`)
 
@@ -2564,6 +2692,7 @@ The `fixtures/` directory provides read-only demo data used when `DEMO_MODE=true
 3. **Verify against real data.** If you're unsure of a data file's format, check the actual files in `data/` (symlinked from the main worktree) rather than trusting fixtures alone.
 4. **Generate pipeline-derived fields from the producer, not by hand.** The `executionIssueCount`/`doneExecutionIssueCount`/`executionState`/`executionCoverage`/`executionCoverageReason`/`preparationReadiness` values on a representative subset of `fixtures/releases/execution/` features (e.g. `TEST1-1131`, `TEST1-1045`, `TEST1-284`, `TEST1-15`, `TEST1-157`, `TEST1-576`) were produced by calling org-pulse-data's `compute_metrics`/`compute_preparation_readiness` with controlled epic/issue inputs, one per execution/coverage/readiness state. The same six fixtures' `epics[].issues[].isPreparation` and per-epic `executionIssueCount`/`doneExecutionIssueCount` were produced by calling `is_preparation_issue()` against each fixture's own issue titles. The remaining fixtures intentionally omit these fields to keep covering the pre-contract/missing-metrics case.
 5. **Epic status-completion override fixtures.** `TEST1-9101`–`TEST1-9104` (OSAC-5234) were produced by calling org-pulse-data's `enrich_epics_with_provenance`/`compute_metrics`/`build_index_entry`/`build_detail_json` against hand-built Epic/issue inputs, one per scenario: `TEST1-9101` (zero-child completed-via-status Epic: raw `insufficient-data`, effective `complete`/0/0), `TEST1-9102` (completed-via-status Epic with open children, mixed with a normal Epic — weighted effective total across differently-sized Epics), `TEST1-9103` (a Won't Do-closed Epic with real open work credited complete alongside an already fully-done Epic), and `TEST1-9104` (a Duplicate-closed Epic with zero real progress credited fully complete). Trimmed to the same minimal field set as the other representative fixtures (no `aiReview`, no epic `fixVersionSource`/`componentSource`/`pct`/`progress` — unused by any consuming view).
+6. **UI/UX evidence and `epicReleaseVersions` fixtures.** `TEST1-9105` (OSAC-6322, Phase 3) mirrors the OSAC-1604/5650 production case: two `[UI]` Epics for the same Feature in different releases (`rhoai-3.4` completed, `rhoai-3.5` not-started), exercising `scopes[]` resolution, the unified Labels filter (including `design-approved`/`be-completed` via `workflowLabelSources`), scope-aware card labels, and Drawer provenance (`basis`/`localBasis`/per-source `labels`) together — `rhoai-3.4`/`rhoai-3.5` were chosen because they already appear on other fixtures' `fixVersions`, so no new Release option needed adding anywhere else. `TEST1-9106` is Closed with no `fixVersions` of its own and `epicReleaseVersions: ["rhoai-3.0"]` sourced only from its child Epic, covering Closed Feature visibility revealed purely via `epicReleaseVersions`; it intentionally omits `uiEvidence`/`uxEvidence` entirely to keep covering the absent-fields default-shape case alongside the new fields.
 
 
 ## Releases — Project execution evidence

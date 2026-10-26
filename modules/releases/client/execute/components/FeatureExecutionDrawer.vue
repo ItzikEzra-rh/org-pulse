@@ -2,8 +2,10 @@
 import { ref, computed, watch } from 'vue'
 import StatusBadge from './StatusBadge.vue'
 import AIInfoBubble from './AIInfoBubble.vue'
+import UiUxStatusBadge from './UiUxStatusBadge.vue'
 import { componentDisplayLabel } from '../composables/useComponentStatusFilter'
 import { useFocusTrap } from '../../plan/composables/useFocusTrap'
+import { uiUxStatusForContext, uiEvidenceOf, uxEvidenceOf, scopeMatchesReleaseComponent } from '../composables/useUiUxFilter'
 import {
   isValidProgressCount,
   PROGRESS_SUPPORTING_TEXT,
@@ -17,7 +19,10 @@ const props = defineProps({
   detail: { type: Object, default: null },
   loading: Boolean,
   error: { type: String, default: null },
-  jiraBaseUrl: { type: String, default: 'https://issues.redhat.com/browse' }
+  jiraBaseUrl: { type: String, default: 'https://issues.redhat.com/browse' },
+  hasUiUxData: Boolean,
+  selectedVersions: { type: Array, default: () => [] },
+  selectedComponents: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['close', 'retry'])
@@ -100,6 +105,28 @@ function featureIssueCountLabel(feature) {
 const completedViaStatusEpicCount = computed(() =>
   Array.isArray(props.detail?.epics) ? props.detail.epics.filter(e => e.completedViaStatus).length : 0
 )
+
+// Full detail-shape evidence (basis[]/localBasis/scopes), not the lean index
+// projection used for list/board filtering and badges.
+const uiUxWorkstreams = computed(() => {
+  if (!props.detail) return []
+  return [
+    { key: 'ui', label: 'UI', evidence: uiEvidenceOf(props.detail) },
+    { key: 'ux', label: 'UX', evidence: uxEvidenceOf(props.detail) }
+  ].map(ws => ({
+    ...ws,
+    display: uiUxStatusForContext(ws.evidence, props.selectedVersions, props.selectedComponents)
+  }))
+})
+
+function scopeIsSelected(scope) {
+  return scopeMatchesReleaseComponent(scope, props.selectedVersions, props.selectedComponents) &&
+    (props.selectedVersions.length > 0 || props.selectedComponents.length > 0)
+}
+
+function basisLabel(entry) {
+  return typeof entry === 'string' ? entry : (entry?.signal || JSON.stringify(entry))
+}
 </script>
 
 <template>
@@ -272,6 +299,79 @@ const completedViaStatusEpicCount = computed(() =>
                   </dd>
                 </template>
               </dl>
+            </section>
+
+            <!-- UI/UX evidence -->
+            <section v-if="hasUiUxData && !loading && !error && detail" class="px-4 py-4">
+              <p class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">UI/UX Evidence</p>
+              <div class="space-y-4">
+                <div v-for="ws in uiUxWorkstreams" :key="ws.key">
+                  <div class="flex items-center justify-between mb-1.5">
+                    <UiUxStatusBadge :label="ws.label" v-bind="ws.display" />
+                  </div>
+
+                  <div v-if="(ws.evidence.scopes || []).length" class="flex flex-wrap gap-1 mb-2">
+                    <span
+                      v-for="(scope, idx) in ws.evidence.scopes"
+                      :key="idx"
+                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px]"
+                      :class="scopeIsSelected(scope)
+                        ? 'border-primary-400 dark:border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-300'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'"
+                    >
+                      {{ (scope.fixVersions || []).join(', ') || 'No release' }}
+                      <template v-if="(scope.components || []).length">&middot; {{ scope.components.map(componentDisplayLabel).join(', ') }}</template>
+                      &middot; {{ scope.status }}
+                      <span v-if="scope.conflict" class="text-amber-600 dark:text-amber-400 font-semibold">!</span>
+                    </span>
+                  </div>
+
+                  <p v-if="!(ws.evidence.sources || []).length" class="text-[11px] italic text-gray-400 dark:text-gray-500">No evidence sources.</p>
+                  <div v-else class="space-y-1.5">
+                    <div
+                      v-for="source in ws.evidence.sources"
+                      :key="source.epicKey"
+                      class="text-[11px] border border-gray-100 dark:border-gray-800 rounded px-2 py-1.5"
+                    >
+                      <div class="flex items-center justify-between gap-2">
+                        <a
+                          :href="`${jiraBaseUrl}/${source.epicKey}`"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="font-mono text-primary-600 dark:text-blue-400 hover:underline"
+                        >{{ source.epicKey }}</a>
+                        <span class="text-gray-400 dark:text-gray-500">{{ source.epicType || 'unknown' }}</span>
+                      </div>
+                      <p class="text-gray-500 dark:text-gray-400 mt-0.5">
+                        Local status: <span class="font-medium text-gray-700 dark:text-gray-300">{{ source.localStatus || 'unknown' }}</span>
+                        <span v-if="source.localConflict" class="text-amber-600 dark:text-amber-400 font-semibold ml-1">(conflict)</span>
+                      </p>
+                      <div v-if="(source.fixVersions || []).length || (source.components || []).length" class="flex flex-wrap gap-1 mt-1">
+                        <span
+                          v-for="v in source.fixVersions"
+                          :key="v"
+                          class="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400 text-[10px]"
+                        >{{ v }}</span>
+                        <span
+                          v-for="c in source.components"
+                          :key="c"
+                          class="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-400 text-[10px]"
+                        >{{ componentDisplayLabel(c) }}</span>
+                      </div>
+                      <div v-if="(source.stageLabels || []).concat(source.routingLabels || []).length" class="flex flex-wrap gap-1 mt-1">
+                        <span
+                          v-for="l in (source.stageLabels || []).concat(source.routingLabels || [])"
+                          :key="l"
+                          class="px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-500/15 text-teal-700 dark:text-teal-400 text-[10px]"
+                        >{{ l }}</span>
+                      </div>
+                      <p v-if="(source.localBasis || []).length" class="text-gray-400 dark:text-gray-500 mt-1">
+                        Basis: {{ source.localBasis.map(basisLabel).join(', ') }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </section>
 
             <!-- Epics -->

@@ -63,6 +63,17 @@ describe('mergeFeatureData', () => {
     expect(result.parentKey).toBe('X-0')
   })
 
+  it('workflowLabelSources refreshes from pipeline and survives Jira syncs unchanged', () => {
+    const sources = [{ epicKey: 'X-2', labels: ['design-approved'], fixVersions: ['0.4'], components: [] }]
+    const pipeline = { key: 'X-1', workflowLabelSources: sources }
+    const afterIngest = mergeFeatureData(null, pipeline, null)
+    expect(afterIngest.workflowLabelSources).toEqual(sources)
+
+    const jira = { key: 'X-1', status: 'Done' }
+    const result = mergeFeatureData(afterIngest, null, jira)
+    expect(result.workflowLabelSources).toEqual(sources)
+  })
+
   it('sets _sources timestamps correctly', () => {
     const result = mergeFeatureData(null, { key: 'X-1' }, { key: 'X-1' })
     expect(result._sources.pipeline).toBeDefined()
@@ -859,6 +870,22 @@ describe('rebuildIndex', () => {
     const index = storage._files['releases/execution/index.json']
     expect(index.featureCount).toBe(0)
     expect(index.features).toEqual([])
+  })
+
+  it('projects workflowLabelSources into the index unchanged, defaulting to [] when absent', async () => {
+    const sources = [{ epicKey: 'X-9', labels: ['be-completed'], fixVersions: ['0.4'], components: ['Dashboard'] }]
+    const storage = makeStorage({
+      'releases/execution/features/X-1.json': { key: 'X-1', summary: 'Has sources', status: 'New', workflowLabelSources: sources },
+      'releases/execution/features/X-2.json': { key: 'X-2', summary: 'Legacy, no field', status: 'New' }
+    })
+
+    await rebuildIndex(storage)
+    const byKey = Object.fromEntries(
+      storage._files['releases/execution/index.json'].features.map(f => [f.key, f])
+    )
+
+    expect(byKey['X-1'].workflowLabelSources).toEqual(sources)
+    expect(byKey['X-2'].workflowLabelSources).toEqual([])
   })
 
   // metrics below are copies of fetch-ep-review.py build_detail_json() output
