@@ -38,6 +38,19 @@ const ALL_PIPELINE_LABELS = [...TRIAGE_LABELS, ...AUTOFIX_LABELS];
 
 const BOT_ACCOUNTS = new Set(['osac-dev-bot']);
 
+/**
+ * Map a Jira issue's pipeline labels to an Org Pulse pipeline state.
+ *
+ * `jira-autofix` and `jira-autofix-candidate` are treated as the same trigger:
+ * the first is set when a ticket is queued for the bot, the second by the
+ * triage bot when it assesses the ticket as auto-fixable. Progress labels
+ * (review, CI failing, blocked) take precedence over the trigger labels.
+ *
+ * @param {string[]} labels - Jira labels on the issue.
+ * @param {string} status - Jira status name.
+ * @param {string} [assignee] - Assignee display name.
+ * @returns {string} Pipeline state, e.g. 'autofix-ready' or 'unknown'.
+ */
 function classifyIssue(labels, status, assignee) {
   const labelSet = new Set(labels);
 
