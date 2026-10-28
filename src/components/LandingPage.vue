@@ -323,6 +323,22 @@ function handleToggleWidget(widgetId, defaultSize) {
   }
 }
 
+// Sortable reports positions in the rendered grid, but widgets scoped out by
+// project or role are hidden from it while staying in the saved layout. Translate
+// the rendered old/new positions into saved-layout indices via widget ids so a
+// hidden entry never shifts the move onto the wrong widget.
+function moveWidgetByRenderedIndex(oldIndex, newIndex) {
+  const rendered = resolvedLayout.value
+  const saved = layout.value || []
+  const fromWidgetId = rendered[oldIndex]?.widgetId
+  const toWidgetId = rendered[newIndex]?.widgetId
+  if (!fromWidgetId || !toWidgetId) return
+  const fromIndex = saved.findIndex(item => item.widgetId === fromWidgetId)
+  const toIndex = saved.findIndex(item => item.widgetId === toWidgetId)
+  if (fromIndex === -1 || toIndex === -1) return
+  moveWidget(fromIndex, toIndex)
+}
+
 // SortableJS integration
 const SORT_ANIMATION_MS = 150
 
@@ -338,7 +354,7 @@ function initSortable() {
     ghostClass: 'opacity-30',
     onEnd(evt) {
       if (evt.oldIndex !== evt.newIndex) {
-        moveWidget(evt.oldIndex, evt.newIndex)
+        moveWidgetByRenderedIndex(evt.oldIndex, evt.newIndex)
       }
     }
   })
