@@ -6,7 +6,8 @@ const {
   extractTerminalAt,
   getLastWeekBounds,
   computeAutofixMetrics,
-  buildTrendData
+  buildTrendData,
+  AUTOFIX_LABELS
 } = require('../../server/jira/autofix-fetcher')
 
 describe('classifyIssue', () => {
@@ -40,6 +41,25 @@ describe('classifyIssue', () => {
 
   it('returns autofix-ready when jira-autofix is present and status is New', () => {
     expect(classifyIssue(['jira-autofix'], 'New')).toBe('autofix-ready')
+  })
+
+  it('returns autofix-ready when jira-autofix-candidate is present and status is New', () => {
+    expect(classifyIssue(['jira-autofix-candidate'], 'New')).toBe('autofix-ready')
+  })
+
+  it('treats jira-autofix-candidate the same as jira-autofix for human assignment', () => {
+    expect(classifyIssue(['jira-autofix-candidate'], 'In Progress', 'Jane Doe'))
+      .toBe('triage-human-assigned')
+  })
+
+  it('does not return human-assigned for a candidate assigned to the bot', () => {
+    expect(classifyIssue(['jira-autofix-candidate'], 'In Progress', 'osac-dev-bot'))
+      .toBe('unknown')
+  })
+
+  it('lets progress labels win over jira-autofix-candidate', () => {
+    expect(classifyIssue(['jira-autofix-candidate', 'jira-autofix-review'], 'New'))
+      .toBe('autofix-review')
   })
 
   it('returns unknown when jira-autofix is present but status is not New', () => {
@@ -110,6 +130,12 @@ describe('classifyIssue', () => {
 
   it('security-review takes precedence over human assignee', () => {
     expect(classifyIssue(['jira-autofix', 'jira-triage-security-review'], 'Open', 'Jane Doe')).toBe('triage-security-review')
+  })
+})
+
+describe('AUTOFIX_LABELS', () => {
+  it('includes jira-autofix-candidate so candidate tickets are fetched from Jira', () => {
+    expect(AUTOFIX_LABELS).toContain('jira-autofix-candidate')
   })
 })
 
@@ -242,6 +268,15 @@ describe('computeAutofixMetrics', () => {
       expect(m.eligibleCount).toBe(1)
       expect(m.windowTotal).toBe(3)
       expect(m.eligibilityRate).toBe(33)
+    })
+
+    it('counts jira-autofix-candidate issues as eligible', () => {
+      const issues = [
+        { created: recent, labels: ['jira-autofix-candidate'], pipelineState: 'triage-human-assigned' },
+        { created: recent, labels: ['jira-triage-not-fixable'], pipelineState: 'triage-not-fixable' }
+      ]
+      const m = computeAutofixMetrics(issues, 'week')
+      expect(m.eligibleCount).toBe(1)
     })
 
     it('returns 0% when window is empty', () => {

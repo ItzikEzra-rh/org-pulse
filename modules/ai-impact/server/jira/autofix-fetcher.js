@@ -23,6 +23,7 @@ const TRIAGE_LABELS = [
 
 const AUTOFIX_LABELS = [
   'jira-autofix',
+  'jira-autofix-candidate',
   'jira-autofix-pending',
   'jira-autofix-review',
   'jira-autofix-ci-failing',
@@ -37,6 +38,19 @@ const ALL_PIPELINE_LABELS = [...TRIAGE_LABELS, ...AUTOFIX_LABELS];
 
 const BOT_ACCOUNTS = new Set(['osac-dev-bot']);
 
+/**
+ * Map a Jira issue's pipeline labels to an Org Pulse pipeline state.
+ *
+ * `jira-autofix` and `jira-autofix-candidate` are treated as the same trigger:
+ * the first is set when a ticket is queued for the bot, the second by the
+ * triage bot when it assesses the ticket as auto-fixable. Progress labels
+ * (review, CI failing, blocked) take precedence over the trigger labels.
+ *
+ * @param {string[]} labels - Jira labels on the issue.
+ * @param {string} status - Jira status name.
+ * @param {string} [assignee] - Assignee display name.
+ * @returns {string} Pipeline state, e.g. 'autofix-ready' or 'unknown'.
+ */
 function classifyIssue(labels, status, assignee) {
   const labelSet = new Set(labels);
 
@@ -51,10 +65,13 @@ function classifyIssue(labels, status, assignee) {
   if (labelSet.has('jira-autofix-ci-failing')) return 'autofix-ci-failing';
   if (labelSet.has('jira-autofix-review')) return 'autofix-review';
   if (labelSet.has('jira-autofix-pending')) return 'autofix-pending';
-  if (labelSet.has('jira-autofix') && status === 'New') return 'autofix-ready';
+  // jira-autofix is applied when a ticket is queued for the bot; jira-autofix-candidate
+  // is applied by the triage bot when it assesses the ticket as auto-fixable.
+  const autofixRequested = labelSet.has('jira-autofix') || labelSet.has('jira-autofix-candidate');
+  if (autofixRequested && status === 'New') return 'autofix-ready';
   // Security review takes precedence over human-assigned — don't hide the reason code
   if (labelSet.has('jira-triage-security-review')) return 'triage-security-review';
-  if (labelSet.has('jira-autofix') && assignee && !BOT_ACCOUNTS.has(assignee)) return 'triage-human-assigned';
+  if (autofixRequested && assignee && !BOT_ACCOUNTS.has(assignee)) return 'triage-human-assigned';
   // Triage states
   if (labelSet.has('jira-triage-external')) return 'triage-external';
   if (labelSet.has('jira-triage-not-fixable')) return 'triage-not-fixable';
@@ -146,7 +163,10 @@ function computeAutofixMetrics(issues, timeWindow) {
     counts[issue.pipelineState] = (counts[issue.pipelineState] || 0) + 1;
     if (
       issue.pipelineState?.startsWith('autofix-') ||
-      (Array.isArray(issue.labels) && issue.labels.includes('jira-autofix'))
+      (Array.isArray(issue.labels) && (
+        issue.labels.includes('jira-autofix') ||
+        issue.labels.includes('jira-autofix-candidate')
+      ))
     ) {
       eligibleCount++;
     }
