@@ -256,7 +256,10 @@ const metrics = computed(() => {
 
   const eligibleCount = windowIssues.filter(i =>
     i.pipelineState?.startsWith('autofix-') ||
-    (Array.isArray(i.labels) && i.labels.includes('jira-autofix'))
+    (Array.isArray(i.labels) && (
+      i.labels.includes('jira-autofix') ||
+      i.labels.includes('jira-autofix-candidate')
+    ))
   ).length
   const eligibilityRate = windowIssues.length > 0
     ? Math.round((eligibleCount / windowIssues.length) * 100)
