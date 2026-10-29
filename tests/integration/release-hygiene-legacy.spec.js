@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-test('legacy Release Hygiene loads mapped releases and displays published empty data @releases', async ({ page }) => {
+async function installLegacyApi(page, { displayData = false } = {}) {
   const requests = [];
   await page.addInitScript(() => localStorage.setItem('releases:hygiene:welcome_dismissed', 'true'));
   await page.route('**/api/**', async route => {
@@ -20,25 +20,36 @@ test('legacy Release Hygiene loads mapped releases and displays published empty 
     }
     if (url.pathname === '/api/modules/releases/hygiene/features') {
       requests.push({ endpoint: 'features', version, projectId: url.searchParams.get('projectId') });
-      const features = version === '0.4'
-        ? { 'OSAC-11': { key: 'OSAC-11', summary: 'Published feature', status: 'Backlog', violations: [] } }
-        : {};
-      return route.fulfill({ json: { features, fetchedAt: ['0.4', 'Backlog'].includes(version) ? '2026-10-29T08:00:00Z' : null } });
+      const feature = version === '0.4'
+        ? { key: 'OSAC-11', summary: 'Pipeline feature', status: 'Backlog', violations: [] }
+        : displayData && version === 'OSAC 0.4'
+          ? { key: 'OSAC-12', summary: 'Refreshed feature', status: 'Backlog', violations: [] }
+          : null;
+      const features = feature ? { [feature.key]: feature } : {};
+      const exists = feature || version === 'Backlog';
+      return route.fulfill({ json: { features, fetchedAt: exists ? '2026-10-29T08:00:00Z' : null } });
     }
     if (url.pathname === '/api/modules/releases/hygiene/summary') {
       requests.push({ endpoint: 'summary', version, projectId: url.searchParams.get('projectId') });
-      return route.fulfill({ json: { totalFeatures: version === '0.4' ? 1 : 0, featuresWithViolations: 0, violationsByRule: {} } });
+      const exists = version === '0.4' || version === 'Backlog' || (displayData && version === 'OSAC 0.4');
+      return route.fulfill({ json: { fetchedAt: exists ? '2026-10-29T08:00:00Z' : null, totalFeatures: exists && version !== 'Backlog' ? 1 : 0, featuresWithViolations: 0, violationsByRule: {} } });
     }
     if (url.pathname === '/api/modules/releases/execution/features') {
       return route.fulfill({ json: { features: [] } });
     }
     return route.fulfill({ json: {} });
   });
+  return requests;
+}
 
+test('legacy Release Hygiene loads mapped releases and displays published empty data @releases', async ({ page }) => {
+  const requests = await installLegacyApi(page);
   await page.goto('/#/releases/execute?tab=feature-status&projectId=osac');
   await expect(page.getByText('OSAC-11', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'All Versions' })).toBeVisible();
   expect(requests).toEqual(expect.arrayContaining([
+    { endpoint: 'features', version: 'OSAC 0.4', projectId: 'osac' },
+    { endpoint: 'summary', version: 'OSAC 0.4', projectId: 'osac' },
     { endpoint: 'features', version: '0.4', projectId: 'osac' },
     { endpoint: 'summary', version: '0.4', projectId: 'osac' },
     { endpoint: 'features', version: 'Backlog', projectId: 'osac' },
@@ -53,4 +64,18 @@ test('legacy Release Hygiene loads mapped releases and displays published empty 
   await page.getByLabel('OSAC Backlog', { exact: true }).check();
   await expect(page.getByText('No features found for the selected release.')).toBeVisible();
   await expect(page.getByText('Use the Manage page to trigger a hygiene data refresh.')).toHaveCount(0);
+});
+
+test('legacy Release Hygiene prefers refreshed display-name data when both sources exist @releases', async ({ page }) => {
+  const requests = await installLegacyApi(page, { displayData: true });
+  await page.goto('/#/releases/execute?tab=feature-status&version=OSAC%200.4&projectId=osac');
+
+  await expect(page.getByText('OSAC-12', { exact: true })).toBeVisible();
+  await expect(page.getByText('OSAC-11', { exact: true })).toHaveCount(0);
+  expect(requests).toEqual(expect.arrayContaining([
+    { endpoint: 'features', version: 'OSAC 0.4', projectId: 'osac' },
+    { endpoint: 'summary', version: 'OSAC 0.4', projectId: 'osac' }
+  ]));
+  expect(requests).not.toContainEqual({ endpoint: 'features', version: '0.4', projectId: 'osac' });
+  expect(requests).not.toContainEqual({ endpoint: 'summary', version: '0.4', projectId: 'osac' });
 });

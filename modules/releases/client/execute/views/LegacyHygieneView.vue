@@ -117,15 +117,30 @@ async function loadData(versions) {
 
     await Promise.all(effective.map(async (version) => {
       const rel = registryReleases.value.find(r => r.displayName === version)
-      const dataVersion = (rel && rel.fixVersions && rel.fixVersions.length > 0)
+      const execVersion = (rel && rel.fixVersions && rel.fixVersions.length > 0)
         ? rel.fixVersions[0]
         : version
 
-      const [hygieneData, summaryData, execData] = await Promise.all([
-        apiRequest(scopedUrl('/modules/releases/hygiene/features', { version: dataVersion })),
-        apiRequest(scopedUrl('/modules/releases/hygiene/summary', { version: dataVersion })),
-        apiRequest(scopedUrl('/modules/releases/execution/features', { version: dataVersion }))
+      const [displayHygiene, displaySummary, execData] = await Promise.all([
+        apiRequest(scopedUrl('/modules/releases/hygiene/features', { version })),
+        apiRequest(scopedUrl('/modules/releases/hygiene/summary', { version })),
+        apiRequest(scopedUrl('/modules/releases/execution/features', { version: execVersion }))
       ])
+
+      if (requestId !== dataRequestId || projectId.value !== requestedProjectId) return
+      let hygieneData = displayHygiene
+      let summaryData = displaySummary
+      const hasDisplayData = displayHygiene?.fetchedAt || displaySummary?.fetchedAt ||
+        Object.keys(displayHygiene?.features || {}).length > 0 || displaySummary?.totalFeatures > 0
+      const initialUnavailable = [displayHygiene, displaySummary, execData].some(item => item?.state === 'unavailable')
+      if (!hasDisplayData && !initialUnavailable && execVersion !== version) {
+        const [fallbackHygiene, fallbackSummary] = await Promise.all([
+          apiRequest(scopedUrl('/modules/releases/hygiene/features', { version: execVersion })),
+          apiRequest(scopedUrl('/modules/releases/hygiene/summary', { version: execVersion }))
+        ])
+        hygieneData = fallbackHygiene
+        summaryData = fallbackSummary
+      }
 
       if (requestId !== dataRequestId || projectId.value !== requestedProjectId) return
       const unavailable = [hygieneData, summaryData, execData].find(item => item?.state === 'unavailable')

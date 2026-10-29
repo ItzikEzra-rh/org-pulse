@@ -14,7 +14,14 @@ const releases = [
   { displayName: 'Unmapped', fixVersions: [] }
 ]
 
-function installResponses() {
+const publishedAt = '2026-10-29T08:00:00Z'
+const mappedFeature = { key: 'OSAC-1', summary: 'Mapped feature', violations: [] }
+const refreshedFeature = { key: 'OSAC-2', summary: 'Refreshed feature', violations: [] }
+
+function installResponses(dataByVersion = {
+  '0.4': { fetchedAt: publishedAt, features: { 'OSAC-1': mappedFeature } },
+  'OSAC Backlog': { fetchedAt: publishedAt, features: {} }
+}) {
   apiRequest.mockImplementation(path => {
     const url = new URL(path, 'http://localhost')
     const version = url.searchParams.get('version')
@@ -22,13 +29,11 @@ function installResponses() {
     if (url.pathname.endsWith('/config')) return Promise.resolve({})
     if (url.pathname.endsWith('/execution/features')) return Promise.resolve({ features: [] })
     if (url.pathname.endsWith('/hygiene/summary')) {
-      return Promise.resolve({ totalFeatures: version === '0.4' ? 1 : 0, featuresWithViolations: 0 })
+      const data = dataByVersion[version]
+      return Promise.resolve({ fetchedAt: data?.fetchedAt || null, totalFeatures: Object.keys(data?.features || {}).length, featuresWithViolations: 0 })
     }
     if (url.pathname.endsWith('/hygiene/features')) {
-      const features = version === '0.4'
-        ? { 'OSAC-1': { key: 'OSAC-1', summary: 'A feature', violations: [] } }
-        : {}
-      return Promise.resolve({ features, fetchedAt: version === 'Unmapped' ? null : '2026-10-29T08:00:00Z' })
+      return Promise.resolve(dataByVersion[version] || { features: {}, fetchedAt: null })
     }
     throw new Error(`Unexpected request: ${path}`)
   })
@@ -48,10 +53,12 @@ describe('Legacy Release Hygiene version mapping', () => {
     installResponses()
   })
 
-  it('loads a selected display name using its Jira fix version', async () => {
+  it('falls back to the Jira fix version when display-name data is missing', async () => {
     const wrapper = mountView('OSAC 0.4')
     await flushPromises()
 
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/features?version=OSAC+0.4&projectId=osac')
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/summary?version=OSAC+0.4&projectId=osac')
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/features?version=0.4&projectId=osac')
     expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/summary?version=0.4&projectId=osac')
     expect(wrapper.findComponent(KanbanBoard).props('features')).toMatchObject([{ key: 'OSAC-1' }])
@@ -59,14 +66,57 @@ describe('Legacy Release Hygiene version mapping', () => {
     wrapper.unmount()
   })
 
-  it('loads all releases by fix version and falls back to an unmapped display name', async () => {
+  it('prefers data written by refresh under the display name when both files exist', async () => {
+    installResponses({
+      'OSAC 0.4': { fetchedAt: publishedAt, features: { 'OSAC-2': refreshedFeature } },
+      '0.4': { fetchedAt: publishedAt, features: { 'OSAC-1': mappedFeature } }
+    })
+    const wrapper = mountView('OSAC 0.4')
+    await flushPromises()
+
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/features?version=OSAC+0.4&projectId=osac')
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/hygiene/summary?version=OSAC+0.4&projectId=osac')
+    expect(apiRequest).not.toHaveBeenCalledWith('/modules/releases/hygiene/features?version=0.4&projectId=osac')
+    expect(apiRequest).toHaveBeenCalledWith('/modules/releases/execution/features?version=0.4&projectId=osac')
+    expect(wrapper.findComponent(KanbanBoard).props('features')).toMatchObject([{ key: 'OSAC-2' }])
+    wrapper.unmount()
+  })
+
+  it('does not replace a published empty display-name file with fix-version data', async () => {
+    installResponses({
+      'OSAC 0.4': { fetchedAt: publishedAt, features: {} },
+      '0.4': { fetchedAt: publishedAt, features: { 'OSAC-1': mappedFeature } }
+    })
+    const wrapper = mountView('OSAC 0.4')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No features found for the selected release.')
+    expect(apiRequest).not.toHaveBeenCalledWith('/modules/releases/hygiene/features?version=0.4&projectId=osac')
+    wrapper.unmount()
+  })
+
+  it('does not fall back when the project data is unavailable', async () => {
+    const normalResponse = apiRequest.getMockImplementation()
+    apiRequest.mockImplementation(path => path.includes('/hygiene/features?version=OSAC+0.4')
+      ? Promise.resolve({ state: 'unavailable', message: 'Hygiene is unavailable' })
+      : normalResponse(path))
+    const wrapper = mountView('OSAC 0.4')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Hygiene is unavailable')
+    expect(apiRequest).not.toHaveBeenCalledWith('/modules/releases/hygiene/features?version=0.4&projectId=osac')
+    wrapper.unmount()
+  })
+
+  it('loads all releases using display names and mapped fallbacks where needed', async () => {
     const wrapper = mountView()
     await flushPromises()
 
-    for (const version of ['0.4', 'Backlog', 'Unmapped']) {
+    for (const version of ['OSAC+0.4', '0.4', 'OSAC+Backlog', 'Unmapped']) {
       expect(apiRequest).toHaveBeenCalledWith(`/modules/releases/hygiene/features?version=${version}&projectId=osac`)
       expect(apiRequest).toHaveBeenCalledWith(`/modules/releases/hygiene/summary?version=${version}&projectId=osac`)
     }
+    expect(apiRequest).not.toHaveBeenCalledWith('/modules/releases/hygiene/features?version=Backlog&projectId=osac')
     expect(wrapper.findComponent(KanbanBoard).props('features')).toMatchObject([{ key: 'OSAC-1' }])
     wrapper.unmount()
   })
